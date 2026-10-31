@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import {
   ArrowLeft,
   ArrowRight,
@@ -52,6 +52,10 @@ import { NpcHall } from './ui/NpcHall';
 import { VirtualJoystick } from './ui/VirtualJoystick';
 import { SkillIcon } from './ui/AssetIcon';
 import { AdventureGuide } from './ui/AdventureGuide';
+import { CoopPanel } from './ui/CoopPanel';
+import type { CoopRoom } from './core/coopRoom';
+import type { CoopFrame, CoopInput } from './core/coop';
+import { apiRequest } from './state/cloudStore';
 import { useDialog } from './ui/useDialog';
 import { SETS } from './data/sets';
 import { BUILD_GUIDES } from './data/buildGuides';
@@ -62,6 +66,7 @@ import { audio } from './audio/SynthAudio';
 import './styles.css';
 
 const NAV = [
+  { id: 'coop', label: '组队远征', sub: 'PARTY · 1–4', icon: Swords },
   { id: 'character', label: '角色装备', sub: 'CHARACTER', icon: Shield },
   { id: 'stash', label: '共享仓库', sub: 'ACCOUNT STASH', icon: Package },
   { id: 'skills', label: '技能之书', sub: 'SKILLS', icon: BookOpen },
@@ -76,6 +81,7 @@ function App() {
     useGameStore();
   const [panel, setPanel] = useState<string | null>(null);
   const [config, setConfig] = useState<CombatConfig | null>(null);
+  const [coop, setCoop] = useState<CoopRoom | null>(null);
   const [result, setResult] = useState<RunResult | null>(null);
   const [runSummary, setRunSummary] = useState('');
   const [showGuide, setShowGuide] = useState(false);
@@ -172,9 +178,22 @@ function App() {
     });
   };
   const leave = () => {
+    if (coop) void apiRequest('/coop/leave', 'POST', {}).catch(() => {});
     useGameStore.getState().setInCombat(false);
     setConfig(null);
+    setCoop(null);
     audio.setTrack('town');
+  };
+  const enterCoop = (room: CoopRoom) => {
+    const member = room.members.find((entry) => entry.id === room.selfId);
+    if (!member) return;
+    useGameStore.getState().setInCombat(true);
+    setNotice('');
+    setPanel(null);
+    setResult(null);
+    setCoop(room);
+    setConfig(member.config);
+    audio.setTrack('rift');
   };
   const finish = (r: RunResult) => {
     if (!config?.training) completeRun(r);
@@ -405,6 +424,13 @@ function App() {
                   <span>踏入秘境</span>
                   <ArrowRight size={19} />
                 </button>
+                <button
+                  className="outline-button full-width coop-entry"
+                  onClick={() => open('coop')}
+                >
+                  <Swords size={17} />
+                  组队爬塔 · 1–4 人
+                </button>
               </div>
               <button className="journal-card" onClick={() => open('pets')}>
                 <span className="journal-icon">
@@ -513,7 +539,7 @@ function App() {
             </button>
             <button
               className="dock-expedition"
-              onClick={() => enter()}
+              onClick={() => open('expedition')}
               disabled={useGameStore.getState().cloudTransition}
             >
               <Compass size={24} />
@@ -541,8 +567,24 @@ function App() {
           </footer>
         </>
       )}
-      {config && <CombatView config={config} onLeave={leave} onFinish={finish} />}
-      <SystemsModal panel={panel} onClose={() => setPanel(null)} onNavigate={setPanel} />
+      {config && <CombatView config={config} coop={coop} onLeave={leave} onFinish={finish} />}
+      {['coop', 'expedition'].includes(panel ?? '') && (
+        <CoopPanel
+          expedition={panel === 'expedition'}
+          onClose={() => setPanel(null)}
+          onStart={enterCoop}
+          onSolo={() => {
+            setPanel(null);
+            enter();
+          }}
+          onAccount={() => setPanel('accounts')}
+        />
+      )}
+      <SystemsModal
+        panel={['coop', 'expedition'].includes(panel ?? '') ? null : panel}
+        onClose={() => setPanel(null)}
+        onNavigate={setPanel}
+      />
       {notice && (
         <div className="toast" role={panel ? undefined : 'status'}>
           <Sparkles size={17} />
@@ -603,11 +645,20 @@ function App() {
               <button
                 className="gold-button full-width"
                 onClick={() => {
-                  if (result.won) selectStage(save.highestStage);
-                  enter(!!config?.training);
+                  if (coop) {
+                    returnToCamp();
+                    open('coop');
+                  } else {
+                    if (result.won) selectStage(save.highestStage);
+                    enter(!!config?.training);
+                  }
                 }}
               >
-                {result.won ? `挑战第 ${save.highestStage} 层` : '再次挑战本层'}{' '}
+                {coop
+                  ? '重新集结队伍'
+                  : result.won
+                    ? `挑战第 ${save.highestStage} 层`
+                    : '再次挑战本层'}{' '}
                 <Swords size={16} />
               </button>
               <button
@@ -632,10 +683,12 @@ function App() {
 
 function CombatView({
   config,
+  coop,
   onLeave,
   onFinish,
 }: {
   config: CombatConfig;
+  coop?: CoopRoom | null;
   onLeave: () => void;
   onFinish: (result: RunResult) => void;
 }) {
@@ -645,6 +698,8 @@ function CombatView({
   onFinishRef.current = onFinish;
   const [snapshot, setSnapshot] = useState<CombatSnapshot | null>(null);
   const [error, setError] = useState('');
+  const [network, setNetwork] = useState('');
+  const [actors, setActors] = useState<CoopFrame['actors']>([]);
   const [leaveDialog, setLeaveDialog] = useState(false);
   const pauseBeforeLeave = useRef(false);
   const [auto, setAuto] = useState(config.autoSkills);
@@ -680,13 +735,81 @@ function CombatView({
     setAuto(config.autoSkills);
     const game = new GameEngine();
     engine.current = game;
+    let input: CoopInput | undefined;
+    let frame: CoopFrame | undefined;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let lastSuccess = Date.now();
+    let stopped = false;
+    let pendingResult: RunResult | undefined;
+    let resultDelivered = false;
+    if (coop)
+      game.configureCoop({
+        localId: coop.selfId,
+        hostId: coop.hostId,
+        seed: coop.seed,
+        members: coop.members,
+        onInput: (next) => {
+          input = next;
+        },
+        onFrame: (next) => {
+          frame = next;
+          if (!cancelled) setActors(next.actors);
+        },
+      });
+    const exchange = async () => {
+      if (!coop || cancelled || stopped) return;
+      try {
+        const response = await apiRequest<{ room: CoopRoom }>(
+          '/coop/exchange',
+          'POST',
+          coop.selfId === coop.hostId ? (frame ? { snapshot: frame } : {}) : input ? { input } : {},
+        );
+        if (cancelled) return;
+        const room = response.room;
+        if (room.status === 'aborted') {
+          stopped = true;
+          game.destroy();
+          setError(room.reason ?? '远征已中止，请返回营地重新集结。');
+          return;
+        }
+        lastSuccess = Date.now();
+        setNetwork('');
+        if (coop.selfId === coop.hostId) {
+          for (const [id, next] of Object.entries(room.inputs ?? {}))
+            game.receiveCoopInput(id, next);
+          if (room.status === 'finished' && pendingResult && !resultDelivered) {
+            resultDelivered = true;
+            onFinishRef.current(pendingResult);
+          }
+        } else if (room.snapshot) {
+          game.receiveCoopFrame(room.snapshot);
+          setActors(room.snapshot.actors);
+        }
+      } catch (e) {
+        if (!cancelled) {
+          setNetwork('连接不稳定，正在重连…');
+          if (Date.now() - lastSuccess > 15000) {
+            stopped = true;
+            game.destroy();
+            setError(
+              `连接已中断，本次远征不发放未结算收益。${e instanceof Error ? e.message : ''}`,
+            );
+          }
+        }
+      } finally {
+        if (!cancelled && !stopped) timer = setTimeout(exchange, 100);
+      }
+    };
     void game
       .init(host.current!, config, {
         onSnapshot: (s) => {
           if (!cancelled) setSnapshot(s);
         },
         onFinish: (r) => {
-          if (!cancelled) onFinishRef.current(r);
+          if (!cancelled) {
+            if (coop && coop.selfId === coop.hostId) pendingResult = r;
+            else onFinishRef.current(r);
+          }
         },
         onSound: (n) => {
           if (n === 'boss') audio.setTrack('boss');
@@ -695,16 +818,18 @@ function CombatView({
       })
       .then(() => {
         if (cancelled) game.destroy();
+        else if (coop) void exchange();
       })
       .catch((e) => {
         if (!cancelled) setError(`战场加载失败：${e instanceof Error ? e.message : String(e)}`);
       });
     return () => {
       cancelled = true;
+      clearTimeout(timer);
       game.destroy();
       engine.current = null;
     };
-  }, [config]);
+  }, [config, coop]);
   const toggleAuto = (id: string) => {
     const next = !(auto[id] ?? SKILLS.find((s) => s.id === id)?.kind !== 'movement');
     setAuto({ ...auto, [id]: next });
@@ -717,7 +842,10 @@ function CombatView({
       current.toggleAuto(id);
   };
   return (
-    <section className="combat-screen">
+    <section
+      className={`combat-screen ${coop ? 'coop-combat' : ''}`}
+      style={{ '--party-size': coop?.members.length ?? 1 } as CSSProperties}
+    >
       <div className="combat-canvas" ref={host} />
       <div className="combat-top">
         <button className="icon-button" aria-label="返回营地" onClick={askLeave}>
@@ -738,12 +866,46 @@ function CombatView({
         </div>
         <button
           className="icon-button"
-          aria-label={snapshot?.paused ? '继续战斗' : '暂停战斗'}
+          aria-label={
+            coop ? '打开战斗菜单，联机持续进行' : snapshot?.paused ? '继续战斗' : '暂停战斗'
+          }
           onClick={() => engine.current?.togglePause()}
         >
           {snapshot?.paused ? <Play /> : <Pause />}
         </button>
       </div>
+      {coop && (
+        <div className="coop-team-hud" aria-label="远征队友">
+          {coop.members.map((member) => {
+            const actor = actors.find((entry) => entry.id === member.id);
+            return (
+              <div key={member.id}>
+                <strong>
+                  {member.name}
+                  <small>
+                    {member.id === coop.selfId ? '你' : member.id === coop.hostId ? '队长' : '队友'}
+                  </small>
+                </strong>
+                <meter
+                  min={0}
+                  max={actor?.snapshot.maxHp ?? member.config.stats.hp}
+                  value={actor?.snapshot.hp ?? member.config.stats.hp}
+                />
+                <small>
+                  {actor && actor.downSeconds > 0
+                    ? `倒地 · ${Math.ceil(actor.downSeconds)}秒后复苏`
+                    : CLASSES.find((entry) => entry.id === member.classId)?.name}
+                </small>
+              </div>
+            );
+          })}
+        </div>
+      )}
+      {network && (
+        <div className="coop-network" role="status">
+          {network}
+        </div>
+      )}
       {snapshot?.boss && (
         <div className="boss-health">
           <span>
@@ -902,7 +1064,8 @@ function CombatView({
         onMove={(x, y) => engine.current?.setMovement(x, y)}
       />
       <div className="combat-help">
-        WASD / 拖动移动 · {movement ? `空格 ${movement.name}` : 'Lv.3 回营学习位移'} · Esc 暂停
+        WASD / 拖动移动 · {movement ? `空格 ${movement.name}` : 'Lv.3 回营学习位移'} · Esc{' '}
+        {coop ? '菜单' : '暂停'}
       </div>
       {config.training && !snapshot?.paused && (
         <div className="training-hint">
@@ -919,7 +1082,8 @@ function CombatView({
           tabIndex={-1}
         >
           <Moon />
-          <h2>时间已静止</h2>
+          <h2>{coop ? '远征仍在进行' : '时间已静止'}</h2>
+          {coop && <p>菜单期间角色停止接收移动操作，战场持续进行。请及时返回队伍。</p>}
           {combatGuide && (
             <div className="paused-build-guide">
               <strong>
@@ -966,9 +1130,11 @@ function CombatView({
           >
             <h2>返回营地</h2>
             <p>
-              {config.training
-                ? '训练不发放奖励，可以随时回营调整技能与装备。'
-                : '本次未结算的战利品将留在迷雾中。'}
+              {coop
+                ? '任意队员离队都会中止全队远征，未结算的收益不会发放。'
+                : config.training
+                  ? '训练不发放奖励，可以随时回营调整技能与装备。'
+                  : '本次未结算的战利品将留在迷雾中。'}
             </p>
             <div>
               <button className="ghost-button" onClick={cancelLeave}>

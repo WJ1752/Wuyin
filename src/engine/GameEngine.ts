@@ -1,4 +1,4 @@
-import { Application, Container, Graphics, Text } from 'pixi.js';
+import { Application, Container, Graphics, Sprite, Text } from 'pixi.js';
 import type {
   BossDef,
   CombatConfig,
@@ -19,7 +19,7 @@ import { CharacterRig } from '../render/ProceduralRig';
 import { preloadCharacterTextures } from '../render/CharacterTextures';
 import { preloadSkillTextures } from '../render/SkillTextures';
 import { MonsterRig } from '../render/MonsterRenderer';
-import { createMap } from '../render/MapGenerator';
+import { createMap, preloadMapTextures } from '../render/MapGenerator';
 import { VFXManager, ELEMENT_COLORS } from '../render/VFXManager';
 import { FloatingText } from '../render/FloatingText';
 import { calculateDamage, mitigateDamage } from './CombatSystem';
@@ -37,6 +37,11 @@ import {
 } from './MonsterAI';
 import { createRng } from '../core/random';
 import { createBossBrain, stepBossAI, type BossBrain } from './BossAI';
+import type { CoopEngineOptions, CoopFrame, CoopInput } from '../core/coop';
+import { coopBalance } from '../data/coopBalance';
+import { PET_ART } from '../data/petVisuals';
+import { preloadPetTexture, getPetTexture } from '../render/PetTextures';
+import type { RunResult } from '../core/types';
 
 export function getActiveSkills(
   config: Pick<CombatConfig, 'classId' | 'skills'> &
@@ -83,6 +88,8 @@ interface Enemy {
   poison: number;
   poisonStacks: number;
   poisonSkill?: SkillDef;
+  poisonOwner?: GameEngine;
+  bleedOwner?: GameEngine;
   bleed?: number;
   bleedSkill?: SkillDef;
   vulnerability: number;
@@ -231,34 +238,46 @@ export class GameEngine {
   private mapClock = 0;
   private gamepadHeld = new Set<number>();
   private gamepadBlocked = false;
+  private coop?: CoopEngineOptions;
+  private coopParent?: GameEngine;
+  private coopActors = new Map<string, GameEngine>();
+  private coopLabels = new Map<string, Text>();
+  private coopControls = new Map<
+    string,
+    { input: CoopInput; receivedAt: number; consumed: number; command: number }
+  >();
+  private coopSequence = 0;
+  private coopActionSequence = 0;
+  private coopInputClock = 0;
+  private coopTimer?: ReturnType<typeof setInterval>;
+  private coopWallClock = 0;
+  private coopAccumulator = 0;
+  private coopReceivedSequence = -1;
+  private coopResults?: Record<string, RunResult>;
+  private coopDownSeconds = 0;
+  private coopInput: CoopInput = { sequence: 0, movement: { x: 0, y: 0 }, casts: [] };
+  private coopVisuals = new Graphics();
+  private get coopHost(): GameEngine {
+    return this.coopParent ?? this;
+  }
+  private get isCoopGuest() {
+    return !!this.coop && this.coop.localId !== this.coop.hostId;
+  }
+
+  /** Configure before init: no peer ever starts an independent solo simulation. */
+  configureCoop(options: CoopEngineOptions) {
+    if (this.initialized) throw new Error('请在初始化战场前配置队伍。');
+    this.coop = options;
+  }
   async init(host: HTMLElement, config: CombatConfig, callbacks: GameCallbacks): Promise<void> {
     this.host = host;
-    this.config = {
-      ...config,
-      autoSkills: { ...config.autoSkills },
-      stats: { ...config.stats, independent: [...config.stats.independent] },
-    };
-    this.callbacks = callbacks;
-    this.skills = getActiveSkills(config);
-    this.hp = config.stats.hp;
-    this.resource = config.stats.maxResource;
-    for (const item of Object.values(config.equipment)) {
-      if (!item) continue;
-      if (item.setId) this.setCounts.set(item.setId, (this.setCounts.get(item.setId) ?? 0) + 1);
-      if (item.legendaryId) {
-        const def = LEGENDARIES.find((l) => l.id === item.legendaryId);
-        if (def)
-          this.powers.set(def.effect, Math.max(this.powers.get(def.effect) ?? 0, item.power));
-      }
-    }
-    for (const id of Object.values(config.cube)) {
-      const def = LEGENDARIES.find((l) => l.id === id);
-      if (def) this.powers.set(def.effect, def.max);
-    }
-    this.applyStaticPowers();
+    this.setupCharacter(config, callbacks);
+    if (this.coop?.seed !== undefined) this.random = createRng(this.coop.seed);
     await Promise.all([
       preloadCharacterTextures(config.classId, config.equipment),
       preloadSkillTextures(this.skills.map((skill) => skill.id)),
+      preloadPetTexture(config.petId),
+      preloadMapTextures(),
     ]);
     if (this.disposed) return;
     this.app = new Application();
@@ -291,8 +310,12 @@ export class GameEngine {
     this.createPet();
     this.createPylons();
     if (config.classId === 'necromancer') this.createSummons();
-    this.spawnWave();
-    if (this.random() < 0.18 && !config.training) this.spawnGoblin();
+    if (this.coop) await this.createCoopActors();
+    if (this.disposed) return;
+    if (!this.isCoopGuest) {
+      this.spawnWave();
+      if (this.random() < 0.18 && !config.training) this.spawnGoblin();
+    }
     this.app.ticker.add(this.tick);
     this.app.ticker.maxFPS = 120;
     window.addEventListener('keydown', this.onKeyDown);
@@ -307,8 +330,522 @@ export class GameEngine {
       if (!this.disposed && this.app) this.app.renderer.resize(host.clientWidth, host.clientHeight);
     });
     this.resizeObserver.observe(host);
+    if (this.coop) this.startCoopClock();
     this.emit();
   }
+  private setupCharacter(config: CombatConfig, callbacks: GameCallbacks) {
+    this.config = {
+      ...config,
+      autoSkills: { ...config.autoSkills },
+      stats: { ...config.stats, independent: [...config.stats.independent] },
+    };
+    this.callbacks = callbacks;
+    this.skills = getActiveSkills(config);
+    this.hp = config.stats.hp;
+    this.resource = config.stats.maxResource;
+    for (const item of Object.values(config.equipment)) {
+      if (!item) continue;
+      if (item.setId) this.setCounts.set(item.setId, (this.setCounts.get(item.setId) ?? 0) + 1);
+      if (item.legendaryId) {
+        const def = LEGENDARIES.find((l) => l.id === item.legendaryId);
+        if (def)
+          this.powers.set(def.effect, Math.max(this.powers.get(def.effect) ?? 0, item.power));
+      }
+    }
+    for (const id of Object.values(config.cube)) {
+      const def = LEGENDARIES.find((l) => l.id === id);
+      if (def) this.powers.set(def.effect, def.max);
+    }
+    this.applyStaticPowers();
+  }
+  private async createCoopActors() {
+    const options = this.coop!;
+    await Promise.all(
+      options.members.map((member) =>
+        Promise.all([
+          preloadCharacterTextures(member.config.classId, member.config.equipment),
+          preloadSkillTextures(getActiveSkills(member.config).map((skill) => skill.id)),
+          preloadPetTexture(member.config.petId),
+        ]),
+      ),
+    );
+    if (this.disposed) return;
+    for (const [index, member] of options.members.entries()) {
+      let actor: GameEngine;
+      if (member.id === options.localId) actor = this;
+      else {
+        actor = new GameEngine();
+        actor.coopParent = this;
+        actor.setupCharacter(member.config, {
+          onSound: (name) => this.callbacks.onSound(name),
+          onSnapshot: () => {},
+          onFinish: () => {},
+        });
+        actor.initialized = true;
+        this.linkCoopActor(actor);
+        actor.hero = new CharacterRig(member.config.classId, member.config.equipment);
+        this.entityLayer.addChild(actor.hero);
+        actor.projectiles = new ProjectileSystem(this.effectsLayer);
+        actor.createPet();
+        if (member.config.classId === 'necromancer') actor.createSummons();
+      }
+      actor.x = (index - (options.members.length - 1) / 2) * 55;
+      actor.hero.position.set(actor.x, actor.y);
+      this.coopActors.set(member.id, actor);
+      const label = new Text({
+        text: member.name,
+        style: {
+          fontFamily: 'sans-serif',
+          fontSize: 12,
+          fill: member.id === options.localId ? 0xf4d791 : 0x9ee4d4,
+          stroke: { color: 0x142226, width: 3 },
+        },
+      });
+      label.anchor.set(0.5, 1);
+      this.textLayer.addChild(label);
+      this.coopLabels.set(member.id, label);
+    }
+    this.effectsLayer.addChild(this.coopVisuals);
+  }
+
+  private linkCoopActor(actor: GameEngine) {
+    actor.coopParent = this;
+    // These are one shared world. Character resources, skills, cooldowns,
+    // projectiles, zones and passives stay independent on each actor.
+    for (const key of [
+      'enemies',
+      'pylons',
+      'elapsed',
+      'progress',
+      'kills',
+      'gold',
+      'shards',
+      'nextId',
+      'bossSpawned',
+      'finished',
+    ] as const)
+      Object.defineProperty(actor, key, {
+        configurable: true,
+        get: () => this[key],
+        set: (value) => {
+          (this as any)[key] = value;
+        },
+      });
+    actor.entityLayer = this.entityLayer;
+    actor.effectsLayer = this.effectsLayer;
+    actor.floorLayer = this.floorLayer;
+    actor.textLayer = this.textLayer;
+    actor.vfx = this.vfx;
+    actor.numbers = this.numbers;
+    actor.random = this.random;
+    actor.orbs = this.orbs;
+  }
+
+  receiveCoopInput(id: string, input: CoopInput) {
+    if (!this.coop || this.isCoopGuest || id === this.coop.localId || !this.coopActors.has(id))
+      return;
+    const previous = this.coopControls.get(id);
+    if (
+      !Number.isSafeInteger(input.sequence) ||
+      input.sequence < 0 ||
+      (previous && input.sequence <= previous.input.sequence)
+    )
+      return;
+    this.coopControls.set(id, {
+      input,
+      receivedAt: performance.now(),
+      consumed: previous?.consumed ?? -1,
+      command: previous?.command ?? 0,
+    });
+  }
+
+  private queueCoopCommand(id: string) {
+    const commands = (this.coopInput.commands ??= []);
+    if (commands.length < 12) commands.push({ sequence: ++this.coopActionSequence, id });
+  }
+
+  private sendCoopInput(dt: number) {
+    const pad = navigator.getGamepads?.()?.find((p) => p?.connected);
+    let x =
+      this.movement.x +
+      this.dragMovement.x +
+      Number(this.keys.has('d') || this.keys.has('arrowright')) -
+      Number(this.keys.has('a') || this.keys.has('arrowleft'));
+    let y =
+      this.movement.y +
+      this.dragMovement.y +
+      Number(this.keys.has('s') || this.keys.has('arrowdown')) -
+      Number(this.keys.has('w') || this.keys.has('arrowup'));
+    if (pad && !this.paused && !this.hasInputDialog()) {
+      if (this.gamepadBlocked)
+        this.gamepadBlocked =
+          pad.buttons.slice(0, 6).some((b) => b.pressed) ||
+          Math.abs(pad.axes[0] ?? 0) > 0.18 ||
+          Math.abs(pad.axes[1] ?? 0) > 0.18;
+      else {
+        if (Math.abs(pad.axes[0] ?? 0) > 0.18) x += pad.axes[0];
+        if (Math.abs(pad.axes[1] ?? 0) > 0.18) y += pad.axes[1];
+        for (let i = 0; i < 6; i++) {
+          if (pad.buttons[i]?.pressed && !this.gamepadHeld.has(i)) {
+            this.gamepadHeld.add(i);
+            if (this.skills[i]) this.cast(this.skills[i].id);
+          } else if (!pad.buttons[i]?.pressed) this.gamepadHeld.delete(i);
+        }
+      }
+    }
+    const length = Math.max(1, Math.hypot(x, y));
+    this.coopInput.movement = this.paused ? { x: 0, y: 0 } : { x: x / length, y: y / length };
+    this.coopInputClock -= dt;
+    if (this.coopInputClock > 0) return;
+    this.coopInputClock = 0.08;
+    this.coopInput.sequence++;
+    this.coopInput.autoSkills = { ...this.config.autoSkills };
+    this.coop?.onInput?.(structuredClone(this.coopInput));
+  }
+
+  private startCoopClock() {
+    this.coopWallClock = performance.now();
+    this.coopAccumulator = 0;
+    if (this.isCoopGuest) this.sendCoopInput(0);
+    else this.coop?.onFrame?.(this.coopFrame());
+    // Rendering can fall to 1 FPS in a background tab. Simulation uses elapsed
+    // monotonic time instead; a throttled timer still catches up in small steps.
+    this.coopTimer = setInterval(this.advanceCoopClock, 50);
+  }
+
+  private advanceCoopClock = (now = performance.now()) => {
+    const elapsed = Math.max(0, Math.min(2, (now - this.coopWallClock) / 1000));
+    this.coopWallClock = now;
+    if (!this.coop || this.disposed || this.finished) return;
+    if (this.isCoopGuest) {
+      this.sendCoopInput(elapsed);
+      return;
+    }
+    const step = 1 / 30;
+    this.coopAccumulator += elapsed;
+    while (this.coopAccumulator + 1e-8 >= step && !this.finished && !this.disposed) {
+      this.coopAccumulator = Math.max(0, this.coopAccumulator - step);
+      this.updateCoop(step);
+    }
+  };
+
+  private updateCoop(dt: number) {
+    if (!this.coopActors.size) return;
+    this.elapsed += dt;
+    for (const [id, actor] of this.coopActors) {
+      if (actor.hp <= 0) {
+        actor.coopDownSeconds = Math.max(0, actor.coopDownSeconds - dt);
+        if (!actor.coopDownSeconds) {
+          actor.hp = actor.config.stats.hp * coopBalance(this.coopActors.size).reviveHealth;
+          actor.buffs.add('invulnerable', '复苏庇护', 2);
+          actor.hero.alpha = 1;
+        } else continue;
+      }
+      const control = this.coopControls.get(id);
+      if (actor !== this) {
+        const live = control && performance.now() - control.receivedAt < 750;
+        actor.setMovement(live ? control.input.movement.x : 0, live ? control.input.movement.y : 0);
+        if (control && live) {
+          if (control.input.autoSkills) actor.config.autoSkills = { ...control.input.autoSkills };
+          for (const command of control.input.commands ?? [])
+            if (command.sequence > control.command) {
+              if (command.id.startsWith('pylon:')) actor.activatePylon(command.id.slice(6));
+              else actor.cast(command.id);
+              control.command = command.sequence;
+            }
+          if (control.consumed !== control.input.sequence) {
+            for (const skill of control.input.casts) actor.cast(skill);
+            if (control.input.pylon) actor.activatePylon(control.input.pylon);
+            control.consumed = control.input.sequence;
+          }
+        }
+      }
+      actor.updateActor(dt);
+      if (this.finished) break;
+    }
+    if (!this.finished) {
+      this.spawnTimer -= dt;
+      if (this.spawnTimer <= 0 && !this.bossSpawned) {
+        this.spawnWave();
+        this.spawnTimer = 5;
+      }
+      this.updateEnemies(dt);
+      this.updateWarningAnimations(dt);
+      this.updateOrbs(dt);
+      if (this.progress >= 100 && !this.bossSpawned) this.summonBoss();
+      for (const actor of this.coopActors.values())
+        if (actor.hp <= 0 && !actor.coopDownSeconds) {
+          actor.coopDownSeconds = coopBalance(this.coopActors.size).reviveSeconds;
+          actor.hero.alpha = 0.3;
+          actor.clearInput();
+        }
+      if (
+        [...this.coopActors.values()].every((actor) => actor.hp <= 0) ||
+        this.elapsed >= coopBalance(this.coopActors.size).timeLimit
+      )
+        this.finishCoop(false);
+    }
+    this.vfx.tick(dt);
+    this.numbers.tick(dt);
+    this.updateCoopLabels();
+    this.snapshotTimer -= dt;
+    if (this.snapshotTimer <= 0 || this.finished) {
+      this.snapshotTimer = 0.1;
+      this.emit();
+      this.coop?.onFrame?.(this.coopFrame());
+    }
+  }
+
+  private updateCoopLabels() {
+    for (const [id, actor] of this.coopActors) {
+      const label = this.coopLabels.get(id);
+      if (!label) continue;
+      const name = this.coop!.members.find((m) => m.id === id)!.name;
+      label.text =
+        actor.hp <= 0
+          ? `${name} · ${Math.ceil(actor.coopDownSeconds)}秒复苏`
+          : `${name} · ${Math.ceil((actor.hp / actor.config.stats.hp) * 100)}%`;
+      label.position.set(actor.x, actor.y - 70);
+    }
+  }
+
+  private coopFrame(): CoopFrame {
+    return {
+      sequence: ++this.coopSequence,
+      elapsed: this.elapsed,
+      progress: this.progress,
+      kills: this.kills,
+      actors: [...this.coopActors].map(([id, actor]) => ({
+        id,
+        x: actor.x,
+        y: actor.y,
+        facing: actor.facing,
+        moving: actor.moving,
+        downSeconds: actor.coopDownSeconds,
+        inputSequence: this.coopControls.get(id)?.command ?? 0,
+        pet: { x: actor.pet.x, y: actor.pet.y },
+        summons: actor.summons.map((s) => ({ x: s.x, y: s.y, active: s.visible })),
+        snapshot: actor.snapshot(),
+      })),
+      enemies: this.enemies.map((e) => ({
+        id: e.id,
+        defId: e.def.id,
+        x: e.x,
+        y: e.y,
+        hp: e.hp,
+        maxHp: e.maxHp,
+        elite: e.elite,
+        boss: e.boss,
+        minion: e.minion,
+      })),
+      projectiles: [...this.coopActors.values()].flatMap((actor) =>
+        actor.projectiles.items.map((p) => ({
+          x: p.x,
+          y: p.y,
+          angle: Math.atan2(p.vy, p.vx),
+          color: p.color,
+        })),
+      ),
+      zones: [...this.coopActors.values()].flatMap((actor) =>
+        actor.zones.map((z) => ({
+          x: z.x,
+          y: z.y,
+          radius: z.radius,
+          color: ELEMENT_COLORS[z.skill.element],
+        })),
+      ),
+      orbs: this.orbs.map((o) => ({ x: o.x, y: o.y, kind: o.kind })),
+      warnings: [...this.warningAnimations].map(([id, w]) => ({
+        id,
+        x: w.event.x,
+        y: w.event.y,
+        radius: w.event.radius,
+        angle: w.event.angle,
+        range: w.event.range,
+        width: w.event.width,
+        shape: w.event.shape,
+        color: w.event.color,
+      })),
+      pylons: this.pylons.map((p) => ({ id: p.id, used: p.used })),
+      results: this.coopResults,
+    };
+  }
+
+  private finishCoop(won: boolean) {
+    if (this.finished) return;
+    this.finished = true;
+    this.coopResults = Object.fromEntries(
+      [...this.coopActors].map(([id, actor]) => [
+        id,
+        {
+          partySize: this.coopActors.size,
+          won,
+          stage: this.config.stage,
+          seconds: Math.min(300, this.elapsed),
+          kills: this.kills,
+          gold: this.gold,
+          shards: this.shards,
+          items: [...actor.earned],
+        },
+      ]),
+    );
+    // Publish before onFinish can unmount the view. The room stores this immutable result.
+    this.coop?.onFrame?.(this.coopFrame());
+    this.callbacks.onSound(won ? 'victory' : 'defeat');
+    this.emit();
+    this.callbacks.onFinish(this.coopResults[this.coop!.localId]);
+  }
+
+  receiveCoopFrame(frame: CoopFrame) {
+    if (
+      !this.isCoopGuest ||
+      !this.initialized ||
+      frame.sequence <= this.coopReceivedSequence ||
+      this.finished
+    )
+      return;
+    this.coopReceivedSequence = frame.sequence;
+    const dt = 0.1;
+    this.elapsed = frame.elapsed;
+    this.progress = frame.progress;
+    this.kills = frame.kills;
+    for (const state of frame.actors) {
+      const actor = this.coopActors.get(state.id);
+      if (!actor) continue;
+      actor.x = state.x;
+      actor.y = state.y;
+      actor.hp = state.snapshot.hp;
+      actor.resource = state.snapshot.resource;
+      actor.cooldowns = { ...state.snapshot.cooldowns };
+      actor.facing = state.facing;
+      actor.moving = state.moving;
+      actor.coopDownSeconds = state.downSeconds;
+      actor.hero.position.set(state.x, state.y);
+      actor.hero.zIndex = state.y;
+      actor.hero.alpha = state.snapshot.hp <= 0 ? 0.3 : 1;
+      actor.hero.update(frame.elapsed, dt, state.moving, state.facing, false);
+      if (state.pet) {
+        actor.pet.position.set(state.pet.x, state.pet.y);
+        actor.pet.zIndex = state.pet.y;
+      }
+      state.summons?.forEach((summon, index) => {
+        const view = actor.summons[index];
+        if (view) {
+          view.position.set(summon.x, summon.y);
+          view.zIndex = summon.y;
+          view.visible = summon.active;
+          view.update(frame.elapsed + index, dt, true, state.facing, false);
+          view.scale.set(0.45);
+        }
+      });
+      if (state.id === this.coop!.localId) {
+        this.coopInput.commands = this.coopInput.commands?.filter(
+          (c) => c.sequence > (state.inputSequence ?? 0),
+        );
+        this.callbacks.onSnapshot({
+          ...state.snapshot,
+          paused: this.paused,
+          fps: Math.round(this.fps),
+        });
+      }
+    }
+    const existing = new Map(this.enemies.map((e) => [e.id, e]));
+    const next: Enemy[] = [];
+    for (const state of frame.enemies) {
+      let enemy = existing.get(state.id);
+      if (!enemy) {
+        const def = [...MONSTERS, ...BOSSES].find((d) => d.id === state.defId) ?? {
+          ...MONSTERS[0],
+          id: state.defId,
+          name: '盗宝哥布林',
+          family: 'goblin',
+          color: '#b6a660',
+        };
+        enemy = this.spawn(def, state.x, state.y, state.elite, state.boss, state.minion);
+      }
+      Object.assign(enemy, {
+        id: state.id,
+        x: state.x,
+        y: state.y,
+        hp: state.hp,
+        maxHp: state.maxHp,
+      });
+      enemy.view.position.set(state.x, state.y);
+      enemy.view.zIndex = state.y;
+      enemy.view.alpha = state.hp > 0 ? 1 : 0.3;
+      enemy.view.update(frame.elapsed + state.id, dt, true);
+      enemy.view.drawHealth(Math.max(0, state.hp / state.maxHp));
+      next.push(enemy);
+      existing.delete(state.id);
+    }
+    for (const enemy of existing.values()) enemy.view.destroy({ children: true });
+    this.enemies = next;
+    this.coopVisuals.clear();
+    for (const p of frame.projectiles)
+      pixelLine(
+        this.coopVisuals,
+        p.x - Math.cos(p.angle) * 12,
+        p.y - Math.sin(p.angle) * 12,
+        p.x,
+        p.y,
+        p.color,
+        3,
+      );
+    for (const z of frame.zones)
+      pixelEllipse(this.coopVisuals, z.x, z.y, z.radius, z.radius * 0.6, z.color, 6, 0.3, true);
+    for (const o of frame.orbs)
+      this.coopVisuals
+        .rect(o.x - 3, o.y - 3, 6, 6)
+        .fill(o.kind === 'health' ? 0xdd5269 : o.kind === 'progress' ? 0xb49be7 : 0xd7bb76);
+    for (const w of frame.warnings) {
+      if (w.shape === 'circle')
+        pixelEllipse(this.coopVisuals, w.x, w.y, w.radius, w.radius, w.color, 6, 0.5, true);
+      else if (w.shape === 'cone') {
+        const points = [w.x, w.y];
+        for (let i = 0; i <= 12; i++) {
+          const angle = w.angle - w.width + (w.width * 2 * i) / 12;
+          points.push(w.x + Math.cos(angle) * w.range, w.y + Math.sin(angle) * w.range);
+        }
+        pixelPolygon(this.coopVisuals, points, w.color, 6, 0.25);
+      } else {
+        const dx = Math.cos(w.angle) * w.range,
+          dy = Math.sin(w.angle) * w.range;
+        const ox = -Math.sin(w.angle) * w.width,
+          oy = Math.cos(w.angle) * w.width;
+        pixelPolygon(
+          this.coopVisuals,
+          [
+            w.x + ox,
+            w.y + oy,
+            w.x + dx + ox,
+            w.y + dy + oy,
+            w.x + dx - ox,
+            w.y + dy - oy,
+            w.x - ox,
+            w.y - oy,
+          ],
+          w.color,
+          6,
+          0.25,
+        );
+      }
+    }
+    for (const state of frame.pylons) {
+      const pylon = this.pylons.find((p) => p.id === state.id);
+      if (pylon) {
+        pylon.used = state.used;
+        pylon.view.alpha = state.used ? 0.4 : 1;
+      }
+    }
+    this.updateCoopLabels();
+    const result = frame.results?.[this.coop!.localId];
+    if (result) {
+      this.finished = true;
+      this.callbacks.onSound(result.won ? 'victory' : 'defeat');
+      this.callbacks.onFinish(result);
+    }
+  }
+
   private applyStaticPowers() {
     const s = this.config.stats;
     const p = (id: string) => this.power(id);
@@ -360,6 +897,7 @@ export class GameEngine {
   }
   setAuto(id: string, enabled: boolean) {
     this.config.autoSkills[id] = enabled;
+    if (this.isCoopGuest) this.coopInput.autoSkills = { ...this.config.autoSkills };
   }
   getSkillCost(id: string) {
     const skill = this.skill(id);
@@ -376,6 +914,12 @@ export class GameEngine {
     this.moving = false;
     this.gamepadHeld.clear();
     this.gamepadBlocked = true;
+    this.coopInput.commands = [];
+    this.coopInput.movement = { x: 0, y: 0 };
+    if (this.isCoopGuest && this.initialized) {
+      this.coopInputClock = 0;
+      this.sendCoopInput(0);
+    }
   }
   setPaused(paused: boolean) {
     if (this.finished) return;
@@ -462,11 +1006,33 @@ export class GameEngine {
     if (!this.app || this.disposed) return;
     const dt = Math.min(0.05, this.app.ticker.deltaMS / 1000);
     this.fps = this.app.ticker.FPS;
-    if (!this.paused && !this.finished) this.update(dt);
+    if (!this.coop && !this.paused && !this.finished) this.update(dt);
     this.updateCamera(dt);
   };
   private update(dt: number) {
     this.elapsed += dt;
+    this.updateActor(dt);
+    this.spawnTimer -= dt;
+    if (this.spawnTimer <= 0 && !this.bossSpawned) {
+      this.spawnWave();
+      this.spawnTimer = 5;
+    }
+    this.updateEnemies(dt);
+    this.updateWarningAnimations(dt);
+    this.updateOrbs(dt);
+    this.vfx.tick(dt);
+    this.numbers.tick(dt);
+    if (this.progress >= 100 && !this.bossSpawned && !this.config.training) this.summonBoss();
+    if (this.hp <= 0 && !this.config.training) this.finish(false);
+    if (this.elapsed >= 300 && !this.config.training) this.finish(false);
+    if (this.config.training) this.hp = this.config.stats.hp;
+    this.snapshotTimer -= dt;
+    if (this.snapshotTimer <= 0) {
+      this.snapshotTimer = 0.1;
+      this.emit();
+    }
+  }
+  private updateActor(dt: number) {
     this.buffs.tick(dt);
     this.updateShield(dt);
     this.comboTimer -= dt;
@@ -475,8 +1041,8 @@ export class GameEngine {
       this.cooldowns[id] = Math.max(0, this.cooldowns[id] - dt);
       if (!this.cooldowns[id]) delete this.cooldowns[id];
     }
-    let mx = this.movement.x + this.dragMovement.x,
-      my = this.movement.y + this.dragMovement.y;
+    let mx = this.paused ? 0 : this.movement.x + this.dragMovement.x,
+      my = this.paused ? 0 : this.movement.y + this.dragMovement.y;
     mx +=
       (this.keys.has('d') || this.keys.has('arrowright') ? 1 : 0) -
       (this.keys.has('a') || this.keys.has('arrowleft') ? 1 : 0);
@@ -484,7 +1050,10 @@ export class GameEngine {
       (this.keys.has('s') || this.keys.has('arrowdown') ? 1 : 0) -
       (this.keys.has('w') || this.keys.has('arrowup') ? 1 : 0);
     const gamepadSkills: SkillDef[] = [];
-    const pad = navigator.getGamepads?.()?.find((p) => p?.connected);
+    const pad =
+      !this.coopParent && !this.paused
+        ? navigator.getGamepads?.()?.find((p) => p?.connected)
+        : undefined;
     if (pad && !this.hasInputDialog() && this.gamepadBlocked) {
       // Require neutral input after a pause or reconnect before accepting a held action.
       this.gamepadBlocked =
@@ -572,15 +1141,11 @@ export class GameEngine {
               ? 'war_cry'
               : undefined,
       });
-      if (selected) this.cast(selected.id);
+      if (selected) {
+        if (this.coop && this.paused) this.perform(selected, false);
+        else this.cast(selected.id);
+      }
     }
-    this.spawnTimer -= dt;
-    if (this.spawnTimer <= 0 && !this.bossSpawned) {
-      this.spawnWave();
-      this.spawnTimer = 5;
-    }
-    this.updateEnemies(dt);
-    this.updateWarningAnimations(dt);
     for (const p of [...this.projectiles.items])
       if (
         p.skillId === 'frozen_orb' &&
@@ -658,20 +1223,8 @@ export class GameEngine {
       },
     );
     this.updateZones(dt);
-    this.updateOrbs(dt);
     this.updatePet(dt);
     this.periodic(dt);
-    this.vfx.tick(dt);
-    this.numbers.tick(dt);
-    if (this.progress >= 100 && !this.bossSpawned && !this.config.training) this.summonBoss();
-    if (this.hp <= 0 && !this.config.training) this.finish(false);
-    if (this.elapsed >= 300 && !this.config.training) this.finish(false);
-    if (this.config.training) this.hp = this.config.stats.hp;
-    this.snapshotTimer -= dt;
-    if (this.snapshotTimer <= 0) {
-      this.snapshotTimer = 0.1;
-      this.emit();
-    }
   }
   private updateCamera(dt: number) {
     if (!this.app) return;
@@ -739,7 +1292,13 @@ export class GameEngine {
   ): Enemy {
     const stage = STAGES[this.config.stage - 1] ?? STAGES[0];
     const view = new MonsterRig(def, elite, boss, minion);
-    const hp = def.hp * stage.hpMultiplier * (elite ? 5 : 1) * (minion ? 1.6 : 1);
+    const balance = coopBalance(this.coopHost.coop?.members.length ?? 1);
+    const hp =
+      def.hp *
+      stage.hpMultiplier *
+      (elite ? 5 : 1) *
+      (minion ? 1.6 : 1) *
+      (boss ? balance.bossHp : balance.monsterHp);
     const e: Enemy = {
       id: this.nextId++,
       def,
@@ -929,7 +1488,7 @@ export class GameEngine {
       if (e.poison > 0) {
         const poisonTime = Math.min(dt, e.poison);
         e.poison = Math.max(0, e.poison - dt);
-        this.hit(
+        (e.poisonOwner ?? this).hit(
           e,
           e.poisonSkill ?? this.skills[0],
           poisonTime * 0.4 * Math.max(1, e.poisonStacks),
@@ -940,7 +1499,8 @@ export class GameEngine {
       }
       if ((e.bleed ?? 0) > 0) {
         e.bleed = Math.max(0, e.bleed! - dt);
-        this.hit(e, e.bleedSkill, dt * (this.learned('blood_fan') ? 1.6 : 1), false, true);
+        const owner = e.bleedOwner ?? this;
+        owner.hit(e, e.bleedSkill, dt * (owner.learned('blood_fan') ? 1.6 : 1), false, true);
       }
       if (e.hp <= 0) continue;
       e.view.position.set(e.x, e.y);
@@ -951,6 +1511,12 @@ export class GameEngine {
   }
   private stepEnemyBrain(e: Enemy, dt: number) {
     if (this.config.training) return;
+    const target = this.coop
+      ? ([...this.coopActors.values()]
+          .filter((actor) => actor.hp > 0)
+          .sort((a, b) => Math.hypot(a.x - e.x, a.y - e.y) - Math.hypot(b.x - e.x, b.y - e.y))[0] ??
+        this)
+      : this;
     const input = {
       dt,
       time: this.elapsed,
@@ -959,8 +1525,8 @@ export class GameEngine {
       family: e.def.family,
       x: e.x,
       y: e.y,
-      playerX: this.x,
-      playerY: this.y,
+      playerX: target.x,
+      playerY: target.y,
       hp: e.hp,
       maxHp: e.maxHp,
       attack: e.def.attack,
@@ -1057,37 +1623,8 @@ export class GameEngine {
         this.shake = Math.max(this.shake, 5);
         this.vfx.burst(event.targetX, event.targetY, ELEMENT_COLORS[event.element], 18, true);
       }
-      for (const summon of this.summons) {
-        const state = this.summonStates.get(summon);
-        if (!state || state.hp <= 0 || !attackContains(event, summon.x, summon.y)) continue;
-        state.hp = Math.max(
-          0,
-          state.hp -
-            mitigateDamage(
-              event.damage * (STAGES[this.config.stage - 1]?.damageMultiplier ?? 1),
-              this.config.stats,
-            ),
-        );
-        summon.alpha = 0.25 + (0.4 * state.hp) / state.maxHp;
-        if (state.hp <= 0) this.defeatSummon(summon);
-      }
-      if (event.playerHit) {
-        this.takeDamage(event.damage);
-        if (event.slow && !this.buffs.has('ultimate') && !this.buffs.has('invulnerable')) {
-          this.slowUntil = this.elapsed + event.slow.duration;
-          this.slowRatio = event.slow.ratio;
-        }
-        if (this.config.classId === 'barbarian')
-          this.resource = Math.min(
-            this.config.stats.maxResource,
-            this.resource + 8 + (this.learned('thick_skin') ? 6 : 0),
-          );
-        if (this.config.stats.thorns > 0 && e.hp > 0) {
-          e.hp -= this.config.stats.thorns;
-          this.numbers.show(e.x, e.y, this.config.stats.thorns);
-          if (e.hp <= 0) this.kill(e);
-        }
-      }
+      for (const actor of this.coop ? this.coopActors.values() : [this])
+        actor.applyEnemyStrike(e, event);
     } else if (event.kind === 'heal') {
       for (const other of this.enemies)
         if (
@@ -1123,8 +1660,42 @@ export class GameEngine {
       this.kill(e);
     }
   }
+  private applyEnemyStrike(e: Enemy, event: Extract<MonsterAIEvent, { kind: 'strike' }>) {
+    for (const summon of this.summons) {
+      const state = this.summonStates.get(summon);
+      if (!state || state.hp <= 0 || !attackContains(event, summon.x, summon.y)) continue;
+      state.hp = Math.max(
+        0,
+        state.hp -
+          mitigateDamage(
+            event.damage * (STAGES[this.config.stage - 1]?.damageMultiplier ?? 1),
+            this.config.stats,
+          ),
+      );
+      summon.alpha = 0.25 + (0.4 * state.hp) / state.maxHp;
+      if (state.hp <= 0) this.defeatSummon(summon);
+    }
+    if (this.hp > 0 && attackContains(event, this.x, this.y)) {
+      this.takeDamage(event.damage);
+      if (event.slow && !this.buffs.has('ultimate') && !this.buffs.has('invulnerable')) {
+        this.slowUntil = this.elapsed + event.slow.duration;
+        this.slowRatio = event.slow.ratio;
+      }
+      if (this.config.classId === 'barbarian')
+        this.resource = Math.min(
+          this.config.stats.maxResource,
+          this.resource + 8 + (this.learned('thick_skin') ? 6 : 0),
+        );
+      if (this.config.stats.thorns > 0 && e.hp > 0) {
+        e.hp -= this.config.stats.thorns;
+        this.numbers.show(e.x, e.y, this.config.stats.thorns);
+        if (e.hp <= 0) this.kill(e);
+      }
+    }
+  }
   private takeDamage(raw: number) {
-    if (this.buffs.has('invulnerable')) return;
+    if (this.hp <= 0 || this.buffs.has('invulnerable')) return;
+    raw *= coopBalance(this.coopHost.coop?.members.length ?? 1).monsterDamage;
     if (this.random() < this.config.stats.dodge) {
       this.numbers.show(this.x, this.y, '闪避', false, 0x9ddbcc);
       if (this.power('immortal_armor') && this.random() < this.power('immortal_armor'))
@@ -1179,7 +1750,11 @@ export class GameEngine {
     e.vulnerability = Object.values(e.vulnerabilities).reduce((sum, buff) => sum + buff.value, 0);
   }
   cast(id: string) {
-    if (this.paused || this.finished || !this.initialized) return;
+    if (this.isCoopGuest) {
+      if (!this.paused && !this.finished) this.queueCoopCommand(id);
+      return;
+    }
+    if (this.paused || this.finished || !this.initialized || this.hp <= 0) return;
     const skill = this.skill(id);
     if (
       !skill ||
@@ -1902,15 +2477,18 @@ export class GameEngine {
     }
     if (!dot && skill.effect === 'fan') {
       e.bleed = this.learned('blood_fan') ? 5 : 3;
+      e.bleedOwner = this;
       e.bleedSkill = { ...skill, multiplier: 0.6 };
     }
     if (!dot && skill.effect === 'whirlwind' && this.power('lamentation')) {
       e.bleed = 3;
+      e.bleedOwner = this;
       e.bleedSkill = { ...skill, multiplier: this.power('lamentation') };
     }
     if (skill.element === 'poison' && !dot) {
       if (e.poison <= 0) e.poisonStacks = 0;
       e.poison = (skill.effect === 'scythe' ? skill.duration : 4) + (this.power('nayr') ? 2 : 0);
+      e.poisonOwner = this;
       e.poisonSkill =
         skill.effect === 'scythe'
           ? {
@@ -2040,6 +2618,7 @@ export class GameEngine {
         ) {
           n.poison = Math.max(n.poison, e.poison);
           n.poisonSkill = e.poisonSkill;
+          n.poisonOwner = e.poisonOwner;
           n.poisonStacks = Math.max(n.poisonStacks, 2);
           if (this.power('plaguebranch'))
             this.hit(
@@ -2055,8 +2634,31 @@ export class GameEngine {
         if (n.hp > 0) {
           n.poison = 4;
           n.poisonSkill = e.poisonSkill;
+          n.poisonOwner = e.poisonOwner;
           n.poisonStacks = Math.max(n.poisonStacks, 1);
         }
+    if (e.boss && this.coopHost.coop) {
+      const host = this.coopHost;
+      host.shards += 100 + this.config.stage * 12;
+      host.gold += 400 + this.config.stage * 40;
+      for (const actor of host.coopActors.values()) {
+        const owned = [...Object.values(actor.config.equipment), ...actor.earned]
+          .filter(Boolean)
+          .map((i) => `${i!.setId}:${i!.slot}`)
+          .concat(actor.config.ownedSetPieces ?? []);
+        for (let i = 0; i < 4; i++) {
+          const item = generateLoot(actor.config.classId, actor.config.stage, {
+            rng: host.random,
+            source: 'boss',
+            ownedSetPieces: owned,
+          });
+          actor.earned.push(item);
+          if (item.setId) owned.push(`${item.setId}:${item.slot}`);
+        }
+      }
+      host.finishCoop(true);
+      return;
+    }
     if (e.boss) {
       this.shards += 100 + this.config.stage * 12;
       this.gold += 400 + this.config.stage * 40;
@@ -2254,6 +2856,7 @@ export class GameEngine {
               e.poison = 4;
               e.poisonStacks = 3;
               e.poisonSkill = z.skill;
+              e.poisonOwner = this;
             }
           this.vfx.burst(z.x, z.y, 0xb7d67e, 20, true);
         }
@@ -2319,6 +2922,25 @@ export class GameEngine {
     this.orbs.push({ kind, x, y, age: 0, view, item, value });
   }
   private dropItem(x: number, y: number, item: Item) {
+    if (this.coopHost.coop) {
+      const source = this.enemies.some(
+        (e) => e.goblin && e.deadTime !== undefined && Math.hypot(e.x - x, e.y - y) < 100,
+      )
+        ? 'goblin'
+        : 'world';
+      for (const actor of this.coopHost.coopActors.values())
+        actor.earned.push(
+          actor === this
+            ? item
+            : generateLoot(actor.config.classId, actor.config.stage, {
+                rng: this.coopHost.random,
+                source,
+                ownedSetPieces: actor.config.ownedSetPieces,
+              }),
+        );
+      this.vfx.ring(x, y, Number.parseInt(RARITY_COLORS[item.rarity].slice(1), 16), 25);
+      return;
+    }
     this.drop('item', x, y, 0, item);
     this.callbacks.onSound(
       item.rarity === 'primal'
@@ -2338,9 +2960,27 @@ export class GameEngine {
     for (let i = this.orbs.length - 1; i >= 0; i--) {
       const o = this.orbs[i];
       o.age += dt;
-      const pickup = this.config.stats.pickupRadius + 35;
+      if (this.coop && this.coopActors.size) {
+        const collector = [...this.coopActors.values()]
+          .filter((a) => a.hp > 0)
+          .sort((a, b) => a.distance(o) - b.distance(o))[0];
+        if (
+          collector &&
+          collector !== this &&
+          collector.distance(o) < collector.config.stats.pickupRadius + 35
+        ) {
+          // Execute the existing pickup rules with the collecting character's passives.
+          const rest = this.orbs;
+          collector.orbs = [o];
+          collector.updateOrbs(0);
+          if (!collector.orbs.length) rest.splice(i, 1);
+          collector.orbs = rest;
+          continue;
+        }
+      }
+      const pickup = this.hp > 0 ? this.config.stats.pickupRadius + 35 : 0;
       const player = this.distance(o) < pickup;
-      const pet = Math.hypot(o.x - this.pet.x, o.y - this.pet.y) < 25;
+      const pet = this.hp > 0 && Math.hypot(o.x - this.pet.x, o.y - this.pet.y) < 25;
       if (o.age > 0.25 && (player || pet)) {
         if (o.kind === 'health') {
           this.hp = Math.min(
@@ -2382,86 +3022,13 @@ export class GameEngine {
     }
   }
   private createPet() {
-    const g = new Graphics();
     const id = this.config.petId;
-    const color = id.includes('dragon')
-      ? 0x8cccd7
-      : id.includes('imp')
-        ? 0xe5a26e
-        : id.includes('owl')
-          ? 0xb9aed3
-          : 0xb7c77e;
-    const ink = { o: 0x14262d, b: color, h: 0xe7dcc5, e: 0x1d3136, g: 0x90724e };
-    const petRows: Record<string, string[]> = {
-      owl: [
-        '..oo..oo..',
-        '.obboobbo.',
-        '.bbbbbbbb.',
-        'obhhbbhhbo',
-        'obhebbehbo',
-        'obbbggbbbo',
-        '.obbbbbbo.',
-        '..obbbbo..',
-        '..gg..gg..',
-      ],
-      fox: [
-        'oo......oo',
-        'obo....obo',
-        'obbboobbbo',
-        '.bbbbbbbb.',
-        '.bhebbheb.',
-        '..bhhghb..',
-        '...bhhb...',
-        '..bbhhbb..',
-        '..gg..gg..',
-      ],
-      dragon: [
-        '...o..o...',
-        '...boob...',
-        '.oobbbboo.',
-        'obebbbebo.',
-        'obbbhbbbbo',
-        '.obbhhbbo.',
-        'obbbhhbbbo',
-        '.obbbbbbo.',
-        '..gg..gg..',
-      ],
-      imp: [
-        '.ho....oh.',
-        '.hbo..obh.',
-        '..bbbbbb..',
-        '.bbebbebb.',
-        '.bbbbbbbb.',
-        '..bhhhhb..',
-        '...bbbb...',
-        '..bb..bb..',
-        '..gg..gg..',
-      ],
-      goblin: [
-        'oo......oo',
-        'obbo..obbo',
-        '.bbbbbbbb.',
-        '..behheb..',
-        '..bbggbb..',
-        '.ggbbbbbb.',
-        '.gghhbbbb.',
-        '.gggbbbb..',
-        '...gg.gg..',
-      ],
-      wisp: [
-        '....b.....',
-        '...bbb....',
-        '..bbhbb...',
-        '.bbhhhbb..',
-        '.bhehebb..',
-        '..bhhhb...',
-        '...bhb....',
-        '..bb.bb...',
-        '.b.....b..',
-      ],
-    };
-    pixelStamp(g, petRows[id] ?? petRows.owl, ink, -15, -18, 3);
-    this.pet.addChild(g);
+    const art = PET_ART[id] ?? PET_ART.owl;
+    const sprite = new Sprite(getPetTexture(id));
+    sprite.anchor.set(art.anchorX, art.ground);
+    sprite.width = 36;
+    sprite.height = 36;
+    this.pet.addChild(sprite);
     this.pet.position.set(-38, 32);
     this.entityLayer.addChild(this.pet);
     if (this.config.classId === 'ranger' && this.learned('raven'))
@@ -2641,7 +3208,11 @@ export class GameEngine {
     });
   }
   activatePylon(id: string) {
-    if (this.paused || this.finished) return;
+    if (this.paused || this.finished || this.hp <= 0) return;
+    if (this.isCoopGuest) {
+      this.queueCoopCommand(`pylon:${id}`);
+      return;
+    }
     const p = this.pylons.find((p) => p.id === id);
     if (!p || p.used) return;
     if (this.distance(p) > 190) {
@@ -2651,7 +3222,8 @@ export class GameEngine {
     p.used = true;
     p.view.alpha = 0.4;
     const def = PYLONS.find((d) => d.id === id)!;
-    this.buffs.add(id, def.name, 25 * (1 + this.power('nemesis')), def.color);
+    for (const actor of this.coopHost.coop ? this.coopHost.coopActors.values() : [this])
+      actor.buffs.add(id, def.name, 25 * (1 + this.power('nemesis')), def.color);
     this.vfx.ring(p.x, p.y, Number.parseInt(def.color.slice(1), 16), 230);
     this.callbacks.onSound('pylon');
     if (this.power('nemesis')) {
@@ -2756,6 +3328,10 @@ export class GameEngine {
     }
   }
   private finish(won: boolean) {
+    if (this.coopHost.coop) {
+      this.coopHost.finishCoop(won);
+      return;
+    }
     if (this.finished || this.config.training) return;
     this.finished = true;
     this.callbacks.onSound(won ? 'victory' : 'defeat');
@@ -2770,8 +3346,7 @@ export class GameEngine {
       items: [...this.earned],
     });
   }
-  private emit() {
-    if (!this.callbacks) return;
+  private snapshot(): CombatSnapshot {
     const boss = this.enemies.find((e) => e.boss && e.hp > 0);
     const snapshot: CombatSnapshot = {
       hp: Math.max(0, this.hp),
@@ -2799,11 +3374,16 @@ export class GameEngine {
       pylons: this.pylons.map(({ id, name, used }) => ({ id, name, used })),
       fps: Math.round(this.fps),
     };
-    this.callbacks.onSnapshot(snapshot);
+    return snapshot;
+  }
+  private emit() {
+    if (this.callbacks) this.callbacks.onSnapshot(this.snapshot());
   }
   destroy() {
     if (this.disposed) return;
     this.disposed = true;
+    clearInterval(this.coopTimer);
+    this.coopTimer = undefined;
     this.resizeObserver?.disconnect();
     window.removeEventListener('keydown', this.onKeyDown);
     window.removeEventListener('keyup', this.onKeyUp);

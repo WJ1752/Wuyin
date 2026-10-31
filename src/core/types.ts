@@ -227,6 +227,8 @@ export interface RunRecord {
   >;
 }
 export interface RunResult {
+  /** Cooperative clears grant progression but are excluded from solo rankings. */
+  partySize?: number;
   won: boolean;
   stage: number;
   seconds: number;

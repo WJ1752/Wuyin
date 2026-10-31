@@ -49,6 +49,13 @@ const ACTIVITIES: Record<string, string> = {
 };
 const START = { x: 0.5, y: 0.73 };
 const INTERACTION_DISTANCE = 82;
+// CSS and Pixi use the same image origin: the actor's coordinate is its ground contact.
+const characterOrigin = (classId: keyof typeof CHARACTER_ART): CSSProperties =>
+  ({
+    '--art-left': `${(0.5 - CHARACTER_ART[classId].anchorX) * 100}%`,
+    '--art-bottom': `${(CHARACTER_ART[classId].ground - 1) * 100}%`,
+    '--art-anchor': `${CHARACTER_ART[classId].anchorX * 100}% ${CHARACTER_ART[classId].ground * 100}%`,
+  }) as CSSProperties;
 
 export function NpcHall({
   onNavigate,
@@ -300,6 +307,10 @@ export function NpcHall({
 
   const approach = (npc: HallNpc) => {
     if (!movingEnabled) return;
+    if (distanceTo(npc) <= INTERACTION_DISTANCE) {
+      openService(npc);
+      return;
+    }
     setSelectedNpcId(npc.id);
     setTarget(clampHallPosition(npc.x, npc.y + 0.09));
   };
@@ -420,7 +431,7 @@ export function NpcHall({
                 } as CSSProperties
               }
               onClick={() => approach(npc)}
-              aria-label={`走近${npc.name}，${npc.service}`}
+              aria-label={`${near ? '交互' : '走近'}${npc.name}，${npc.service}`}
               disabled={!movingEnabled}
             >
               <span className="hall-nameplate">
@@ -429,6 +440,11 @@ export function NpcHall({
               </span>
               <span className="hall-sprite">
                 <img
+                  className="npc-atlas-art"
+                  style={{
+                    left: `${-NPC_ART[npc.id].column * 100}%`,
+                    top: `${-NPC_ART[npc.id].row * 100}%`,
+                  }}
                   src={NPC_ART[npc.id].src}
                   alt={`${npc.name}，${NPC_ART[npc.id].description}`}
                   draggable={false}
@@ -443,8 +459,9 @@ export function NpcHall({
           return (
             <button
               key={player.id}
-              className="hall-actor hall-player"
+              className="hall-actor hall-player hall-character"
               style={{
+                ...characterOrigin(player.classId),
                 left: `${location.x * 100}%`,
                 top: `${location.y * 100}%`,
                 zIndex: Math.round(location.y * 100) + 1,
@@ -471,9 +488,10 @@ export function NpcHall({
           </span>
         )}
         <div
-          className={`hall-actor hall-self ${walking ? 'walking' : ''}`}
+          className={`hall-actor hall-self hall-character ${walking ? 'walking' : ''}`}
           style={
             {
+              ...characterOrigin(save.classId),
               left: `${position.x * 100}%`,
               top: `${position.y * 100}%`,
               zIndex: Math.round(position.y * 100) + 2,
@@ -622,7 +640,7 @@ export function NpcHall({
                 )}
               </div>
               <p className="muted hall-profile-note">
-                营地提供在线同屏与档案查看；秘境仍为单人远征。
+                营地可查看旅人配装；通过组队远征入口邀请同行，共同挑战秘境。
               </p>
             </div>
           </div>

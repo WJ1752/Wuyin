@@ -1,20 +1,20 @@
 @import 'tailwindcss';
 @theme {
-  --color-gold: #e3b96e;
-  --color-ink: #101925;
+  --color-gold: #d8b77d;
+  --color-ink: #101719;
 }
 :root {
   font-family: 'Microsoft YaHei', 'PingFang SC', system-ui, sans-serif;
-  color: #e9e2cd;
-  background: #101925;
+  color: #e8dfca;
+  background: #0b1114;
   font-synthesis: none;
-  --gold: #e3b96e;
-  --muted: #a5b4b4;
-  --line: #52645b;
-  --panel: #1c2d36;
-  --serif: 'Microsoft YaHei', 'PingFang SC', sans-serif;
+  --gold: #d8b77d;
+  --muted: #a9b3aa;
+  --line: #635d4d;
+  --panel: #1b2729;
+  --serif: 'Noto Serif SC', 'Songti SC', 'SimSun', serif;
   --ui-mono: 'Consolas', 'Courier New', monospace;
-  --pixel-bevel: inset 2px 2px 0 #ffffff16, inset -2px -2px 0 #080f1888, 3px 3px 0 #080f18;
+  --pixel-bevel: inset 1px 1px 0 #c9bc8d30, inset -2px -2px 0 #060e12aa, 3px 3px 0 #060e12;
 }
 * {
   box-sizing: border-box;
@@ -100,13 +100,19 @@ small {
   margin: auto;
   padding: 0 38px;
   min-height: 100dvh;
-  background: repeating-linear-gradient(0deg, #15232c 0 4px, #14212a 4px 8px);
+  background:
+    linear-gradient(135deg, #34423a12 25%, transparent 25%) 0 0 / 28px 28px,
+    linear-gradient(315deg, #34423a12 25%, transparent 25%) 0 0 / 28px 28px,
+    #111b20;
 }
 .topbar {
   height: 100px;
   display: flex;
   align-items: center;
-  border-bottom: 3px solid #6d7662;
+  border-bottom: 1px solid #aa8d58;
+  box-shadow:
+    0 4px 0 #080f15,
+    0 5px 0 #52604e66;
   gap: 42px;
 }
 .brand {
@@ -216,8 +222,8 @@ small {
 .adventure-sidebar {
   padding-top: 6px;
   padding: 12px;
-  background: #1b2b34;
-  border: 2px solid #43564e;
+  background: #182428;
+  border: 2px solid #68604c;
   box-shadow: var(--pixel-bevel);
 }
 .eyebrow {
@@ -3083,5 +3089,185 @@ kbd {
   }
   .paused-build-guide {
     padding: 10px;
+  }
+}
+
+/* Stone, old brass and parchment unite the camp, expedition altar and battle HUD. */
+.character-sidebar,
+.adventure-sidebar,
+.current-build {
+  background-image:
+    linear-gradient(#c4aa72, #c4aa72), linear-gradient(#c4aa72, #c4aa72),
+    linear-gradient(#c4aa72, #c4aa72), linear-gradient(#c4aa72, #c4aa72);
+  background-position:
+    left top,
+    right top,
+    left bottom,
+    right bottom;
+  background-size: 9px 2px;
+  background-repeat: no-repeat;
+}
+.brand strong {
+  color: #e9d8b1;
+  text-shadow: 0 2px #0a0f13;
+}
+.brand-sigil {
+  color: #d3ae6b;
+}
+.hero-portrait {
+  background:
+    radial-gradient(ellipse at 50% 66%, #49635466, transparent 65%),
+    repeating-linear-gradient(90deg, #131f25 0 19px, #293a3744 19px 21px);
+  border-bottom-color: #7d714f;
+}
+.outline-button,
+.ghost-button,
+.icon-button {
+  background-color: #1e2d30;
+  border-color: #777052;
+}
+.outline-button:hover:not(:disabled),
+.ghost-button:hover:not(:disabled),
+.icon-button:hover:not(:disabled) {
+  background-color: #344039;
+  border-color: #b99c65;
+}
+.rift-card {
+  border-color: #8f7952;
+  background:
+    linear-gradient(135deg, #75634422 0 18px, transparent 18px),
+    linear-gradient(225deg, #75634422 0 18px, transparent 18px), #141f25;
+  box-shadow:
+    inset 0 0 0 4px #0b141a,
+    inset 0 0 0 5px #65553a66,
+    3px 3px #080f14;
+}
+.rift-crest:before {
+  transform: rotate(45deg) scale(0.8);
+  border-color: #9a855b;
+  background: #22342f;
+}
+.rift-crest span {
+  background: #22342f;
+  color: #edd5a1;
+}
+.stage-picker > span {
+  color: #eee1bf;
+  text-shadow: 2px 2px #080f15;
+}
+.stage-picker button {
+  min-width: 32px;
+  min-height: 36px;
+  display: grid;
+  place-items: center;
+}
+.enter-button,
+.gold-button {
+  background: #c7a267;
+  border-color: #e5c891;
+  color: #141f22;
+  box-shadow:
+    inset 2px 2px #f3d89f,
+    inset -2px -3px #755838,
+    3px 3px #080f14;
+}
+.enter-button:active:not(:disabled),
+.gold-button:active:not(:disabled),
+.outline-button:active:not(:disabled),
+.icon-button:active:not(:disabled) {
+  box-shadow: inset 2px 2px #080f1877;
+}
+.bottom-nav {
+  border-color: #6d654c;
+  background: #101c21;
+}
+.bottom-nav button {
+  border-color: #4b5144;
+}
+.bottom-nav button:hover {
+  background: #334239;
+}
+.current-build {
+  border-color: #7d7658;
+  background-color: #1c2b2b;
+}
+.modal {
+  background: #17252b;
+  border-color: #bca374;
+  box-shadow:
+    inset 0 0 0 3px #080f16,
+    inset 0 0 0 4px #75694d,
+    6px 6px #050c12aa;
+}
+.modal-header {
+  background: #101d24;
+  border-bottom: 3px double #8b7954;
+}
+.modal-header h2 {
+  color: #e5d6b4;
+}
+.combat-top {
+  background: linear-gradient(#0c171eeb 0 70%, #0c171e99 85%, transparent);
+}
+.combat-bottom {
+  background: linear-gradient(transparent, #09141dc9 28%, #09141deb);
+}
+.resource-orb {
+  border-color: #ac9160;
+  clip-path: polygon(18% 0, 82% 0, 100% 18%, 100% 82%, 82% 100%, 18% 100%, 0 82%, 0 18%);
+  outline: 0;
+  box-shadow:
+    inset 3px 3px #f1d89c55,
+    inset -3px -3px #080f18cc;
+}
+.skill-cast {
+  border-color: #81937b;
+  background: #20333b;
+  box-shadow:
+    inset 2px 2px #d5d2aa22,
+    inset -2px -2px #080f18,
+    2px 3px #060e16;
+}
+.keybind {
+  padding: 0 3px;
+  color: #e7d9b1;
+  background: #101b23e6;
+}
+.auto-toggle[aria-pressed='true'] {
+  color: #c6dda5;
+  border-color: #8b9b6c;
+  background: #263a2f;
+}
+.auto-toggle[aria-pressed='false'] {
+  color: #e0c691;
+  border-color: #93815b;
+  background: #292b28;
+}
+.virtual-joystick {
+  border-radius: 50%;
+  border: 2px solid #ae9f7377;
+  background: #111e29a8;
+}
+.joystick-ring {
+  border-radius: 50%;
+  border-color: #c7c39d44;
+}
+.joystick-thumb {
+  clip-path: polygon(25% 0, 75% 0, 100% 25%, 100% 75%, 75% 100%, 25% 100%, 0 75%, 0 25%);
+  background: #486052;
+  border-color: #b9b58b;
+}
+@media (max-width: 760px) {
+  .mobile-dock {
+    background: #111d24fa;
+    border-top: 3px double #c0a36d;
+  }
+  .mobile-dock .dock-expedition {
+    background: #c7a267;
+    border-color: #e5c891;
+  }
+  .stage-picker button {
+    min-width: 30px;
+    min-height: 40px;
   }
 }

@@ -1,5 +1,27 @@
-import { Container, Graphics } from 'pixi.js';
+import { Assets, Container, Graphics, Rectangle, Texture, TilingSprite } from 'pixi.js';
 import { pixelEllipse, pixelLine, pixelPolygon, pixelStamp, snapPixel } from './PixelArt';
+
+const groundTextures: Texture[] = [];
+let loading: Promise<void> | undefined;
+
+/** Load once for all runs; retain the authored ground below when an asset is unavailable. */
+export function preloadMapTextures(): Promise<void> {
+  return (loading ??= Assets.load<Texture>('assets/maps/rift-ground-atlas-v2.png')
+    .then((atlas) => {
+      atlas.source.scaleMode = 'nearest';
+      const width = atlas.width / 2;
+      const height = atlas.height / 2;
+      for (let index = 0; index < 4; index++) {
+        groundTextures[index] = new Texture({
+          source: atlas.source,
+          frame: new Rectangle((index % 2) * width, Math.floor(index / 2) * height, width, height),
+        });
+      }
+    })
+    .catch(() => {
+      // Preserve the existing procedural map as the offline/error fallback.
+    }));
+}
 
 const PALETTES = [
   [0x1b302d, 0x233c34, 0x304b3b, 0x536149, 0x8a9d61],
@@ -15,35 +37,48 @@ export function createMap(theme: number, size = 1800): Container {
   root.addChild(ground);
   let seed = 77 + theme * 973;
   const rand = () => (seed = (seed * 1664525 + 1013904223) >>> 0) / 4294967296;
-  // Quiet paving gives combat a readable centre; irregular islands break the tile grid.
-  for (let y = -size / 2; y < size / 2; y += 48) {
-    for (let x = -size / 2; x < size / 2; x += 64) {
-      const stagger = (Math.floor(y / 48) % 2) * 32;
-      const xx = x + stagger;
-      ground.rect(xx + 3, y + 3, 58, 42).fill(rand() > 0.5 ? palette[1] : palette[0]);
-      ground.rect(xx + 6, y + 3, 49, 3).fill({ color: palette[2], alpha: 0.55 });
-      if (rand() > 0.62) {
-        ground.rect(xx + 12, y + 18, 12, 3).fill(palette[2]);
-        ground.rect(xx + 21, y + 21, 3, 6).fill(palette[2]);
+  const texture = groundTextures[theme % PALETTES.length];
+  if (texture) {
+    const terrain = new TilingSprite({
+      texture,
+      width: size,
+      height: size,
+      tileScale: { x: 0.78, y: 0.78 },
+      tint: 0xb8b8b8,
+    });
+    terrain.position.set(-size / 2, -size / 2);
+    root.addChild(terrain);
+  } else {
+    // Quiet paving gives combat a readable centre; irregular islands break the tile grid.
+    for (let y = -size / 2; y < size / 2; y += 48) {
+      for (let x = -size / 2; x < size / 2; x += 64) {
+        const stagger = (Math.floor(y / 48) % 2) * 32;
+        const xx = x + stagger;
+        ground.rect(xx + 3, y + 3, 58, 42).fill(rand() > 0.5 ? palette[1] : palette[0]);
+        ground.rect(xx + 6, y + 3, 49, 3).fill({ color: palette[2], alpha: 0.55 });
+        if (rand() > 0.62) {
+          ground.rect(xx + 12, y + 18, 12, 3).fill(palette[2]);
+          ground.rect(xx + 21, y + 21, 3, 6).fill(palette[2]);
+        }
+        if (rand() > 0.8)
+          pixelStamp(
+            ground,
+            ['..aa.', '.aaba', 'abb..', '.a...'],
+            { a: palette[2], b: palette[3] },
+            xx + 38,
+            y + 29,
+            3,
+          );
       }
-      if (rand() > 0.8)
-        pixelStamp(
-          ground,
-          ['..aa.', '.aaba', 'abb..', '.a...'],
-          { a: palette[2], b: palette[3] },
-          xx + 38,
-          y + 29,
-          3,
-        );
     }
-  }
-  for (let i = 0; i < 48; i++) {
-    if (i % 11 < 2) continue;
-    const a = (i / 48) * Math.PI * 2;
-    const x = snapPixel(Math.cos(a) * 164, 4),
-      y = snapPixel(Math.sin(a) * 112, 4);
-    ground.rect(x, y, 8, 4).fill(palette[3]);
-    if (i % 4 === 0) ground.rect(x, y - 8, 4, 16).fill(palette[2]);
+    for (let i = 0; i < 48; i++) {
+      if (i % 11 < 2) continue;
+      const a = (i / 48) * Math.PI * 2;
+      const x = snapPixel(Math.cos(a) * 164, 4),
+        y = snapPixel(Math.sin(a) * 112, 4);
+      ground.rect(x, y, 8, 4).fill(palette[3]);
+      if (i % 4 === 0) ground.rect(x, y - 8, 4, 16).fill(palette[2]);
+    }
   }
   for (let i = 0; i < 105; i++) {
     const x = snapPixel((rand() - 0.5) * (size - 80));

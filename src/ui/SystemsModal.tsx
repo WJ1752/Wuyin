@@ -51,7 +51,7 @@ import { formatBigNumber } from '../core/format';
 import './systems.css';
 import { audio } from '../audio/SynthAudio';
 import { CharacterPreview } from './CharacterPreview';
-import { ItemIcon, SkillIcon } from './AssetIcon';
+import { ItemIcon, PetIcon, SkillIcon } from './AssetIcon';
 import { JourneyPanel, LootChances } from './JourneyPanel';
 import { skillLearningStatus, skillUnlockLevel } from '../data/progression';
 import { BUILD_GUIDES } from '../data/buildGuides';
@@ -1791,29 +1791,7 @@ function PetsPanel({
               style={{ '--pet': p.color } as CSSProperties}
             >
               <div className="pet-portrait">
-                <svg width="84" height="84" viewBox="0 0 84 84" aria-hidden="true">
-                  <path
-                    d={
-                      p.id === 'dragon'
-                        ? 'M20 52 6 23 30 34 42 12 53 34 78 23 63 54 42 70Z'
-                        : p.id === 'owl'
-                          ? 'M13 20 31 27 42 18 52 27 70 20 62 60 42 73 22 60Z'
-                          : p.id === 'fox'
-                            ? 'M16 9 38 29 49 29 70 9 63 55 42 72 21 55Z'
-                            : 'M14 17 31 27 42 15 54 27 71 17 62 57 42 72 22 57Z'
-                    }
-                    fill="currentColor"
-                    opacity=".18"
-                    stroke="currentColor"
-                  />
-                  <path
-                    d="M25 40 35 44 25 47M59 40 49 44 59 47M37 56 42 59 47 56"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                  />
-                  <path d="M30 61 42 67 54 61" stroke="currentColor" fill="none" opacity=".5" />
-                </svg>
+                <PetIcon petId={p.id} size={112} />
               </div>
               <span className="eyebrow">
                 {save.petId === p.id

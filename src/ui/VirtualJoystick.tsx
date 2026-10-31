@@ -47,7 +47,13 @@ export function VirtualJoystick({
       y = (y / length) * radius;
     }
     setOffset({ x, y });
-    moveCallback.current(x / radius, y / radius);
+    // A small resting dead zone prevents a light touch from causing continuous drift.
+    const strength = Math.min(1, length / radius);
+    const scaled = Math.max(0, (strength - 0.12) / 0.88);
+    moveCallback.current(
+      length ? (x / Math.max(1, Math.hypot(x, y))) * scaled : 0,
+      length ? (y / Math.max(1, Math.hypot(x, y))) * scaled : 0,
+    );
   };
   return (
     <div

@@ -802,7 +802,7 @@ export const useGameStore = create<GameState>((set, get) => {
       mutate((s) => {
         const priorLevel = s.level;
         const chapterNotices: string[] = [];
-        if (result.won) {
+        if (result.won && !result.partySize) {
           const { classId, level, equipment, cube, skills, autoSkills, petId, petLevels, forge } =
             s;
           const record: RunRecord = {

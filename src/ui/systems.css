@@ -3,12 +3,12 @@
   max-height: 91dvh;
   display: flex;
   flex-direction: column;
-  background: #1c2b36;
-  border: 3px solid #bfa576;
+  background: #17252b;
+  border: 3px solid #bca374;
   box-shadow:
-    inset 3px 3px 0 #ffffff13,
-    inset -3px -3px 0 #091421,
-    6px 6px 0 #070e18;
+    inset 0 0 0 3px #080f16,
+    inset 0 0 0 4px #75694d,
+    6px 6px 0 #050c12aa;
   outline: none;
 }
 .account-panel {
@@ -1134,7 +1134,13 @@
 .pet-portrait {
   color: var(--pet);
   filter: drop-shadow(3px 4px 0 #080f18aa);
-  height: 95px;
+  height: 120px;
+  width: 100%;
+  display: grid;
+  place-items: center;
+}
+.pet-art {
+  object-fit: contain;
 }
 .pet-card h3 {
   font-size: 16px;

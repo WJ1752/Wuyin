@@ -22,31 +22,21 @@ import {
 const geometry = (visual: AssetVisual) =>
   JSON.stringify(visual.layers.map(({ path, transform }) => ({ path, transform })));
 
-test('all seven hall residents resolve to self-contained SVGs with distinct body and tool geometry', () => {
+test('all seven hall residents resolve to distinct cells of a bundled high resolution RGBA atlas', () => {
   assert.deepEqual(Object.keys(NPC_ART).sort(), HALL_NPCS.map((npc) => npc.id).sort());
-  const silhouettes = HALL_NPCS.map((npc) => {
+  const cells = HALL_NPCS.map((npc) => {
     const art = NPC_ART[npc.id];
     assert.ok(art.description.length > 0);
-    const svg = readFileSync(
+    const png = readFileSync(
       new URL(`../public/${art.src.replace(/^\.?\//, '')}`, import.meta.url),
-      'utf8',
     );
-    assert.match(svg, /<svg\b[^>]*xmlns="http:\/\/www\.w3\.org\/2000\/svg"/);
-    assert.match(svg, /viewBox="0 0 64 80"/);
-    assert.match(svg, /<\/svg>\s*$/);
-    assert.ok(
-      !/<(?:image|text|script)\b|href=/i.test(svg),
-      `${npc.id} must not depend on external art`,
-    );
-    return [...svg.matchAll(/<(?:path|rect|circle|polygon|ellipse)\b[^>]*>/g)]
-      .map(([shape]) => shape.replace(/\s(?:fill|stroke|opacity|id)="[^"]*"/g, ''))
-      .join('');
+    assert.equal(png.toString('hex', 0, 8), '89504e470d0a1a0a');
+    assert.ok(png.readUInt32BE(16) >= 1600 && png.readUInt32BE(20) >= 800);
+    assert.equal(png[25], 6, 'transparent RGBA sprites');
+    assert.ok(art.column >= 0 && art.column < 4 && art.row >= 0 && art.row < 2);
+    return `${art.column}:${art.row}`;
   });
-  assert.equal(
-    new Set(silhouettes).size,
-    HALL_NPCS.length,
-    'NPCs must differ in geometry, not just color',
-  );
+  assert.equal(new Set(cells).size, HALL_NPCS.length, 'NPCs must use their own atlas cells');
 });
 
 test('every skill has distinct authored geometry and a self-contained combat SVG', () => {
