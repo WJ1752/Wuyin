@@ -13,256 +13,236 @@ export function HeroArt({
       src={CHARACTER_ART[classId].src}
       className={small ? 'hero-art small' : 'hero-art'}
       alt="职业角色立绘"
-      style={{ objectFit: 'contain', objectPosition: 'center bottom' }}
+      style={{ objectFit: 'contain', objectPosition: 'center bottom', imageRendering: 'pixelated' }}
       decoding="async"
       draggable={false}
     />
   );
 }
 
+function Pine({
+  x,
+  y,
+  size = 1,
+  distant = false,
+}: {
+  x: number;
+  y: number;
+  size?: number;
+  distant?: boolean;
+}) {
+  return (
+    <g transform={`translate(${x} ${y}) scale(${size})`}>
+      <path d="M-2-12H3V5H-2Z" fill={distant ? '#243c3d' : '#785b3e'} />
+      <path
+        d="M-1-44H2V-39H5V-34H8V-30H6V-28H11V-24H14V-20H11V-18H17V-14H20V-10H5V-7H-5V-10H-19V-14H-16V-18H-11V-20H-13V-24H-10V-28H-6V-30H-8V-34H-5V-39H-1Z"
+        fill={distant ? '#20383c' : '#183c32'}
+      />
+      {!distant && (
+        <>
+          <path
+            d="M-1-39H2V-34H5V-30H1V-27H-4V-24H-9V-21H3V-18H-6V-14H-14V-12H-4V-10H4V-14H10V-16H4V-20H8V-23H2V-28H5V-30H1Z"
+            fill="#396447"
+          />
+          <path
+            d="M-2-35H0V-31H-3V-28H-6V-25H-9V-23H-5V-26H-2ZM-8-17H-5V-14H-12V-12H-15V-14H-8Z"
+            fill="#607c4e"
+          />
+        </>
+      )}
+    </g>
+  );
+}
+
+function Torch({ x, y }: { x: number; y: number }) {
+  return (
+    <g transform={`translate(${x} ${y})`}>
+      <path d="M-3 1H4V16H-3ZM-5-2H6V3H-5Z" fill="#1b252d" />
+      <path d="M-1 3H1V14H-1Z" fill="#b48b50" />
+      <path d="M-2-14H1V-9H4V-5H6V-1H3V1H-3V-1H-5V-6H-3V-10H-2Z" fill="#db8550" />
+      <path d="M-1-9H1V-5H3V-1H-2V-4H-1Z" fill="#ffe4a1" />
+      <rect x="-2" y="-19" width="2" height="2" fill="#e5b375" />
+    </g>
+  );
+}
+
+/** 250×190 authored pixel composition; all terrain, architecture and lighting use solid clusters. */
 export function TownScene() {
   return (
     <svg
       className="town-scene"
-      viewBox="0 0 1000 760"
+      viewBox="0 0 250 190"
       preserveAspectRatio="xMidYMid slice"
-      aria-label="暮色中的守望者营地，古老传送门散发秘境幽光"
+      shapeRendering="crispEdges"
+      aria-label="像素暮林中的守望者营地，青绿色符文门、铁匠铺与温暖篝火"
       role="img"
     >
       <defs>
-        <linearGradient id="sky" x2="0" y2="1">
-          <stop stopColor="#17232c" />
-          <stop offset=".55" stopColor="#365157" />
-          <stop offset="1" stopColor="#111a1c" />
-        </linearGradient>
-        <linearGradient id="stone" x2="1" y2=".5">
-          <stop stopColor="#4e5855" />
-          <stop offset=".45" stopColor="#344544" />
-          <stop offset="1" stopColor="#172727" />
-        </linearGradient>
-        <linearGradient id="floor" x2="0" y2="1">
-          <stop stopColor="#3b4844" />
-          <stop offset="1" stopColor="#111b20" />
-        </linearGradient>
-        <linearGradient id="beam" x2="0" y2="1">
-          <stop stopColor="#c1e5c6" stopOpacity="0" />
-          <stop offset=".6" stopColor="#c1e5c6" stopOpacity=".16" />
-          <stop offset="1" stopColor="#c1e5c6" stopOpacity="0" />
-        </linearGradient>
-        <radialGradient id="portal">
-          <stop stopColor="#d8fff0" stopOpacity=".9" />
-          <stop offset=".35" stopColor="#84c9bd" stopOpacity=".4" />
-          <stop offset="1" stopColor="#396a67" stopOpacity="0" />
-        </radialGradient>
-        <radialGradient id="lamp">
-          <stop stopColor="#ffdfa2" stopOpacity=".8" />
-          <stop offset=".3" stopColor="#ed9a47" stopOpacity=".2" />
-          <stop offset="1" stopColor="#d28134" stopOpacity="0" />
-        </radialGradient>
-        <filter id="mist">
-          <feGaussianBlur stdDeviation="18" />
-        </filter>
-        <pattern
-          id="paving"
-          width="100"
-          height="56"
-          patternUnits="userSpaceOnUse"
-          patternTransform="skewX(-25)"
-        >
-          <path
-            d="M0 0H100V56H0ZM50 0V28M0 28H100"
-            stroke="#809086"
-            strokeOpacity=".1"
-            fill="none"
-          />
-          <path d="M5 5L45 5M55 33H91" stroke="#101b1e" strokeWidth="2" opacity=".4" />
+        <pattern id="pixel-paving" width="24" height="14" patternUnits="userSpaceOnUse">
+          <rect width="24" height="14" fill="#33453e" />
+          <path d="M0 0H24V1H0ZM0 7H24V8H0ZM11 0H12V7H11ZM0 7H1V14H0Z" fill="#263a36" />
+          <path d="M2 2H9V3H2ZM14 9H21V10H14Z" fill="#4b5c4c" />
         </pattern>
-        <g id="pine">
-          <path
-            d="M0-150L-19-103-8-108-35-64-20-69-48-17-9-31-8 0H8L9-31 48-17 20-69 35-64 8-108 19-103Z"
-            fill="#10252a"
-          />
-          <path d="M0-136V0" stroke="#263b3b" strokeWidth="3" />
-        </g>
-        <g id="torch">
-          <path d="M-4 0L-6 49 6 49 4 0M-12-3H12L8 8H-8Z" fill="#2a2c25" stroke="#a38a55" />
-          <path d="M0-30Q-20-6-5 0Q12 4 8-15L3-9Z" fill="#e8a051" />
-          <path d="M0-19Q-8-5 0-1Q9-2 0-19" fill="#ffe0a0" />
-        </g>
-        <g id="rune">
-          <path d="M0-7L6 0 0 7-6 0ZM0-12V12M-10 0H10" fill="none" stroke="#9dd6c5" opacity=".8" />
-        </g>
       </defs>
-      <rect width="1000" height="760" fill="url(#sky)" />
-      <circle cx="705" cy="118" r="54" fill="#b5c7ba" opacity=".15" />
-      <circle cx="720" cy="109" r="50" fill="#23373e" />
+      <rect width="250" height="190" fill="#172c38" />
+      <path d="M0 35H250V67H0Z" fill="#203943" />
+      <path d="M0 58H250V92H0Z" fill="#2d4548" />
       <path
-        d="M0 310L94 207 144 245 269 113 353 211 445 169 528 263 619 201 704 266 806 146 925 226 1000 169V550H0Z"
-        fill="#162b32"
-        opacity=".7"
+        d="M176 17H187V19H192V23H195V34H192V38H188V40H176V37H172V33H170V23H173V20H176Z"
+        fill="#a3bfa7"
       />
+      <path d="M182 17H187V19H192V23H195V34H190V32H186V29H183V25H182Z" fill="#203943" />
+      {[
+        [24, 24],
+        [53, 15],
+        [88, 30],
+        [139, 18],
+        [214, 32],
+        [233, 12],
+      ].map(([x, y], i) => (
+        <rect key={i} x={x} y={y} width="1" height="1" fill="#8aa7a2" />
+      ))}
       <path
-        d="M0 369L86 307 143 324 253 256 333 293 415 242 551 337 664 275 790 319 920 242 1000 298V580H0Z"
-        fill="#1d3337"
+        d="M0 66H8V60H17V54H25V59H32V65H39V57H47V50H54V44H62V37H68V43H74V50H82V57H91V61H101V68H113V62H123V54H134V59H141V65H153V60H164V53H176V57H184V63H193V55H202V45H210V38H216V45H224V51H232V57H242V52H250V112H0Z"
+        fill="#1e353d"
       />
-      {Array.from({ length: 24 }, (_, i) => (
-        <use
+      {Array.from({ length: 18 }, (_, i) => (
+        <Pine
           key={i}
-          href="#pine"
-          transform={`translate(${i * 48 - 60} ${330 + ((i * 37) % 125)}) scale(${0.5 + ((i * 13) % 10) / 10})`}
-          opacity={0.35 + (i % 3) * 0.14}
+          x={i * 16 - 9}
+          y={89 + ((i * 11) % 16)}
+          size={0.75 + (i % 3) * 0.25}
+          distant
         />
       ))}
-      <path d="M0 482Q415 365 1000 460V760H0Z" fill="url(#floor)" />
-      <path d="M0 482Q415 365 1000 460V760H0Z" fill="url(#paving)" />
-      <path d="M441 0L271 563 606 513 554 0" fill="url(#beam)" />
-      <g opacity=".5">
-        <path d="M680 198L680 367H755V199L720 142Z" fill="#223337" />
-        <path d="M687 195L720 127 761 197Z" fill="#14272e" />
-        <path d="M706 235Q720 207 735 235V286H706Z" fill="#111d24" />
-        <path d="M663 367H775V381H663" fill="#3c4845" />
-        <path d="M715 145V113M703 124H728" stroke="#495c57" strokeWidth="5" />
-      </g>
-      <g transform="translate(412 241)">
-        <ellipse cx="91" cy="270" rx="173" ry="61" fill="url(#portal)" />
-        <path
-          d="M-25 254V79Q-25-52 91-91Q208-51 208 79V254H168V77Q164-12 91-47Q14-9 16 77V254Z"
-          fill="url(#stone)"
-          stroke="#6e8075"
-          strokeWidth="2"
-        />
-        <path
-          d="M-14 247V79Q-15-40 91-78Q197-39 197 79V247M6 247V79Q4-18 91-59Q179-20 179 79V247"
-          fill="none"
-          stroke="#a0a88c"
-          strokeOpacity=".34"
-          strokeWidth="3"
-        />
-        <path d="M19 256V80Q20-8 91-40Q166-5 166 80V256Z" fill="#173238" />
-        <ellipse className="portal-glow" cx="91" cy="146" rx="106" ry="155" fill="url(#portal)" />
-        <path
-          className="portal-vein"
-          d="M91-27Q37 42 74 79T85 177Q57 212 91 256M115-12Q81 34 117 95T100 192L126 249"
-          stroke="#bde8d0"
-          strokeWidth="2"
-          fill="none"
-          opacity=".5"
-        />
-        <path
-          d="M-39 258H28V277H-39ZM155 258H223V277H155ZM-20 83H12M-22 125H12M-22 170H12M-22 211H12M172 83H202M172 125H205M172 170H205M172 211H205"
-          fill="#3d514c"
-          stroke="#83907a"
-          strokeOpacity=".4"
-        />
-        {[
-          [-6, 63],
-          [-6, 111],
-          [-6, 160],
-          [-6, 211],
-          [188, 63],
-          [188, 111],
-          [188, 160],
-          [188, 211],
-          [91, -66],
-          [39, -26],
-          [143, -26],
-        ].map(([x, y], i) => (
-          <use key={i} href="#rune" x={x} y={y} />
-        ))}
-        <path d="M70-90L91-119 114-91 103-69 80-69Z" fill="#374e4d" stroke="#869783" />
-        <path d="M91-109L101-90 91-78 81-90Z" fill="#98c6b0" />
-        <path
-          d="M-65 282H247L230 299H-49ZM-86 305H265L282 322H-101Z"
-          fill="#42534d"
-          stroke="#6b7a68"
-        />
-        <path d="M-112 328H290L315 348H-135Z" fill="#34443f" stroke="#576654" />
-      </g>
-      <g transform="translate(118 330)">
-        <path d="M-85 119L0 70 126 106V219L41 267-85 215Z" fill="#2b3534" stroke="#58645a" />
-        <path d="M-110 124L-17 13 18-2 148 101 39 161Z" fill="#17292e" stroke="#647570" />
-        <path
-          d="M-101 122L-17 30 38 148 132 103M-17 30L120 105M-55 76L79 129"
-          fill="none"
-          stroke="#3f5555"
-          strokeWidth="3"
-        />
-        <path d="M-9 167Q15 133 39 166V230L-9 247Z" fill="#101a1c" />
-        <path d="M-72 155L-34 171V209L-72 193Z" fill="#ac6a3d" opacity=".5" />
-        <path d="M71 161L104 144V174L71 193Z" fill="#b79057" opacity=".4" />
-        <path d="M-2 30V-38L23-43V27" fill="#394440" stroke="#637165" />
-        <path d="M-3-43H29V-30H-3Z" fill="#35423e" />
-        <path
-          d="M22-44Q-13-93 15-122"
-          stroke="#78918a"
-          strokeWidth="19"
-          opacity=".1"
-          fill="none"
-          filter="url(#mist)"
-        />
-      </g>
-      <g transform="translate(807 383)">
-        <path d="M-67 89L0 51 106 94V199L42 235-67 188Z" fill="#293432" stroke="#57665b" />
-        <path d="M-89 88L-11-18 124 81 44 128Z" fill="#282d37" stroke="#63706c" />
-        <path d="M-11-18L43 128M-74 89L43 128 110 83" fill="none" stroke="#978b75" />
-        <path d="M-29 118L11 137V190L-29 174Z" fill="#191d23" />
-        <path d="M-44 89L-40 170M72 111L75 195" stroke="#5b5a49" strokeWidth="6" />
-        <path d="M-44 92Q12 129 73 111L75 152Q10 169-43 130Z" fill="#504459" stroke="#8b7889" />
-        <path
-          d="M-35 129L-28 135-23 130-16 142-9 135-2 148 5 140 12 153 19 144 26 154 33 145 40 153 47 145 54 150 61 143 70 147"
-          fill="none"
-          stroke="#b09870"
-        />
-      </g>
-      <g transform="translate(318 539)">
-        <ellipse cy="35" rx="60" ry="22" fill="#101d20" />
-        <path d="M-24 0L-15 31 24 32 30 2 8-9Z" fill="#464c43" stroke="#727564" />
-        <path d="M-33-7L-34-20 30-23 43-11 20-2H-19Z" fill="#7c8175" stroke="#a6a68c" />
-        <circle cy="-17" r="72" fill="url(#lamp)" opacity=".65" />
-      </g>
-      <g transform="translate(661 580)">
-        <ellipse cy="39" rx="59" ry="19" fill="#112024" />
-        <path d="M-31-9L0-28 32-9 30 24 0 43-30 23Z" fill="#465252" stroke="#919783" />
-        <path d="M0-17L20-5 0 9-20-5Z" fill="#8c7dc3" />
-        <path d="M0 9V32M-23-2L-23 17M23-2V17" stroke="#b5a376" />
-        <ellipse cy="-2" rx="58" ry="47" fill="url(#portal)" opacity=".25" />
-      </g>
-      {[
-        { x: 361, y: 462 },
-        { x: 650, y: 469 },
-        { x: 175, y: 555 },
-        { x: 824, y: 611 },
-      ].map(({ x, y }, i) => (
+      <path d="M0 111H33V107H67V104H93V102H155V105H194V109H226V114H250V190H0Z" fill="#263e35" />
+      <path
+        d="M86 109H161V117H178V128H198V139H226V151H250V190H0V164H30V151H51V137H71V123H86Z"
+        fill="#22332f"
+      />
+      <path
+        d="M91 111H156V120H174V131H194V142H220V155H250V190H0V169H32V156H55V142H75V128H91Z"
+        fill="url(#pixel-paving)"
+      />
+      {/* Distant watchtower and cloth flag. */}
+      <path d="M188 61H204V97H188Z" fill="#273d40" />
+      <path d="M185 62H207V57H203V52H199V47H193V52H189V57H185Z" fill="#182d36" />
+      <path d="M194 69H199V80H194Z" fill="#ad9c68" />
+      <path d="M196 37H197V48H196ZM197 37H209V43H197Z" fill="#6d7a63" />
+      {/* The shrine is built from individually lit stone blocks, with a stepped portal. */}
+      <path
+        d="M91 124V65H95V54H101V46H110V40H119V37H133V40H143V46H151V54H156V65H160V124Z"
+        fill="#122c2e"
+      />
+      <path
+        d="M94 123V65H98V55H104V48H112V43H121V40H131V43H140V48H148V55H153V65H157V123H145V68H141V58H134V53H119V53H112V58H106V68H106V123Z"
+        fill="#546b59"
+      />
+      <path
+        d="M96 122V65H100V56H106V49H114V44H122V42H128V45H116V49H108V55H103V64H100V122Z"
+        fill="#8c9b73"
+      />
+      <path d="M148 64H153V122H148ZM142 55H147V64H142Z" fill="#354b42" />
+      <path d="M109 120V69H113V61H119V56H132V60H139V69H143V120Z" fill="#244c48" />
+      <path d="M115 120V73H119V66H132V73H137V120Z" fill="#356b5c" />
+      <path d="M121 119V91H118V82H121V74H125V70H129V82H125V95H129V109H126V119Z" fill="#89c7a1" />
+      <path d="M124 117V105H127V94H124V83H126V76H128V88H127V102H130V114H127V119Z" fill="#d2f0ba" />
+      {Array.from({ length: 5 }, (_, i) => (
         <g key={i}>
-          <circle cx={x} cy={y - 10} r="86" fill="url(#lamp)" />
-          <use href="#torch" x={x} y={y} />
+          <rect x="95" y={70 + i * 10} width="9" height="1" fill="#2a413a" />
+          <rect x="147" y={70 + i * 10} width="9" height="1" fill="#2a413a" />
+          <path
+            d={`M98 ${73 + i * 10}h3v2h-1v3h-2ZM150 ${73 + i * 10}h3v2h-1v3h-2Z`}
+            fill="#b7d09a"
+          />
         </g>
       ))}
-      <g opacity=".12" filter="url(#mist)" className="scene-mist">
-        <ellipse cx="324" cy="357" rx="273" ry="27" fill="#b4d0bd" />
-        <ellipse cx="638" cy="560" rx="308" ry="26" fill="#b4d0bd" />
-        <ellipse cx="488" cy="681" rx="361" ry="36" fill="#94acaa" />
-      </g>
-      {Array.from({ length: 22 }, (_, i) => (
-        <circle
-          className="mote"
+      <path d="M121 31H131V35H135V40H131V44H121V40H117V35H121Z" fill="#213936" />
+      <path d="M124 31H128V34H131V38H128V41H124V38H121V34H124Z" fill="#b2d49e" />
+      <path d="M87 122H163V128H87ZM83 130H167V136H83ZM78 138H173V144H78Z" fill="#20342f" />
+      <path d="M87 121H163V124H87ZM83 129H167V132H83ZM78 137H173V140H78Z" fill="#718066" />
+      {/* Left timber smithy. */}
+      <path d="M15 104H61V147H15Z" fill="#1b2d2d" />
+      <path d="M19 107H57V143H19Z" fill="#6c6247" />
+      <path d="M23 108H53V141H23Z" fill="#89734c" />
+      <path d="M18 113H58V116H18ZM18 129H58V132H18ZM36 104H40V145H36Z" fill="#3b3d31" />
+      <path
+        d="M9 108V103H13V97H18V91H23V85H28V79H34V74H42V79H47V85H52V91H57V97H63V103H68V108Z"
+        fill="#182d30"
+      />
+      <path
+        d="M14 101H19V95H24V89H29V83H35V79H41V83H46V89H51V95H56V101H61V104H14Z"
+        fill="#3e5b50"
+      />
+      <path d="M19 99H57V101H19ZM24 93H51V95H24ZM29 87H46V89H29ZM35 81H41V83H35Z" fill="#758364" />
+      <path d="M46 76V63H54V89H50V83Z" fill="#6c7865" />
+      <path d="M45 61H55V65H45Z" fill="#a2a084" />
+      <path d="M47 55H52V57H47ZM49 48H56V50H49ZM46 41H52V43H46Z" fill="#687b73" />
+      <path d="M26 122H34V142H26Z" fill="#233532" />
+      <path d="M44 119H53V130H44Z" fill="#312e28" />
+      <path d="M46 121H51V128H46Z" fill="#e8b96f" />
+      {/* Right merchant's violet awning and hanging sign. */}
+      <path d="M189 121H229V164H189Z" fill="#263532" />
+      <path d="M193 125H225V160H193Z" fill="#6c6148" />
+      <path
+        d="M182 125V119H188V112H194V105H201V98H211V104H217V111H224V118H231V125Z"
+        fill="#262d38"
+      />
+      <path d="M188 121H225V124H188V117H194V110H201V103H209V108H216V115H222V121Z" fill="#65546f" />
+      <path d="M187 134H229V148H187Z" fill="#342d43" />
+      <path d="M187 133H229V141H187Z" fill="#9c788f" />
+      {[188, 198, 208, 218].map((x) => (
+        <path key={x} d={`M${x} 134h5v11h-5Z`} fill="#c3aa8c" />
+      ))}
+      <path d="M188 147H191V166H188ZM226 147H229V166H226Z" fill="#b19566" />
+      <path d="M197 149H221V163H197Z" fill="#2c3331" />
+      <path d="M200 153H207V159H200ZM211 150H217V159H211Z" fill="#b28c55" />
+      <path d="M201 153H207V155H201ZM212 150H217V152H212Z" fill="#e5c985" />
+      {/* Smith's anvil, campfire and the waypoint chest. */}
+      <path d="M65 148H78V156H65ZM60 142H84V147H60V140H66V137H79V140H87V143H84Z" fill="#1a292c" />
+      <path d="M61 140H84V143H61Z" fill="#a3b4a2" />
+      <path d="M67 149H77V153H67Z" fill="#677d71" />
+      <path d="M84 169H108V174H84V167H88V164H104V167H108V169Z" fill="#1b2c2a" />
+      <path d="M87 168H106V171H87ZM91 173H103V176H91Z" fill="#9c8258" />
+      <path d="M93 148H96V156H99V151H102V159H105V167H99V170H92V167H89V159H92Z" fill="#c87743" />
+      <path d="M95 157H98V162H101V167H94V163H92V161H95Z" fill="#ffe09a" />
+      <path d="M160 153H177V171H160Z" fill="#213632" />
+      <path d="M162 154H175V167H162Z" fill="#8c7048" />
+      <path d="M161 158H177V161H161ZM165 153H168V170H165ZM172 153H174V170H172Z" fill="#d3ad69" />
+      <rect x="167" y="158" width="5" height="5" fill="#2e4c44" />
+      <Torch x={88} y={119} />
+      <Torch x={163} y={120} />
+      <Torch x={44} y={154} />
+      <Torch x={220} y={171} />
+      {Array.from({ length: 24 }, (_, i) => (
+        <g key={i} transform={`translate(${9 + ((i * 31) % 235)} ${126 + ((i * 17) % 61)})`}>
+          <path d="M0 3H2V0H3V5H0ZM4 2H6V5H4Z" fill={i % 2 ? '#6c8051' : '#476b48'} />
+        </g>
+      ))}
+      <Pine x={8} y={133} size={1.5} />
+      <Pine x={244} y={144} size={1.6} />
+      <Pine x={-2} y={194} size={1.4} />
+      <Pine x={248} y={201} size={1.4} />
+      {[
+        [106, 69],
+        [138, 91],
+        [117, 105],
+        [131, 54],
+        [85, 158],
+        [185, 138],
+        [207, 81],
+      ].map(([x, y], i) => (
+        <rect
           key={i}
-          cx={115 + ((i * 37) % 780)}
-          cy={170 + ((i * 59) % 440)}
-          r={i % 3 === 0 ? 2 : 1}
-          fill={i % 2 ? '#c7c2a1' : '#9fc7b5'}
-          style={{ animationDelay: `${i * 0.21}s` }}
+          className="mote"
+          x={x}
+          y={y}
+          width="1"
+          height="1"
+          fill="#d7dba4"
+          style={{ animationDelay: `${i * 0.4}s` }}
         />
       ))}
-      <path
-        d="M0 0V760H93L66 715 78 618 48 508 79 455 44 356 55 291 28 214 38 119 29 0M1000 0V760H933L948 649 926 582 953 498 940 376 964 290 950 221 978 125 969 0"
-        fill="#0c171c"
-        opacity=".85"
-      />
-      <path
-        d="M0 0L106 61 164 66 91 81 48 61M1000 105L879 147 834 190 887 165 961 159M0 355L103 306 156 246 120 315 44 387"
-        fill="#0c171c"
-      />
     </svg>
   );
 }

@@ -27,6 +27,7 @@ import { BuffManager, PYLONS } from './BuffAndPylon';
 import { ProjectileSystem, type CastContext } from './ProjectileSystem';
 import { selectAutoCast } from './AutoCastAI';
 import { generateLoot } from './LootGenerator';
+import { pixelEllipse, pixelPolygon, pixelLine, pixelStamp } from '../render/PixelArt';
 import {
   createMonsterBrain,
   attackContains,
@@ -261,9 +262,10 @@ export class GameEngine {
     this.app = new Application();
     await this.app.init({
       resizeTo: host,
-      antialias: true,
+      antialias: false,
       background: 0x142426,
-      resolution: Math.min(window.devicePixelRatio || 1, 2),
+      resolution: 1,
+      roundPixels: true,
       autoDensity: true,
       powerPreference: 'high-performance',
     });
@@ -626,7 +628,7 @@ export class GameEngine {
     const g = this.minimap;
     g.position.set(this.app.screen.width - 120, 16);
     g.clear()
-      .roundRect(0, 0, 104, 104, 4)
+      .rect(0, 0, 104, 104)
       .fill({ color: 0x101e23, alpha: 0.82 })
       .stroke({ color: 0x9b997e, alpha: 0.5, width: 1 });
     const point = (x: number, y: number) => ({
@@ -921,13 +923,11 @@ export class GameEngine {
       const t = Math.min(1, animation.age / Math.max(0.01, animation.event.delay));
       const e = animation.event;
       view.alpha = 0.6 + t * 0.4;
-      if (e.shape === 'circle')
-        view
-          .clear()
-          .circle(e.x, e.y, e.radius)
-          .fill({ color: e.color, alpha: 0.12 })
-          .circle(e.x, e.y, e.radius * t)
-          .stroke({ color: e.color, alpha: 0.9, width: 2.5 });
+      if (e.shape === 'circle') {
+        view.clear();
+        pixelEllipse(view, e.x, e.y, e.radius, e.radius, e.color, 6, 0.12);
+        pixelEllipse(view, e.x, e.y, e.radius * t, e.radius * t, e.color, 6, 0.9, true);
+      }
     }
   }
   private handleEnemyEvent(e: Enemy, event: MonsterAIEvent) {
@@ -935,33 +935,37 @@ export class GameEngine {
       this.enemyWarnings.get(event.id)?.destroy();
       const g = new Graphics();
       const color = event.color;
-      if (event.shape === 'circle')
-        g.circle(event.x, event.y, event.radius)
-          .fill({ color, alpha: 0.12 })
-          .stroke({ color, alpha: 0.65, width: 1.5 });
-      else if (event.shape === 'cone')
-        g.moveTo(event.x, event.y)
-          .arc(event.x, event.y, event.range, event.angle - event.width, event.angle + event.width)
-          .closePath()
-          .fill({ color, alpha: 0.15 })
-          .stroke({ color, alpha: 0.6, width: 1.5 });
-      else {
-        const dx = Math.cos(event.angle) * event.range,
-          dy = Math.sin(event.angle) * event.range,
-          ox = -Math.sin(event.angle) * event.width,
-          oy = Math.cos(event.angle) * event.width;
-        g.poly([
-          event.x + ox,
-          event.y + oy,
-          event.x + dx + ox,
-          event.y + dy + oy,
-          event.x + dx - ox,
-          event.y + dy - oy,
-          event.x - ox,
-          event.y - oy,
-        ])
-          .fill({ color, alpha: 0.15 })
-          .stroke({ color, alpha: 0.65, width: 1.5 });
+      if (event.shape === 'circle') {
+        pixelEllipse(g, event.x, event.y, event.radius, event.radius, color, 6, 0.15);
+        pixelEllipse(g, event.x, event.y, event.radius, event.radius, color, 6, 0.8, true);
+      } else {
+        const points = event.shape === 'cone' ? [event.x, event.y] : [];
+        if (event.shape === 'cone') {
+          for (let i = 0; i <= 12; i++) {
+            const a = event.angle - event.width + (event.width * 2 * i) / 12;
+            points.push(event.x + Math.cos(a) * event.range, event.y + Math.sin(a) * event.range);
+          }
+        } else {
+          const dx = Math.cos(event.angle) * event.range,
+            dy = Math.sin(event.angle) * event.range;
+          const ox = -Math.sin(event.angle) * event.width,
+            oy = Math.cos(event.angle) * event.width;
+          points.push(
+            event.x + ox,
+            event.y + oy,
+            event.x + dx + ox,
+            event.y + dy + oy,
+            event.x + dx - ox,
+            event.y + dy - oy,
+            event.x - ox,
+            event.y - oy,
+          );
+        }
+        pixelPolygon(g, points, color, 6, 0.18);
+        for (let i = 0; i < points.length; i += 2) {
+          const j = (i + 2) % points.length;
+          pixelLine(g, points[i], points[i + 1], points[j], points[j + 1], color, 4, 0.8);
+        }
       }
       this.floorLayer.addChild(g);
       this.enemyWarnings.set(event.id, g);
@@ -1941,7 +1945,8 @@ export class GameEngine {
           e.y,
           generateLoot(this.config.classId, this.config.stage, {
             rng: this.random,
-            rarity: i % 2 ? 'set' : 'legendary',
+            source: 'goblin',
+            ownedSetPieces: this.config.ownedSetPieces,
           }),
         );
     } else if (
@@ -1988,34 +1993,16 @@ export class GameEngine {
         ...this.orbs.map((o) => o.item),
       ]
         .filter(Boolean)
-        .map((i) => `${i!.setId}:${i!.slot}`);
+        .map((i) => `${i!.setId}:${i!.slot}`)
+        .concat(this.config.ownedSetPieces ?? []);
       for (let i = 0; i < 4; i++) {
         const item = generateLoot(this.config.classId, this.config.stage, {
           rng: this.random,
-          rarity: i < 2 ? 'legendary' : 'set',
+          source: 'boss',
           ownedSetPieces: owned,
         });
         this.earned.push(item);
         if (item.setId) owned.push(`${item.setId}:${item.slot}`);
-      }
-      if (this.config.stage === 5) {
-        const set = SETS.find((s) => s.classId === this.config.classId)!;
-        this.earned.push(
-          generateLoot(this.config.classId, 5, { setId: set.id, slot: 'head' }),
-          generateLoot(this.config.classId, 5, { setId: set.id, slot: 'chest' }),
-        );
-      }
-      if (this.config.stage <= 3) {
-        const core = LEGENDARIES.find(
-          (l) => l.classId === this.config.classId && l.slot === 'weapon',
-        );
-        if (core)
-          this.earned.push(
-            generateLoot(this.config.classId, this.config.stage, {
-              rng: this.random,
-              legendaryId: core.id,
-            }),
-          );
       }
       for (const orb of this.orbs) if (orb.item) this.earned.push(orb.item);
       this.finish(true);
@@ -2106,20 +2093,21 @@ export class GameEngine {
         z.x = this.x;
         z.y = this.y;
       }
-      z.view
-        .clear()
-        .ellipse(z.x, z.y, z.radius, z.radius * 0.68)
-        .fill({ color, alpha: 0.045 })
-        .stroke({ color, alpha: 0.35, width: 1.5 });
+      z.view.clear();
+      pixelEllipse(z.view, z.x, z.y, z.radius, z.radius * 0.68, color, 6, 0.08);
+      pixelEllipse(z.view, z.x, z.y, z.radius, z.radius * 0.68, color, 6, 0.4, true);
       for (let j = 0; j < 5; j++) {
         const a = this.elapsed * 2 + j * Math.PI * 0.4;
-        z.view
-          .moveTo(z.x + Math.cos(a) * z.radius * 0.7, z.y + Math.sin(a) * z.radius * 0.5)
-          .lineTo(
-            z.x + Math.cos(a + 0.4) * z.radius * 0.9,
-            z.y + Math.sin(a + 0.4) * z.radius * 0.6,
-          )
-          .stroke({ color, width: 2, alpha: 0.65 });
+        pixelLine(
+          z.view,
+          z.x + Math.cos(a) * z.radius * 0.7,
+          z.y + Math.sin(a) * z.radius * 0.5,
+          z.x + Math.cos(a + 0.4) * z.radius * 0.9,
+          z.y + Math.sin(a + 0.4) * z.radius * 0.6,
+          color,
+          3,
+          0.7,
+        );
       }
       if (z.pull)
         for (const e of this.enemies)
@@ -2208,35 +2196,49 @@ export class GameEngine {
     let color = kind === 'health' ? 0xdd5269 : kind === 'progress' ? 0xb49be7 : 0xd7bb76;
     if (item) color = Number.parseInt(RARITY_COLORS[item.rarity].slice(1), 16);
     if (kind === 'item') {
-      g.poly([-6, -5, 0, -10, 7, -4, 5, 7, -5, 7])
-        .fill(color)
-        .stroke({ color: 0xe7e5d1, width: 1 });
-      g.moveTo(0, -4)
-        .lineTo(0, -135)
-        .stroke({ color, alpha: 0.12, width: 22 })
-        .moveTo(0, -4)
-        .lineTo(0, -135)
-        .stroke({ color, alpha: 0.65, width: 2 });
-      for (let i = 0; i < 6; i++) {
-        const a = (i * Math.PI) / 3;
-        g.moveTo(Math.cos(a) * 17, Math.sin(a) * 7)
-          .lineTo(Math.cos(a + (Math.PI * 2) / 3) * 17, Math.sin(a + (Math.PI * 2) / 3) * 7)
-          .stroke({ color, alpha: 0.6, width: 1 });
+      pixelStamp(
+        g,
+        [
+          '..oo....',
+          '.ohho...',
+          '.ohhho..',
+          '..ohhho.',
+          '...ohhho',
+          '..oohoo.',
+          '.ooo....',
+          '.o......',
+        ],
+        { o: 0x152128, h: color },
+        -12,
+        -12,
+        3,
+      );
+      // Only build-defining drops claim a tall beacon; ordinary gear stays readable on the floor.
+      if (item && ['legendary', 'set', 'primal'].includes(item.rarity)) {
+        g.rect(-6, -108, 12, 96).fill({ color, alpha: 0.15 });
+        g.rect(-2, -108, 4, 96).fill({ color, alpha: 0.8 });
+        pixelEllipse(g, 0, 8, 18, 7, color, 3, 0.7, true);
       }
     } else if (kind === 'gold') {
-      g.ellipse(0, 0, 6, 4)
-        .fill(0xc3a055)
-        .stroke({ color: 0xe8d8a7, width: 1 })
-        .moveTo(0, -2)
-        .lineTo(0, 2)
-        .stroke({ color: 0x695a36, width: 1 });
+      pixelStamp(
+        g,
+        ['.gggg.', 'ghhhhg', 'ghgghg', 'ghgghg', '.gggg.'],
+        { g: 0x9b6c3e, h: 0xf1cc70 },
+        -9,
+        -6,
+        3,
+      );
     } else {
-      g.poly([0, -9, 7, -2, 5, 5, 0, 8, -5, 5, -7, -2])
-        .fill(color)
-        .stroke({ color: 0xf4d7cf, alpha: 0.6, width: 1 })
-        .poly([-2, -5, 0, -7, 2, -3, -1, 1])
-        .fill({ color: 0xffffff, alpha: 0.6 });
-      g.ellipse(0, 9, 10, 4).fill({ color, alpha: 0.15 });
+      pixelStamp(
+        g,
+        ['..oo..', '.ohho.', 'ohhhho', 'ohhhho', '.ohho.', '..oo..'],
+        { o: 0x20303a, h: color },
+        -9,
+        -9,
+        3,
+      );
+      g.rect(-3, -6, 3, 6).fill(0xf9ecd2);
+      pixelEllipse(g, 0, 10, 10, 4, color, 3, 0.2);
     }
     view.addChild(g);
     view.position.set(x, y);
@@ -2246,7 +2248,13 @@ export class GameEngine {
   private dropItem(x: number, y: number, item: Item) {
     this.drop('item', x, y, 0, item);
     this.callbacks.onSound(
-      item.rarity === 'primal' ? 'primal' : item.rarity === 'set' ? 'set' : 'legendary',
+      item.rarity === 'primal'
+        ? 'primal'
+        : item.rarity === 'set'
+          ? 'set'
+          : item.rarity === 'legendary'
+            ? 'legendary'
+            : 'pickup',
     );
     if (item.rarity === 'primal') {
       this.shake = 9;
@@ -2310,71 +2318,98 @@ export class GameEngine {
         : id.includes('owl')
           ? 0xb9aed3
           : 0xb7c77e;
-    g.poly([-9, -8, -15, -16, -12, -2, -7, 4, 6, 4, 12, -3, 14, -17, 8, -9, 0, -13])
-      .fill(color)
-      .stroke({ color: 0xd8e3cc, width: 1 });
-    g.ellipse(-4, -5, 3, 4)
-      .fill(0x233c37)
-      .ellipse(4, -5, 3, 4)
-      .fill(0x233c37)
-      .circle(-4, -6, 1)
-      .fill(0xf1e9bb)
-      .circle(4, -6, 1)
-      .fill(0xf1e9bb)
-      .poly([-2, 0, 2, 0, 0, 3])
-      .fill(0xe6bb75);
-    g.moveTo(-6, 5).lineTo(-6, 9).moveTo(5, 5).lineTo(5, 9).stroke({ color, width: 2 });
-    if (id === 'goblin') {
-      g.roundRect(-14, -4, 10, 16, 3).fill(0x7c6944).stroke({ color: 0xc7b77e, width: 1 });
-      g.moveTo(-14, 0).lineTo(-5, 0).stroke({ color: 0xdfcd8d, width: 1 });
-    }
-    if (id === 'dragon') {
-      for (const side of [-1, 1])
-        g.poly([side * 8, -8, side * 22, -20, side * 27, -4, side * 17, -8, side * 10, 2])
-          .fill(0x679fb5)
-          .stroke({ color: 0xb2d9df, width: 1 });
-      g.moveTo(0, 6).bezierCurveTo(20, 16, 28, 2, 22, -1).stroke({ color: 0x8cc5cf, width: 3 });
-    }
-    if (id === 'imp') {
-      g.poly([-8, -10, -12, -26, -3, -15])
-        .fill(0xd0bd8d)
-        .poly([8, -10, 12, -26, 3, -15])
-        .fill(0xd0bd8d);
-      g.moveTo(9, 4).bezierCurveTo(28, 13, 24, -4, 21, -2).stroke({ color: 0xba7254, width: 2 });
-    }
-    if (id === 'fox') {
-      g.poly([5, 2, 22, -7, 28, -4, 26, 8, 12, 11])
-        .fill(0xd4c2b9)
-        .stroke({ color: 0xf0e5ce, width: 1 });
-      g.poly([22, -7, 28, -4, 26, 3, 21, 2]).fill(0xf0e7da);
-    }
-    if (id === 'wisp') {
-      g.clear()
-        .poly([0, -20, 8, -9, 6, 4, 0, 12, -7, 4, -9, -8])
-        .fill({ color: 0xb4e1c0, alpha: 0.6 })
-        .poly([0, -12, 3, -3, 0, 5, -3, -3])
-        .fill(0xe7f5d8);
-      for (let i = 0; i < 6; i++) {
-        const a = (i * Math.PI) / 3;
-        g.moveTo(Math.cos(a) * 10, Math.sin(a) * 10 - 5)
-          .lineTo(Math.cos(a) * 17, Math.sin(a) * 17 - 5)
-          .stroke({ color: 0x93bba4, alpha: 0.4, width: 1 });
-      }
-    }
+    const ink = { o: 0x14262d, b: color, h: 0xe7dcc5, e: 0x1d3136, g: 0x90724e };
+    const petRows: Record<string, string[]> = {
+      owl: [
+        '..oo..oo..',
+        '.obboobbo.',
+        '.bbbbbbbb.',
+        'obhhbbhhbo',
+        'obhebbehbo',
+        'obbbggbbbo',
+        '.obbbbbbo.',
+        '..obbbbo..',
+        '..gg..gg..',
+      ],
+      fox: [
+        'oo......oo',
+        'obo....obo',
+        'obbboobbbo',
+        '.bbbbbbbb.',
+        '.bhebbheb.',
+        '..bhhghb..',
+        '...bhhb...',
+        '..bbhhbb..',
+        '..gg..gg..',
+      ],
+      dragon: [
+        '...o..o...',
+        '...boob...',
+        '.oobbbboo.',
+        'obebbbebo.',
+        'obbbhbbbbo',
+        '.obbhhbbo.',
+        'obbbhhbbbo',
+        '.obbbbbbo.',
+        '..gg..gg..',
+      ],
+      imp: [
+        '.ho....oh.',
+        '.hbo..obh.',
+        '..bbbbbb..',
+        '.bbebbebb.',
+        '.bbbbbbbb.',
+        '..bhhhhb..',
+        '...bbbb...',
+        '..bb..bb..',
+        '..gg..gg..',
+      ],
+      goblin: [
+        'oo......oo',
+        'obbo..obbo',
+        '.bbbbbbbb.',
+        '..behheb..',
+        '..bbggbb..',
+        '.ggbbbbbb.',
+        '.gghhbbbb.',
+        '.gggbbbb..',
+        '...gg.gg..',
+      ],
+      wisp: [
+        '....b.....',
+        '...bbb....',
+        '..bbhbb...',
+        '.bbhhhbb..',
+        '.bhehebb..',
+        '..bhhhb...',
+        '...bhb....',
+        '..bb.bb...',
+        '.b.....b..',
+      ],
+    };
+    pixelStamp(g, petRows[id] ?? petRows.owl, ink, -15, -18, 3);
     this.pet.addChild(g);
     this.pet.position.set(-38, 32);
     this.entityLayer.addChild(this.pet);
     if (this.config.classId === 'ranger' && this.learned('raven'))
       for (let i = 0; i < 2; i++) {
-        const raven = new Graphics()
-          .poly([
-            -3, 0, -24, -14, -16, -1, -23, 3, -8, 7, 0, 2, 8, 7, 23, 3, 16, -1, 24, -14, 3, 0, 0,
-            -7,
-          ])
-          .fill(0x34414c)
-          .stroke({ color: 0xa5bbc0, width: 0.7 })
-          .poly([-2, -6, 0, -11, 3, -6, 6, -4, 2, -3])
-          .fill(0x829097);
+        const raven = new Graphics();
+        pixelStamp(
+          raven,
+          [
+            'o...........o',
+            'obo.......obo',
+            '.obbo...obbo.',
+            '..obbobobbo..',
+            '...bbbhbbb...',
+            '.....bhh.....',
+            '......h......',
+          ],
+          { o: 0x15242d, b: 0x425762, h: 0xa9b9c0 },
+          -19,
+          -12,
+          3,
+        );
         this.entityLayer.addChild(raven);
         this.ravens.push(raven);
       }
@@ -2492,18 +2527,34 @@ export class GameEngine {
         color = Number.parseInt(p.color.slice(1), 16);
       const x = i === 0 ? -170 : 190,
         y = i === 0 ? -150 : 150;
-      g.ellipse(0, 7, 30, 11)
-        .stroke({ color, alpha: 0.6, width: 2 })
-        .poly([-14, 0, -14, -15, -8, -22, -8, -52, 0, -66, 8, -52, 8, -22, 14, -15, 14, 0])
-        .fill(0x4e5860)
-        .stroke({ color: 0xabb4a2, width: 1 });
-      g.poly([0, -84, 8, -68, 0, -53, -8, -68]).fill(color).stroke({ color: 0xf0e6c8, width: 1 });
-      g.moveTo(0, -84).lineTo(0, -180).stroke({ color, alpha: 0.2, width: 16 });
-      g.moveTo(0, -84).lineTo(0, -180).stroke({ color, alpha: 0.6, width: 1 });
+      pixelEllipse(g, 0, 8, 30, 12, color, 3, 0.7, true);
+      pixelStamp(
+        g,
+        [
+          '...oo...',
+          '..ohho..',
+          '.ohhhho.',
+          '..ohho..',
+          '...oo...',
+          '..sshs..',
+          '..shhs..',
+          '..shhs..',
+          '..shhs..',
+          '.sshss..',
+          '.sssss..',
+          'ssssssss',
+        ],
+        { o: 0x20313c, h: color, s: 0x778182 },
+        -16,
+        -68,
+        4,
+      );
+      g.rect(-4, -116, 8, 48).fill({ color, alpha: 0.2 });
+      g.rect(-2, -116, 4, 48).fill({ color, alpha: 0.6 });
       view.addChild(g);
       const label = new Text({
         text: p.name,
-        style: { fontFamily: 'serif', fontSize: 12, fill: color },
+        style: { fontFamily: 'monospace', fontSize: 12, fill: color },
       });
       label.anchor.set(0.5);
       label.position.set(0, 25);
@@ -2643,7 +2694,7 @@ export class GameEngine {
       kills: this.kills,
       gold: this.gold,
       shards: this.shards,
-      items: this.earned,
+      items: [...this.earned],
     });
   }
   private emit() {

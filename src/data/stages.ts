@@ -71,8 +71,15 @@ export const STAGES: StageDef[] = Array.from({ length: 150 }, (_, index) => {
           : level <= 50
             ? '大师'
             : `折磨 ${torment[Math.min(15, Math.floor(((level - 51) * 16) / 100))]}`,
-    hpMultiplier: Math.pow(1.16, index),
-    damageMultiplier: Math.pow(1.035, index),
+    // The opening chapters are balanced for a learner, then a first legendary,
+    // then two set pieces. Full build pressure begins after the four-piece gift.
+    hpMultiplier:
+      Math.pow(1.08, Math.min(index, 14)) *
+      Math.pow(1.11, Math.max(0, Math.min(index - 14, 15))) *
+      Math.pow(1.12, Math.max(0, Math.min(index - 29, 15))) *
+      Math.pow(1.16, Math.max(0, index - 44)),
+    damageMultiplier:
+      Math.pow(1.025, Math.min(index, 44)) * Math.pow(1.035, Math.max(0, index - 44)),
     reward: Math.round(150 + level * 45 + Math.pow(level, 1.35) * 8),
   };
 });

@@ -29,7 +29,7 @@ import {
   Volume2,
   Package,
   ChevronRight,
-} from 'lucide-react';
+} from './PixelIcons';
 import type { Item, Slot, Stats } from '../core/types';
 import { RARITY_COLORS, RARITY_NAMES, SLOTS, SLOT_NAMES } from '../core/types';
 import { CLASSES } from '../data/classes';
@@ -43,6 +43,8 @@ import './systems.css';
 import { audio } from '../audio/SynthAudio';
 import { CharacterPreview } from './CharacterPreview';
 import { ItemIcon, SkillIcon } from './AssetIcon';
+import { JourneyPanel, LootChances } from './JourneyPanel';
+import { skillLearningStatus, skillUnlockLevel } from '../data/progression';
 
 const icons: Record<Slot, typeof Sword> = {
   weapon: Sword,
@@ -57,6 +59,7 @@ const icons: Record<Slot, typeof Sword> = {
 const TITLES: Record<string, [string, string, typeof Sword]> = {
   character: ['行者档案', 'CHARACTER & INVENTORY', Sword],
   skills: ['命运之树', 'THE PATH OF POWER', BookOpen],
+  journey: ['行者旅程', 'THE ROAD TO RESONANCE', BookOpen],
   cube: ['魔盒共鸣', 'THE ARCHIVE OF RELICS', WandSparkles],
   gamble: ['米娅的秘藏', 'FORTUNE FAVORS THE BOLD', Dices],
   forge: ['余烬铁砧', 'THE EMBER FORGE', Hammer],
@@ -173,6 +176,10 @@ function ItemDetails({
 }) {
   const l = LEGENDARIES.find((l) => l.id === item.legendaryId);
   const set = SETS.find((t) => t.id === item.setId);
+  const equipment = useGameStore((state) => state.save.equipment);
+  const setCount = set
+    ? Object.values(equipment).filter((part) => part?.setId === set.id).length
+    : 0;
   return (
     <article
       className={`item-detail rarity-${item.rarity}`}
@@ -252,8 +259,20 @@ function ItemDetails({
       )}
       {set && (
         <>
-          <p className="set-power">[2] {set.two}</p>
-          <p className="set-power">[4] {set.four}</p>
+          <p className="set-power">
+            已穿戴 {setCount} 件 ·{' '}
+            {setCount >= 4
+              ? '流派已成型'
+              : `再穿戴 ${setCount < 2 ? 2 - setCount : 4 - setCount} 件解锁共鸣`}
+          </p>
+          <p className={setCount >= 2 ? 'set-power' : 'muted'}>
+            [2] {setCount >= 2 ? '已激活 · ' : ''}
+            {set.two}
+          </p>
+          <p className={setCount >= 4 ? 'set-power' : 'muted'}>
+            [4] {setCount >= 4 ? '已激活 · ' : ''}
+            {set.four}
+          </p>
           <p className="item-lore">“{set.lore}”</p>
         </>
       )}
@@ -488,6 +507,9 @@ function SkillsPanel() {
       </div>
       <div className="skill-tree">
         <p className="muted system-hint">
+          初始掌握 1 个基础技能；每升一级获得 2 点。位移 Lv.3 → 核心 Lv.5 → 掌控 Lv.8 → 防御 Lv.10 →
+          终极 Lv.15。分支需前置 2 级，每个技能每隔 3 级可再提升一阶。
+          <br />
           技能说明以 1 级为基准。每提升 1 级，主动伤害与护盾强度、被动数值收益提高 10%，最高 5
           级（+40%）；穿透、分裂等结构性效果保持，衍生伤害随节点等级提高。
         </p>
@@ -503,7 +525,7 @@ function SkillsPanel() {
                 .map((n) => (
                   <button
                     key={n.id}
-                    className={`skill-node ${save.skills[n.id] ? 'unlocked' : ''} ${selected === n.id ? 'selected' : ''}`}
+                    className={`skill-node ${save.skills[n.id] ? 'unlocked' : ''} ${save.level < skillUnlockLevel(n) ? 'locked' : ''} ${selected === n.id ? 'selected' : ''}`}
                     onClick={() => setSelected(n.id)}
                   >
                     <span className="skill-symbol">
@@ -512,6 +534,13 @@ function SkillsPanel() {
                     <strong>{n.name}</strong>
                     <small>
                       {n.kind === 'passive' ? '被动' : '主动'} · {save.skills[n.id] ?? 0} / 5
+                    </small>
+                    <small>
+                      {save.level < skillUnlockLevel(n)
+                        ? `Lv.${skillUnlockLevel(n)} 解锁`
+                        : skillLearningStatus(save, n).canLearn
+                          ? '可学习 / 升级'
+                          : skillLearningStatus(save, n).reason}
                     </small>
                     {n.parent && (
                       <span className="skill-parent">
@@ -544,9 +573,12 @@ function SkillsPanel() {
             className="gold-button"
             data-sound="upgrade"
             onClick={() => store.allocateSkill(node.id)}
-            disabled={(save.skills[node.id] ?? 0) >= 5 || skillPoints(save) === 0}
+            disabled={!skillLearningStatus(save, node).canLearn}
           >
-            提升节点 <ArrowUp size={15} />
+            {skillLearningStatus(save, node).canLearn
+              ? `${save.skills[node.id] ? '提升节点' : '学习技能'} · 1 点`
+              : skillLearningStatus(save, node).reason}{' '}
+            <ArrowUp size={15} />
           </button>
         </div>
       )}
@@ -701,8 +733,12 @@ function GamblePanel() {
         </button>
       </div>
       <p className="muted system-hint">
-        传奇与套装判定合计 67%；传奇 / 套装再判定太古，概率随层级提高，最高 15%。装备留在行囊中。
+        秘藏跟随已通关难度成长；低层不会提前产出传奇、套装或太古。指定部位若没有对应传奇，则转为该阶段可产出的装备。装备留在行囊中。
       </p>
+      <LootChances
+        stage={Math.max(1, store.save.progression?.clearedStage ?? store.save.highestStage - 1)}
+        source="gamble"
+      />
       {store.lastGamble.length > 0 ? (
         <div className="gamble-results item-grid" key={store.lastGamble[0].id}>
           {store.lastGamble.map((item, index) => (
@@ -1419,6 +1455,8 @@ export function SystemsModal({ panel, onClose }: { panel: string | null; onClose
         <div className="modal-body">
           {panel === 'character' ? (
             <CharacterPanel />
+          ) : panel === 'journey' ? (
+            <JourneyPanel />
           ) : panel === 'skills' ? (
             <SkillsPanel />
           ) : panel === 'cube' ? (

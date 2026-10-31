@@ -180,6 +180,12 @@ export interface SaveData {
   autoSalvage: boolean;
   orientation: 'portrait' | 'landscape';
   tutorialSeen: boolean;
+  progression?: {
+    version: 1;
+    clearedStage: number;
+    claimedMilestones: string[];
+    targetSetId?: string;
+  };
   runRecords?: RunRecord[];
 }
 export interface RunRecord {
@@ -222,6 +228,7 @@ export interface CombatConfig {
   petId: string;
   petLevel?: number;
   training?: boolean;
+  ownedSetPieces?: string[];
 }
 export interface CombatSnapshot {
   hp: number;

@@ -118,7 +118,12 @@ test('150 stages increase smoothly and cover all difficulty bands', () => {
       assert.ok(stage.hpMultiplier > STAGES[index - 1].hpMultiplier);
       assert.ok(stage.damageMultiplier > STAGES[index - 1].damageMultiplier);
       assert.ok(stage.reward > STAGES[index - 1].reward);
-      assert.ok(Math.abs(stage.hpMultiplier / STAGES[index - 1].hpMultiplier - 1.16) < 1e-10);
+      const growth = stage.hpMultiplier / STAGES[index - 1].hpMultiplier;
+      assert.ok(growth >= 1.08 - 1e-10 && growth <= 1.16 + 1e-10);
+      if (index > 1)
+        assert.ok(
+          growth + 1e-10 >= STAGES[index - 1].hpMultiplier / STAGES[index - 2].hpMultiplier,
+        );
     }
   });
   assert.equal(STAGES[14].difficulty, '普通');

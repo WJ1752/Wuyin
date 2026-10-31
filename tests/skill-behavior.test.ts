@@ -9,6 +9,30 @@ import { computeStats, newSave } from '../src/state/gameStore';
 const skill = (id: string) => SKILLS.find((entry) => entry.id === id)!;
 const noop = () => {};
 
+test('settlement keeps an immutable loot list when frame-end pickups continue', () => {
+  let result: { items: unknown[] } | undefined;
+  const earned = [{ id: 'boss-loot' }];
+  const engine = Object.assign(Object.create(GameEngine.prototype), {
+    config: { stage: 1, training: false },
+    finished: false,
+    elapsed: 20,
+    kills: 4,
+    gold: 0,
+    shards: 0,
+    earned,
+    emit: noop,
+    callbacks: {
+      onSound: noop,
+      onFinish: (value: typeof result) => {
+        result = value;
+      },
+    },
+  });
+  engine.finish(true);
+  earned.push({ id: 'late-pickup' });
+  assert.deepEqual(result?.items, [{ id: 'boss-loot' }]);
+});
+
 // Exercise the actual combat methods without a browser, renderer, ticker or assets.
 function engineFor(classId: ClassId) {
   const save = newSave();

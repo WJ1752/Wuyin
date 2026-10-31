@@ -16,6 +16,15 @@ import { SETS } from '../data/sets';
 import { LEGENDARIES } from '../data/legendaries';
 import { AFFIXES, GEMS, PETS } from '../data/affixes';
 import { generateLoot } from '../engine/LootGenerator';
+import {
+  availableSkillPoints,
+  getProgressionMilestones,
+  progressionSet,
+  PROGRESSION_MILESTONES,
+  skillLearningStatus,
+  skillUnlockLevel,
+  starterSkills,
+} from '../data/progression';
 
 const SAVE_KEY = 'mist-continent-save-v1';
 const RECOVERY_KEY = 'mist-continent-recovery-v1';
@@ -84,18 +93,19 @@ const BUILD_RELICS: Record<string, { worn: string[]; cube: string[] }> = {
   },
 };
 const clone = <T>(value: T): T => JSON.parse(JSON.stringify(value));
-const starters = (id: ClassId) =>
-  Object.fromEntries(
-    SKILLS.filter((s) => s.classId === id && !s.parent && s.kind !== 'passive').map((s) => [
-      s.id,
-      1,
-    ]),
-  );
+const starters = starterSkills;
 function preferBuildSkills(save: SaveData, skillId: string) {
   const focus = SKILLS.find((n) => n.id === skillId)!;
   const nodes = SKILLS.filter((n) => n.classId === save.classId);
-  const basic = focus.kind === 'basic' ? focus.id : nodes.find((n) => n.kind === 'basic')?.id;
-  const core = focus.kind === 'core' ? focus.id : nodes.find((n) => n.kind === 'core')?.id;
+  const learned = nodes.filter((n) => save.skills[n.id]);
+  const basic =
+    focus.kind === 'basic' && save.skills[focus.id]
+      ? focus.id
+      : learned.find((n) => n.kind === 'basic')?.id;
+  const core =
+    focus.kind === 'core' && save.skills[focus.id]
+      ? focus.id
+      : learned.find((n) => n.kind === 'core')?.id;
   for (const node of nodes)
     if (node.kind !== 'passive')
       save.autoSkills[node.id] =
@@ -134,6 +144,7 @@ export function newSave(): SaveData {
     autoSalvage: false,
     orientation: 'portrait',
     tutorialSeen: false,
+    progression: { version: 1, clearedStage: 0, claimedMilestones: [] },
   };
 }
 export function cubeSlot(slot: Slot): 'weapon' | 'armor' | 'jewelry' {
@@ -227,14 +238,13 @@ export function createCombatConfig(save: SaveData): CombatConfig {
     cube: { ...save.cube },
     petId: save.petId,
     petLevel: save.petLevels[save.petId] ?? 1,
+    ownedSetPieces: [...save.inventory, ...Object.values(save.equipment)]
+      .filter((item): item is Item => !!item?.setId)
+      .map((item) => `${item.setId}:${item.slot}`),
   };
 }
 export function skillPoints(save: SaveData) {
-  const spent = SKILLS.filter((s) => s.classId === save.classId).reduce(
-    (n, s) => n + (save.skills[s.id] ?? 0),
-    0,
-  );
-  return Math.max(0, 8 + save.level * 3 - spent);
+  return availableSkillPoints(save);
 }
 export function getActiveLegendaries(save: SaveData) {
   const powers = new Map<string, number>();
@@ -257,7 +267,7 @@ const bounded = (v: unknown, min: number, max: number, integer = false): v is nu
   v >= min &&
   v <= max &&
   (!integer || Number.isInteger(v));
-export function validateSave(input: unknown): SaveData {
+export function validateSave(input: unknown, historical = false): SaveData {
   if (!isRecord(input) || input.version !== 1 || !CLASSES.some((c) => c.id === input.classId))
     throw new Error('存档版本或职业无效。');
   const s = input;
@@ -430,24 +440,104 @@ export function validateSave(input: unknown): SaveData {
       ])
         if (!(key in build)) throw new Error('远征配装快照不完整。');
       // Reuse the save validator for the exact same item/class/cube rules. Records cannot nest.
-      validateSave({
-        ...newSave(),
-        classId: build.classId,
-        level: build.level,
-        equipment: build.equipment,
-        cube: build.cube,
-        skills: build.skills,
-        autoSkills: build.autoSkills,
-        petId: build.petId,
-        petLevels: build.petLevels,
-        forge: build.forge,
-        inventory: [],
-        extracted: isRecord(build.cube) ? Object.values(build.cube) : [],
-        runRecords: [],
-      });
+      validateSave(
+        {
+          ...newSave(),
+          classId: build.classId,
+          level: build.level,
+          equipment: build.equipment,
+          cube: build.cube,
+          skills: build.skills,
+          autoSkills: build.autoSkills,
+          petId: build.petId,
+          petLevels: build.petLevels,
+          forge: build.forge,
+          inventory: [],
+          extracted: isRecord(build.cube) ? Object.values(build.cube) : [],
+          runRecords: [],
+        },
+        true,
+      );
     }
   }
-  return clone(s) as unknown as SaveData;
+  if (s.progression !== undefined) {
+    const p = s.progression;
+    if (
+      !isRecord(p) ||
+      p.version !== 1 ||
+      !bounded(p.clearedStage, 0, 150, true) ||
+      !Array.isArray(p.claimedMilestones) ||
+      p.claimedMilestones.length > CLASSES.length * PROGRESSION_MILESTONES.length ||
+      new Set(p.claimedMilestones).size !== p.claimedMilestones.length ||
+      p.claimedMilestones.some(
+        (key) =>
+          !CLASSES.some((hero) =>
+            PROGRESSION_MILESTONES.some((m) => key === `${hero.id}:${m.stage}`),
+          ),
+      ) ||
+      (p.targetSetId !== undefined && !SETS.some((set) => set.id === p.targetSetId))
+    )
+      throw new Error('成长旅程记录无效。');
+  }
+  const save = clone(s) as unknown as SaveData;
+  if (!save.progression) {
+    // Old equipment/economy survives. Rebuild old automatic unlocks into the new
+    // level/parent budget; unspent points remain available to choose again.
+    save.progression = {
+      version: 1,
+      clearedStage: save.runRecords?.length
+        ? Math.max(...save.runRecords.map((record) => record.stage))
+        : Math.max(0, save.highestStage - 3),
+      claimedMilestones: [],
+    };
+    const previous = { ...save.skills };
+    save.skills = {};
+    for (const hero of CLASSES) {
+      if (
+        hero.id !== save.classId &&
+        !SKILLS.some((node) => node.classId === hero.id && previous[node.id])
+      )
+        continue;
+      Object.assign(save.skills, starters(hero.id));
+      const view = { ...save, classId: hero.id };
+      const nodes = SKILLS.filter((node) => node.classId === hero.id).sort(
+        (a, b) => skillUnlockLevel(a) - skillUnlockLevel(b),
+      );
+      for (let pass = 0; pass < 5; pass++)
+        for (const node of nodes)
+          if (
+            (view.skills[node.id] ?? 0) < (previous[node.id] ?? 0) &&
+            skillLearningStatus(view, node).canLearn
+          )
+            view.skills[node.id] = (view.skills[node.id] ?? 0) + 1;
+    }
+    // Existing accounts can earn each new chapter gift once by clearing its
+    // threshold (or a deeper rift); migration never grants items on load.
+  } else if (!historical) {
+    for (const hero of CLASSES) {
+      const nodes = SKILLS.filter((node) => node.classId === hero.id);
+      const spent = nodes.reduce((sum, node) => sum + (save.skills[node.id] ?? 0), 0);
+      if (
+        spent > 1 + (save.level - 1) * 2 ||
+        nodes.some((node) => {
+          const rank = save.skills[node.id] ?? 0;
+          return (
+            rank > 0 &&
+            (save.level < skillUnlockLevel(node) + (rank - 1) * 3 ||
+              (node.parent && (save.skills[node.parent] ?? 0) < 2))
+          );
+        })
+      )
+        throw new Error('技能分配超出当前等级、前置条件或可用点数。');
+    }
+    if (
+      !SKILLS.some(
+        (node) => node.classId === save.classId && node.kind === 'basic' && save.skills[node.id],
+      )
+    )
+      throw new Error('当前职业至少需要一个基础攻击。');
+  }
+  return save;
 }
 
 let dbPromise: Promise<IDBDatabase> | undefined;
@@ -507,6 +597,7 @@ interface GameState {
   allocateSkill: (id: string) => void;
   resetSkills: () => void;
   recommendSkills: (setId: string) => void;
+  selectProgressionSet: (setId: string) => void;
   toggleAuto: (id: string) => void;
   extract: (id: string) => void;
   equipCube: (id: string) => void;
@@ -550,6 +641,51 @@ function addItems(save: SaveData, items: Item[]) {
       refundGem(save, item);
     } else save.inventory.push(item);
   }
+}
+function chapterRewards(save: SaveData, stage: number, runItems: Item[]): string[] {
+  save.progression ??= { version: 1, clearedStage: 0, claimedMilestones: [] };
+  save.progression.clearedStage = Math.max(save.progression.clearedStage, stage);
+  const earned: string[] = [];
+  for (const milestone of getProgressionMilestones(save)) {
+    if (milestone.claimed || stage < milestone.stage) continue;
+    if (save.inventory.length >= MAX_INVENTORY) {
+      earned.push('背包已满，未领取的旅程奖励将在腾出空间后的下一次达标通关补发');
+      break;
+    }
+    const set = progressionSet(save);
+    const firstCore = SKILLS.find(
+      (skill) => skill.classId === save.classId && skill.kind === 'core',
+    );
+    const firstBuild = SETS.find((build) => build.skillId === firstCore?.id);
+    const rewardBuild = milestone.stage === 16 ? firstBuild : set;
+    const rewardRelics = rewardBuild ? BUILD_RELICS[rewardBuild.id]?.worn : undefined;
+    const weapon = LEGENDARIES.find(
+      (item) =>
+        item.classId === save.classId && item.slot === 'weapon' && rewardRelics?.includes(item.id),
+    );
+    const item = generateLoot(save.classId, milestone.stage, {
+      rarity: milestone.rarity,
+      ...(milestone.rarity === 'set'
+        ? {
+            setId: set.id,
+            ownedSetPieces: [...save.inventory, ...Object.values(save.equipment), ...runItems]
+              .filter((part): part is Item => !!part?.setId)
+              .map((part) => `${part.setId}:${part.slot}`),
+          }
+        : {
+            slot: 'weapon' as Slot,
+            ...(['legendary', 'primal'].includes(milestone.rarity)
+              ? { legendaryId: weapon?.id }
+              : {}),
+          }),
+      primal: milestone.rarity === 'primal',
+    });
+    // Chapter gifts bypass auto-salvage so their promised reward remains reviewable.
+    save.inventory.push(item);
+    save.progression.claimedMilestones.push(`${save.classId}:${milestone.stage}`);
+    earned.push(`${milestone.title}：${item.name}`);
+  }
+  return earned;
 }
 export const useGameStore = create<GameState>((set, get) => {
   const mutate = (fn: (save: SaveData) => string | void) => {
@@ -615,12 +751,14 @@ export const useGameStore = create<GameState>((set, get) => {
           save = validateSave(loaded);
           const hours = Math.min(8, Math.max(0, (Date.now() - save.lastSaved) / 3600000));
           if (hours >= 0.05) {
-            const gold = Math.floor(hours * (120 + save.highestStage * 20));
+            const gold = Math.floor(hours * (120 + (save.progression?.clearedStage ?? 0) * 20));
             const crystals = Math.floor(hours * 4);
             save.gold += gold;
             save.crystals += crystals;
             notice = `离线营地收益：${gold} 金币 · ${crystals} 奥术结晶（最多累计 8 小时）`;
           }
+          if (isRecord(loaded) && loaded.progression === undefined)
+            notice += ' 技能已迁移到学习路径，超出等级或前置的技能点已返还；装备与资源保留。';
         } catch {
           damaged.push({ source: 'IndexedDB / save', raw: JSON.stringify(loaded, null, 2) });
           notice = '原存档无法读取，原始内容已留存。可在设置中导出恢复备份，或导入有效存档。';
@@ -708,6 +846,7 @@ export const useGameStore = create<GameState>((set, get) => {
         s.inventory.push(...Object.values(s.equipment).filter((item): item is Item => !!item));
         s.equipment = {};
         s.classId = id;
+        if (s.progression) delete s.progression.targetSetId;
         for (const slot of ['weapon', 'armor', 'jewelry'] as const) {
           const relic = LEGENDARIES.find((l) => l.id === s.cube[slot]);
           if (relic?.classId && relic.classId !== id) delete s.cube[slot];
@@ -740,6 +879,8 @@ export const useGameStore = create<GameState>((set, get) => {
         return;
       }
       mutate((s) => {
+        const priorLevel = s.level;
+        const chapterNotices: string[] = [];
         if (result.won) {
           const { classId, level, equipment, cube, skills, autoSkills, petId, petLevels, forge } =
             s;
@@ -778,8 +919,8 @@ export const useGameStore = create<GameState>((set, get) => {
           s.xp -= s.level * 180;
           s.level++;
         }
-        addItems(s, result.items);
         if (result.won) {
+          chapterNotices.push(...chapterRewards(s, result.stage, result.items));
           s.clears++;
           s.bestTime = s.bestTime ? Math.min(s.bestTime, result.seconds) : result.seconds;
           if (result.stage >= s.highestStage)
@@ -787,12 +928,18 @@ export const useGameStore = create<GameState>((set, get) => {
           const gem = GEMS[Math.floor(Math.random() * GEMS.length)];
           s.gems[gem.id][Math.min(9, Math.floor(result.stage / 20))]++;
         }
+        addItems(s, result.items);
         if (priorKills < 100 && s.kills >= 100) s.gold += 500;
         if (priorClears < 5 && s.clears >= 5) s.shards += 250;
         if (priorStage < 15 && s.highestStage >= 15) s.crystals += 50;
-        return result.won
+        const summary = result.won
           ? `秘境已肃清 · 获得 ${result.gold} 金币与 ${result.shards} 神秘碎片`
           : '远征结束，已带回本次收获。';
+        if (s.level > priorLevel)
+          chapterNotices.push(
+            `升至 Lv.${s.level}，获得 ${(s.level - priorLevel) * 2} 技能点，前往技能之书学习`,
+          );
+        return [summary, ...chapterNotices].join(' · ');
       });
     },
     getStats: () => computeStats(get().save),
@@ -806,9 +953,23 @@ export const useGameStore = create<GameState>((set, get) => {
         if ((l?.classId && l.classId !== s.classId) || (t && t.classId !== s.classId))
           return '这件装备属于其他职业。';
         const old = s.equipment[item.slot];
+        const before = t
+          ? Object.values(s.equipment).filter((part) => part?.setId === t.id).length
+          : 0;
         s.inventory.splice(i, 1);
         if (old) s.inventory.push(old);
         s.equipment[item.slot] = item;
+        if (t) {
+          const count = Object.values(s.equipment).filter((part) => part?.setId === t.id).length;
+          const bonus =
+            before < 4 && count >= 4
+              ? `四件成型！${t.four}`
+              : before < 2 && count >= 2
+                ? `双件共鸣！${t.two}`
+                : '';
+          if (bonus)
+            return `${t.name} · ${bonus}${!s.skills[t.skillId] ? ' · 记得前往技能之书学习对应技能。' : ''}`;
+        }
         return `已装备 ${item.name}`;
       });
     },
@@ -826,9 +987,8 @@ export const useGameStore = create<GameState>((set, get) => {
       mutate((s) => {
         const node = SKILLS.find((n) => n.id === id && n.classId === s.classId);
         if (!node) return;
-        if (skillPoints(s) <= 0) return '升级角色可获得更多技能点。';
-        if ((s.skills[id] ?? 0) >= 5) return '该节点已达满级。';
-        if (node.parent && !s.skills[node.parent]) return '请先点亮前置技能。';
+        const learning = skillLearningStatus(s, node);
+        if (!learning.canLearn) return learning.reason;
         s.skills[id] = (s.skills[id] ?? 0) + 1;
         return `${node.name}提升至 ${s.skills[id]} 级`;
       });
@@ -837,7 +997,8 @@ export const useGameStore = create<GameState>((set, get) => {
       mutate((s) => {
         for (const n of SKILLS.filter((n) => n.classId === s.classId)) delete s.skills[n.id];
         Object.assign(s.skills, starters(s.classId));
-        return '技能已免费重置，基础战斗技能保持解锁。';
+        for (const id of Object.keys(starters(s.classId))) s.autoSkills[id] = true;
+        return '技能已免费重置，仅保留初始基础攻击，技能点已返还。';
       });
     },
     recommendSkills(setId) {
@@ -851,14 +1012,22 @@ export const useGameStore = create<GameState>((set, get) => {
         );
         for (let pass = 0; pass < 5; pass++)
           for (const n of nodes)
-            if (
-              skillPoints(s) > 0 &&
-              (s.skills[n.id] ?? 0) < 5 &&
-              (!n.parent || s.skills[n.parent])
-            )
-              s.skills[n.id] = (s.skills[n.id] ?? 0) + 1;
+            if (skillLearningStatus(s, n).canLearn) s.skills[n.id] = (s.skills[n.id] ?? 0) + 1;
         preferBuildSkills(s, setDef.skillId);
-        return `已按${setDef.name}分配可用技能点。`;
+        const remaining = skillLearningStatus(
+          s,
+          SKILLS.find((node) => node.id === setDef.skillId)!,
+        );
+        return `已按${setDef.name}分配当前可学习的技能点。${!s.skills[setDef.skillId] ? `流派核心待角色 Lv.${remaining.unlockLevel} 学习。` : ''}`;
+      });
+    },
+    selectProgressionSet(setId) {
+      mutate((s) => {
+        const target = SETS.find((set) => set.id === setId && set.classId === s.classId);
+        if (!target) return;
+        s.progression ??= { version: 1, clearedStage: 0, claimedMilestones: [] };
+        s.progression.targetSetId = setId;
+        return `旅程目标已改为${target.name}，尚未领取的套装奖励会优先补齐该套装。`;
       });
     },
     toggleAuto(id) {
@@ -907,7 +1076,7 @@ export const useGameStore = create<GameState>((set, get) => {
       }
       s.shards -= count * 50;
       const items = Array.from({ length: count }, () =>
-        generateLoot(s.classId, Math.max(s.level, s.highestStage), {
+        generateLoot(s.classId, Math.max(1, s.progression?.clearedStage ?? s.highestStage - 1), {
           slot,
           gambling: true,
           ownedSetPieces: [
@@ -1132,9 +1301,15 @@ export const useGameStore = create<GameState>((set, get) => {
     importSave(text) {
       try {
         if (text.length > 2000000) throw new Error('文件过大。');
-        const save = validateSave(JSON.parse(text));
+        const parsed = JSON.parse(text);
+        const save = validateSave(parsed);
         save.lastSaved = Date.now();
-        set({ save, labBackup: null, lastGamble: [], notice: '存档导入成功。' });
+        set({
+          save,
+          labBackup: null,
+          lastGamble: [],
+          notice: `存档导入成功。${isRecord(parsed) && parsed.progression === undefined ? '旧技能已按学习路径迁移，多余点数可重新分配。' : ''}`,
+        });
         void get().persist();
       } catch (error) {
         set({ notice: `导入失败：${error instanceof Error ? error.message : '无效 JSON'}` });

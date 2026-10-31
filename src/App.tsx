@@ -31,10 +31,13 @@ import {
   Wind,
   X,
   Zap,
-} from 'lucide-react';
+} from './ui/PixelIcons';
 import { CLASSES } from './data/classes';
 import { SKILLS } from './data/skillTrees';
 import { STAGES } from './data/stages';
+import { getLootProfile, getProgressionMilestones } from './data/progression';
+import { RARITY_COLORS, RARITY_NAMES } from './core/types';
+import type { Rarity } from './core/types';
 import { useGameStore, createCombatConfig } from './state/gameStore';
 import { SystemsModal } from './ui/SystemsModal';
 import { HeroArt, TownScene } from './ui/SceneArt';
@@ -70,10 +73,13 @@ function App() {
   const [panel, setPanel] = useState<string | null>(null);
   const [config, setConfig] = useState<CombatConfig | null>(null);
   const [result, setResult] = useState<RunResult | null>(null);
+  const [runSummary, setRunSummary] = useState('');
   const [showGuide, setShowGuide] = useState(false);
   const labBackup = useGameStore((s) => s.labBackup);
   const classDef = CLASSES.find((c) => c.id === save.classId) ?? CLASSES[0];
   const stats = useGameStore.getState().getStats();
+  const lootProfile = getLootProfile(save.selectedStage);
+  const nextMilestone = getProgressionMilestones(save).find((milestone) => !milestone.claimed);
   useEffect(() => {
     void hydrate();
   }, [hydrate]);
@@ -123,6 +129,7 @@ function App() {
   };
   const finish = (r: RunResult) => {
     if (!config?.training) completeRun(r);
+    setRunSummary(config?.training ? '训练不发放奖励。' : useGameStore.getState().notice);
     setResult(r);
     audio.play(r.won ? 'victory' : 'death');
   };
@@ -364,20 +371,30 @@ function App() {
                   <span>限时 05:00</span>
                 </div>
                 <div className="rift-rewards">
-                  <span>秘境馈赠</span>
+                  <span>{lootProfile.label}</span>
                   <div>
-                    <span title="传奇装备" className="reward-icon legendary">
-                      <Swords />
-                    </span>
-                    <span title="套装部件" className="reward-icon set">
-                      <Shield />
-                    </span>
-                    <span title="神秘碎片" className="reward-icon shard">
-                      <Diamond />
-                    </span>
+                    {Object.entries(lootProfile.chances)
+                      .filter(([, chance]) => chance > 0)
+                      .map(([rarity, chance]) => (
+                        <span
+                          key={rarity}
+                          className="reward-icon"
+                          style={{ color: RARITY_COLORS[rarity as Rarity] }}
+                          title={`${RARITY_NAMES[rarity as Rarity]} ${(chance * 100).toFixed(1)}%`}
+                        >
+                          <Gem size={19} />
+                        </span>
+                      ))}
                   </div>
-                  <small>前 3 层必掉核心传奇</small>
+                  <small>
+                    {nextMilestone
+                      ? `下个首通目标 · ${nextMilestone.stage} 层 ${nextMilestone.title}`
+                      : '旅程奖励已集齐 · 继续追寻太古'}
+                  </small>
                 </div>
+                <button className="text-button full-width" onClick={() => open('journey')}>
+                  查看掉落与套装旅程 <ArrowRight size={14} />
+                </button>
                 <button className="enter-button" onClick={() => enter()}>
                   <span>踏入秘境</span>
                   <ArrowRight size={19} />
@@ -482,7 +499,18 @@ function App() {
                 <div>
                   <h3>让装备改变你的战斗</h3>
                   <p>
-                    四件套解锁流派核心，传奇可萃取进魔盒。想直接感受毕业配装？前往流派实验室，退出演武后恢复原有进度。
+                    普通难度收集稀有与史诗，困难追寻传奇，大师开始凑齐套装。2 件套初步共鸣，4
+                    件套改变流派玩法；旅程页面可选择目标套装。
+                  </p>
+                </div>
+              </div>
+              <div className="guide-step">
+                <b>04</b>
+                <div>
+                  <h3>每一次升级，都有新的选择</h3>
+                  <p>
+                    初始掌握一个基础技能，每升一级获得 2 点。Lv.3 学习位移，Lv.5 解锁核心技能，Lv.15
+                    开启终极技能；分支需要前置 2 级。技能之书会显示每个节点的学习条件。
                   </p>
                 </div>
               </div>
@@ -517,8 +545,9 @@ function App() {
               </div>
             </div>
             <p className="muted">
-              获得 {result.items.length} 件装备 · {formatBigNumber(result.gold)} 金币
+              战场掉落 {result.items.length} 件装备 · {formatBigNumber(result.gold)} 金币
             </p>
+            <p className="run-progression-summary">{runSummary}</p>
             <button
               className="gold-button full-width"
               onClick={() => {
@@ -720,6 +749,19 @@ function CombatView({
               </div>
             );
           })}
+          {Array.from({ length: Math.max(0, 6 - skills.length) }, (_, i) => (
+            <div
+              className="combat-skill unlearned-skill"
+              key={`unlearned-${i}`}
+              title="升级后在营地技能之书学习，学习后加入战斗栏"
+            >
+              <span className="auto-toggle">未学习</span>
+              <span className="skill-cast">
+                <BookOpen size={28} />
+              </span>
+              <span className="skill-name">营地学习</span>
+            </div>
+          ))}
         </div>
         <div className="resource-orb energy-orb">
           <div

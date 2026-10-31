@@ -9,11 +9,8 @@ export function AssetIcon({ visual, size = 32 }: { visual: AssetVisual; size?: n
       width={size}
       height={size}
       viewBox="0 0 48 48"
-      fill="none"
-      stroke={visual.color}
-      strokeWidth="1.8"
-      strokeLinecap="round"
-      strokeLinejoin="round"
+      fill={visual.color}
+      shapeRendering="crispEdges"
       aria-hidden="true"
       focusable="false"
       data-visual={visual.key}
@@ -23,8 +20,7 @@ export function AssetIcon({ visual, size = 32 }: { visual: AssetVisual; size?: n
           key={index}
           d={layer.path}
           transform={layer.transform}
-          stroke={layer.accent ? '#f7ecce' : undefined}
-          strokeWidth={layer.accent ? 3 : undefined}
+          fill={layer.fill ?? visual.color}
         />
       ))}
     </svg>

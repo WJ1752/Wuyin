@@ -1,8 +1,398 @@
 import { Container, Graphics, ColorMatrixFilter } from 'pixi.js';
 import type { MonsterDef } from '../core/types';
+import { pixelEllipse, pixelLine, pixelPolygon, pixelStamp } from './PixelArt';
+
+const INK = 0x14202a;
+const BONE = 0xe1d3ad;
+const LIGHT = 0xf8ebc5;
+
+/** Family anatomy is drawn as solid pixel clusters with a shared three-pixel grid. */
+export function drawPixelCreature(g: Graphics, family: string, color: number, boss = false) {
+  const block = (x: number, y: number, w: number, h: number, ink = color) =>
+    g.rect(x, y, w, h).fill(ink);
+  const orb = (x: number, y: number, rx: number, ry: number, ink = color) =>
+    pixelEllipse(g, x, y, rx, ry, ink);
+  const poly = (points: number[], ink = color) => pixelPolygon(g, points, ink);
+  const line = (x: number, y: number, tx: number, ty: number, ink = BONE, cell = 3) =>
+    pixelLine(g, x, y, tx, ty, ink, cell);
+  const eyes = (y: number, ink = 0xffb978) => {
+    block(-9, y, 6, 6, INK);
+    block(6, y, 6, 6, INK);
+    block(-9, y, 3, 3, ink);
+    block(6, y, 3, 3, ink);
+  };
+  const skull = () => {
+    pixelStamp(
+      g,
+      [
+        '..kkkkkk..',
+        '.kbbbbbbk.',
+        'kbbwwbbbbk',
+        'kwwwwbbbbk',
+        'kbkkbbkkbk',
+        'kbkkbbkkbk',
+        '.kbbkkbbk.',
+        '..kb bbk..',
+        '..kbbbbk..',
+        '...kkkk...',
+      ],
+      { k: INK, b: BONE, w: LIGHT },
+      -15,
+      -51,
+      3,
+    );
+    block(-9, -36, 3, 3, color);
+    block(6, -36, 3, 3, color);
+  };
+  if (family === 'dummy') {
+    block(-6, -39, 12, 48, 0x382b2b);
+    block(-3, -36, 6, 42, 0xa77e47);
+    block(-24, -27, 51, 6, 0xa77e47);
+    block(-15, 6, 33, 6, 0x70583d);
+    orb(0, -33, 21, 24, INK);
+    orb(0, -33, 18, 21, 0xc8ad70);
+    orb(0, -33, 12, 15, 0x7c5644);
+    orb(0, -33, 6, 9, 0xe3c58a);
+    block(-3, -36, 6, 9, 0xa95049);
+    return;
+  }
+  if (family === 'goblin') {
+    // The treasure carrier has a broad coin sack, pointed ears and short running legs.
+    orb(15, -18, 21, 24, INK);
+    orb(15, -21, 18, 21, 0x977243);
+    orb(12, -27, 12, 12, 0xc69a59);
+    block(6, -42, 18, 6, 0xe5c27e);
+    block(12, -42, 3, 24, 0x6f5339);
+    block(-12, -6, 9, 15, INK);
+    block(3, -6, 9, 15, INK);
+    block(-12, 3, 9, 6, 0xa08658);
+    block(3, 3, 9, 6, 0xa08658);
+    orb(-3, -18, 12, 15, INK);
+    orb(-3, -21, 9, 12, 0x617f55);
+    for (const side of [-1, 1]) {
+      poly([side * 6, -39, side * 27, -48, side * 18, -30], INK);
+      poly([side * 9, -39, side * 21, -42, side * 15, -33], 0x9baa71);
+    }
+    orb(-3, -36, 18, 18, INK);
+    orb(-3, -36, 15, 15, 0x92a36b);
+    eyes(-39, 0xffe39a);
+    poly([-3, -36, -9, -27, 3, -27], 0xc2c58c);
+    block(-9, -24, 15, 3, INK);
+    block(-9, -24, 3, 3, LIGHT);
+    block(-18, -18, 6, 12, 0x92a36b);
+    pixelStamp(g, ['.aa.', 'abba', 'abba', '.aa.'], { a: 0xf2cf77, b: 0xa8793a }, 21, -15);
+  } else if (['insect', 'spider', 'scorpion'].includes(family)) {
+    for (const side of [-1, 1])
+      for (let i = 0; i < (family === 'spider' ? 4 : 3); i++) {
+        line(side * 12, -15, side * (24 + i * 3), -30 + i * 15, INK, 6);
+        line(side * (24 + i * 3), -30 + i * 15, side * (36 + i * 3), -21 + i * 15, color);
+      }
+    orb(0, -24, 21, 21, INK);
+    orb(0, -24, 18, 18);
+    orb(-6, -30, 9, 9, family === 'insect' ? 0xc8dd8b : 0xab9cb3);
+    orb(0, -3, 12, 12, INK);
+    orb(0, -3, 9, 9);
+    eyes(-6);
+    block(-6, 6, 3, 6, BONE);
+    block(6, 6, 3, 6, BONE);
+    if (family === 'insect') {
+      block(-3, -39, 9, 21, 0xd3e48b);
+      block(-9, -30, 18, 6, 0xc6e789);
+    } else if (family === 'scorpion') {
+      line(0, -36, -12, -54, color, 6);
+      line(-12, -54, 0, -69, color, 6);
+      poly([0, -69, 15, -63, 9, -51, 6, -60], BONE);
+      for (const s of [-1, 1])
+        poly([s * 12, -6, s * 30, -18, s * 36, -6, s * 27, 9, s * 24, -3, s * 15, 3]);
+    }
+  } else if (['worm', 'serpent'].includes(family)) {
+    for (let i = 5; i >= 0; i--) {
+      const x = i * 6 - 12,
+        y = Math.round((Math.sin(i) * 6) / 3) * 3;
+      orb(x, y, 12 - i, 9, INK);
+      orb(x, y - 3, 9 - i, 6);
+      block(x - 3, y - 3, 3, 3, BONE);
+    }
+    orb(-6, -21, 15, 24, INK);
+    orb(-6, -24, 12, 21);
+    if (family === 'serpent') {
+      poly([-21, -39, -27, -27, -18, -6, 12, -6, 21, -27, 12, -39], INK);
+      poly([-18, -36, -21, -27, -12, -12, 9, -12, 15, -27, 9, -36]);
+      block(-6, -24, 9, 15, 0xd0c294);
+      eyes(-30);
+      line(0, -9, 0, 3, 0xf59e9e);
+    } else {
+      orb(-6, -30, 9, 9, INK);
+      block(-12, -36, 3, 6, BONE);
+      block(0, -36, 3, 6, BONE);
+      block(-6, -24, 3, 6, BONE);
+    }
+  } else if (family === 'eye') {
+    for (let i = -2; i <= 2; i++) {
+      line(i * 6, -12, i * 9, 0, color);
+      line(i * 9, 0, i * 6 + 3, 12, color);
+    }
+    orb(0, -30, 24, 21, INK);
+    orb(0, -30, 21, 18, BONE);
+    orb(0, -30, 12, 15);
+    block(-3, -42, 6, 27, INK);
+    block(-9, -39, 6, 6, LIGHT);
+  } else if (['wolf', 'rat', 'drake', 'bat', 'imp'].includes(family)) {
+    if (['bat', 'drake', 'imp'].includes(family))
+      for (const s of [-1, 1]) {
+        poly([s * 9, -30, s * 36, -57, s * 51, -21, s * 36, -27, s * 27, -9, s * 12, -18], INK);
+        poly([s * 12, -30, s * 36, -48, s * 45, -27, s * 33, -33, s * 24, -18], color);
+        line(s * 33, -42, s * 24, -24, BONE);
+      }
+    if (family !== 'bat') {
+      orb(0, -12, 18, 15, INK);
+      orb(0, -15, 15, 12);
+      block(-15, -3, 9, 12, INK);
+      block(9, -3, 9, 12, INK);
+      block(-12, 0, 6, 6, BONE);
+      block(9, 0, 6, 6, BONE);
+      line(12, -9, 27, -3, color, 6);
+      line(27, -3, 36, -18, color, family === 'rat' ? 3 : 6);
+    }
+    orb(0, -33, 18, 18, INK);
+    orb(0, -33, 15, 15);
+    if (family === 'rat') {
+      orb(-15, -45, 9, 9, INK);
+      orb(15, -45, 9, 9, INK);
+      orb(-15, -45, 6, 6, 0xba8b91);
+      orb(15, -45, 6, 6, 0xba8b91);
+    } else
+      for (const s of [-1, 1]) {
+        poly([s * 6, -45, s * 18, -60, s * 21, -36], INK);
+        poly([s * 12, -45, s * 18, -54, s * 18, -39], family === 'imp' ? BONE : color);
+      }
+    eyes(-36);
+    orb(0, -24, 9, 6, BONE);
+    block(-3, -27, 6, 3, INK);
+    if (family === 'drake') {
+      for (let i = 0; i < 3; i++) block(-6 + i * 6, -15, 3, 6, LIGHT);
+      poly([-3, -51, 0, -66, 6, -48], BONE);
+    }
+  } else if (
+    ['ghost', 'revenant', 'cultist', 'shaman', 'assassin', 'skeleton_mage'].includes(family)
+  ) {
+    poly([-12, -36, -21, 9, -9, 3, 0, 12, 9, 3, 21, 9, 12, -36], INK);
+    poly([-9, -30, -15, 6, -6, 0, 0, 9, 9, 0, 15, 3, 9, -30]);
+    orb(0, -36, 18, 21, INK);
+    orb(0, -39, 15, 18);
+    poly([-12, -36, 0, -48, 12, -36, 9, -24, -9, -24], INK);
+    eyes(-36, 0xb5ffe2);
+    block(-12, -48, 6, 6, 0xc4c2bf);
+    if (family === 'ghost') {
+      block(-24, -21, 6, 12);
+      block(21, -21, 6, 12);
+    }
+    if (family === 'revenant') {
+      block(-21, -27, 12, 9, BONE);
+      block(12, -27, 12, 9, BONE);
+      line(21, -18, 27, 9, BONE, 6);
+      poly([24, -3, 24, -45, 30, -54, 33, -3], 0xa7dbe7);
+    }
+    if (family === 'cultist' || family === 'shaman' || family === 'skeleton_mage') {
+      line(24, 9, 24, -48, 0x9d7857);
+      poly([24, -63, 33, -51, 24, -39, 15, -51], family === 'shaman' ? 0xbceeff : 0xbda0e3);
+      block(21, -54, 3, 6, LIGHT);
+      if (family === 'shaman')
+        for (let i = -1; i <= 1; i++)
+          poly([i * 12 - 6, -48, i * 12, -69 + Math.abs(i) * 6, i * 12 + 6, -48], 0xb3dfdf);
+      else if (family === 'cultist') poly([-15, -42, 0, -69, 15, -42], color);
+    }
+    if (family === 'skeleton_mage') skull();
+    if (family === 'assassin')
+      for (const s of [-1, 1]) {
+        line(s * 15, -18, s * 21, 0, color, 6);
+        poly([s * 21, 0, s * 27, -30, s * 30, -36, s * 30, 0], BONE);
+      }
+  } else if (family === 'ent' || family === 'golem') {
+    for (const s of [-1, 1]) {
+      block(s * 15 - 9, -3, 15, 15, INK);
+      block(s * 15 - 6, 0, 9, 9, 0x8e8066);
+      orb(s * 24, -21, 12, 15, INK);
+      orb(s * 24, -24, 9, 12);
+    }
+    orb(0, -24, 21, 24, INK);
+    orb(0, -27, 18, 21);
+    orb(0, -42, 18, 18, INK);
+    orb(0, -45, 15, 15);
+    eyes(-45, family === 'ent' ? 0xd6eda1 : 0xffdc97);
+    if (family === 'ent') {
+      for (const s of [-1, 1]) {
+        line(s * 9, -54, s * 21, -66, 0x99855c, 6);
+        line(s * 21, -66, s * 18, -78, 0x99855c);
+        orb(s * 21, -63, 12, 6, 0x60794d);
+      }
+      block(-9, -27, 3, 21, 0xb29967);
+      block(9, -21, 3, 18, 0xb29967);
+    } else {
+      line(-3, -33, 6, -21, 0xffb66d);
+      line(6, -21, 0, -6, 0xffdb93);
+      block(-27, -33, 12, 3, 0xc99973);
+      block(18, -33, 12, 3, 0xc99973);
+    }
+  } else {
+    // Short armored bodies and oversized heads unify skeleton, knight and bruiser proportions.
+    block(-12, -6, 9, 15, INK);
+    block(6, -6, 9, 15, INK);
+    block(-12, 3, 9, 6, 0x7e7972);
+    block(6, 3, 9, 6, 0x7e7972);
+    orb(0, -15, 15, 18, INK);
+    orb(0, -18, 12, 15);
+    block(-18, -24, 6, 21, BONE);
+    block(15, -24, 6, 21, BONE);
+    block(-9, -9, 21, 3, INK);
+    block(-3, -9, 6, 3, 0xe6bd72);
+    skull();
+    if (family === 'skeleton' || family === 'archer') {
+      block(-9, -24, 21, 3, BONE);
+      block(-6, -18, 15, 3, BONE);
+      if (family === 'archer') {
+        line(24, -42, 33, -27, 0xcb9b60);
+        line(33, -27, 33, -15, 0xcb9b60);
+        line(33, -15, 24, 0, 0xcb9b60);
+        line(24, -42, 24, 0, BONE);
+        line(18, -21, 39, -21, BONE);
+      } else {
+        block(-27, -24, 15, 24, INK);
+        block(-24, -21, 9, 18, 0x718784);
+        line(24, -30, 24, 3, 0xc3d5cb, 6);
+        block(18, -3, 15, 3, 0xc6a35f);
+      }
+    } else if (family === 'knight') {
+      block(-15, -48, 33, 15, 0x8a9ba4);
+      block(-12, -36, 27, 6, INK);
+      block(0, -51, 6, 24, 0xc5d3cd);
+      block(-24, -27, 15, 12, 0x93a2a8);
+      block(12, -27, 15, 12, 0x93a2a8);
+      poly([24, 3, 24, -42, 30, -54, 36, -42, 33, 3], BONE);
+      block(18, -3, 21, 3, 0xcba771);
+    } else if (family === 'zombie') {
+      orb(0, -36, 15, 15);
+      eyes(-39);
+      block(-9, -27, 18, 3, INK);
+      block(-24, -27, 15, 9);
+      block(15, -30, 15, 9);
+      block(-6, -18, 9, 6, 0xa16a66);
+    } else {
+      orb(0, -36, 18, 18);
+      eyes(-39);
+      orb(0, -27, 12, 6, 0xb79882);
+      for (const s of [-1, 1]) poly([s * 9, -45, s * 24, -45, s * 27, -63, s * 18, -51], BONE);
+      if (family === 'jailer') {
+        line(-18, -6, -36, 9, 0x9ea9a6);
+        orb(-42, 9, 12, 12, INK);
+        orb(-42, 9, 9, 9, 0x718080);
+      } else {
+        line(27, 6, 27, -42, 0xaa855c, 6);
+        poly([18, -42, 42, -45, 42, -24, 18, -30], BONE);
+      }
+    }
+  }
+  if (boss) {
+    // Each keeper has regalia tied to its identity, beyond the larger family body.
+    if (family === 'skeleton') {
+      pixelStamp(
+        g,
+        ['a..a..a', 'aa.a.aa', 'aaaaaaa', '.bbbbb.'],
+        { a: 0xe5bd72, b: 0x88674b },
+        -9,
+        -63,
+      );
+      poly([-18, -24, -27, -3, -21, 9, -12, 6, -12, -18], 0x895067);
+      block(-27, -24, 15, 3, 0xe5bd72);
+      block(-24, -18, 3, 12, 0xe5bd72);
+      block(-18, -15, 3, 9, 0xe5bd72);
+    } else if (family === 'ent') {
+      for (const side of [-1, 1]) {
+        line(side * 21, -66, side * 39, -72, 0x8c754e, 6);
+        line(side * 39, -72, side * 42, -84, 0x8c754e);
+        poly([side * 27, -69, side * 27, -81, side * 36, -72], 0xe1c1a0);
+        pixelStamp(g, ['.aa.', 'abba', '.aa.'], { a: 0xd7a3a4, b: 0xf7dfac }, side * 21 - 6, -69);
+      }
+      block(-6, -21, 15, 9, 0x304b3b);
+      block(-3, -18, 9, 3, 0xe0d392);
+    } else if (family === 'golem') {
+      block(-15, -24, 33, 24, INK);
+      block(-12, -21, 27, 18, 0xb85b3b);
+      block(-9, -18, 21, 12, 0xffc36c);
+      for (let x = -6; x <= 9; x += 6) block(x, -21, 3, 18, 0x5a3f3c);
+      for (const side of [-1, 1]) {
+        block(side * 24 - 6, -51, 12, 24, INK);
+        block(side * 24 - 3, -48, 6, 18, 0x7d5650);
+        poly(
+          [
+            side * 24 - 3,
+            -51,
+            side * 24 - 6,
+            -57,
+            side * 24,
+            -69,
+            side * 24 + 3,
+            -57,
+            side * 24 + 6,
+            -54,
+          ],
+          0xf3b15c,
+        );
+      }
+    } else if (family === 'ghost') {
+      pixelEllipse(g, 0, -66, 27, 9, 0xc7b6eb, 3, 1, true);
+      block(-3, -78, 9, 6, 0xe8d5f3);
+      poly([-15, -24, -27, 9, -18, 6, -9, -18], 0x7c6aa0);
+      poly([15, -24, 27, 9, 18, 6, 9, -18], 0x7c6aa0);
+      for (const x of [-33, 30]) pixelStamp(g, ['.a.', 'aaa', '.a.'], { a: 0xe8d5f3 }, x, -27);
+      block(-3, -21, 9, 6, 0xe7d2ac);
+    } else if (family === 'drake') {
+      for (const side of [-1, 1]) {
+        poly([side * 18, -42, side * 36, -60, side * 33, -33], 0x94c4da);
+        line(side * 21, -42, side * 33, -54, 0xe2f4ed);
+        poly([side * 15, -6, side * 24, -12, side * 21, 6], 0xd0eced);
+      }
+      block(-6, -18, 15, 3, INK);
+      block(-6, -12, 15, 3, INK);
+      block(-3, -21, 6, 18, 0xe2f4ed);
+    } else if (family === 'minotaur') {
+      block(-9, -18, 21, 24, 0x543d43);
+      block(-6, -18, 15, 21, 0xa66f62);
+      block(0, -15, 6, 9, 0xd09b7d);
+      block(21, -45, 24, 24, INK);
+      block(24, -42, 18, 18, 0xb9bdb0);
+      block(24, -24, 18, 3, LIGHT);
+      block(36, -39, 3, 3, INK);
+      line(-18, -18, -27, -6, 0x92a4a3);
+      line(-27, -6, -36, -12, 0x92a4a3);
+      line(-36, -12, -36, -24, 0x92a4a3);
+    } else if (family === 'knight') {
+      for (const side of [-1, 1]) {
+        poly([side * 12, -42, side * 21, -63, side * 18, -39], 0xd9d3fa);
+        poly(
+          [side * 21, -27, side * 36, -42, side * 30, -24, side * 39, -27, side * 24, -12],
+          0xa5b8eb,
+        );
+      }
+      pixelStamp(g, ['.aa.', 'aaa.', '.aa.', 'aa..', 'a...'], { a: 0xf5e7b5 }, -3, -24);
+    } else if (family === 'serpent') {
+      for (const side of [-1, 1]) {
+        poly(
+          [side * 12, -36, side * 30, -60, side * 24, -30, side * 36, -39, side * 21, -12],
+          0x8d78af,
+        );
+        line(side * 18, -36, side * 27, -48, 0xd4b6e3);
+        block(side * 18, -27, 6, 3, 0xe4d0a6);
+      }
+      orb(0, -15, 6, 9, INK);
+      block(-3, -21, 3, 12, 0xe9cce6);
+      block(3, -18, 3, 6, 0xb792dc);
+    }
+  }
+}
+
 export class MonsterRig extends Container {
   private form = new Container();
-  private legs: Graphics[] = [];
   private bar = new Graphics();
   private flash = 0;
   private hitFilter = new ColorMatrixFilter();
@@ -14,308 +404,26 @@ export class MonsterRig extends Container {
   ) {
     super();
     const color = Number.parseInt(def.color.replace('#', ''), 16);
-    const seed = [...def.id].reduce((n, c) => n + c.charCodeAt(0), 0);
-    const family = def.family.toLowerCase();
-    this.addChild(
-      new Graphics()
-        .ellipse(0, 7, boss ? 35 : 19, boss ? 12 : 7)
-        .fill({ color: 0x000000, alpha: 0.4 }),
-    );
-    this.hitFilter.matrix = [0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 1, 0];
+    const shadow = new Graphics();
+    pixelEllipse(shadow, 0, 8, boss ? 54 : 23, boss ? 18 : 9, 0x09151f, 3, 0.6);
     if (elite || boss || minion)
-      this.addChild(
-        new Graphics().ellipse(0, 6, boss ? 37 : 25, boss ? 13 : 9).stroke({
-          color: boss ? 0xcf546b : minion ? 0x81a8d5 : 0xc5a464,
-          alpha: 0.7,
-          width: 1.5,
-        }),
+      pixelEllipse(
+        shadow,
+        0,
+        8,
+        boss ? 60 : 27,
+        boss ? 21 : 12,
+        boss ? 0xdf7680 : minion ? 0x8fc8d8 : 0xdfbd77,
+        3,
+        0.85,
+        true,
       );
-    this.addChild(this.form);
-    const beast = /beast|wolf|hound|虫|蛛|兽|insect|spider/.test(family);
-    for (let i = 0; i < (beast ? 4 : 2); i++) {
-      const leg = new Graphics();
-      leg.position.set((i % 2 === 0 ? -1 : 1) * (beast ? 12 : 6), beast ? -12 : -5);
-      leg
-        .moveTo(0, 0)
-        .lineTo(i % 2 === 0 ? -7 : 7, 9)
-        .lineTo(i % 2 === 0 ? -9 : 9, 17)
-        .stroke({ color: 0x6c7271, width: beast ? 3 : 5 });
-      leg
-        .moveTo(i % 2 === 0 ? -9 : 9, 17)
-        .lineTo(i % 2 === 0 ? -13 : 13, 18)
-        .stroke({ color: 0xb3b1a2, width: 2 });
-      this.form.addChild(leg);
-      this.legs.push(leg);
-    }
-    const g = new Graphics();
-    if (beast) {
-      g.poly([-16, -20, -8, -30, 10, -27, 19, -12, 13, 0, -8, 0, -18, -9])
-        .fill(color)
-        .stroke({ color: 0x94a39b, width: 1 });
-      for (let i = 0; i < 4; i++)
-        g.moveTo(-11 + i * 7, -21)
-          .lineTo(-9 + i * 6, -6)
-          .stroke({ color: 0x18272a, width: 2 });
-      g.poly([-12, -21, -18, -36, -4, -28, 6, -31, 18, -37, 15, -19]).fill(0x3d4d4d);
-      g.poly([-7, -18, 7, -18, 3, -10, -4, -10]).fill(0x111d21);
-      g.moveTo(-7, -23)
-        .lineTo(-3, -22)
-        .moveTo(4, -23)
-        .lineTo(9, -24)
-        .stroke({ color: 0xefb985, width: 2 });
-    } else {
-      g.poly([-11, -28, 0, -34, 12, -26, 9, -6, -7, -5])
-        .fill(color)
-        .stroke({ color: 0x88968f, width: 1 });
-      for (let i = 0; i < 3; i++)
-        g.moveTo(-7, -22 + i * 5)
-          .lineTo(7, -20 + i * 5)
-          .stroke({ color: 0x132021, width: 2 });
-      g.moveTo(-12, -25)
-        .lineTo(-20, -8)
-        .lineTo(-16, -2)
-        .moveTo(12, -25)
-        .lineTo(20, -12)
-        .lineTo(21, -2)
-        .stroke({ color: 0x8b9385, width: 4 });
-      g.poly([-9, -43, -4, -49, 6, -47, 10, -37, 5, -29, -6, -30])
-        .fill(seed % 3 === 0 ? 0xc3c4a8 : 0x71827b)
-        .stroke({ color: 0xb2b79e, width: 1 });
-      g.rect(-6, -40, 4, 4).fill(0xe98670).rect(3, -40, 4, 4).fill(0xe98670);
-      g.moveTo(-4, -32).lineTo(4, -32).stroke({ color: 0x172b2a, width: 2 });
-      if (seed % 3 === 0) {
-        g.moveTo(20, 4).lineTo(23, -34).stroke({ color: 0x7b6653, width: 3 });
-        g.poly([20, -32, 20, -47, 28, -35, 25, -27]).fill(0xadb8b4);
-      } else if (seed % 3 === 1) {
-        g.poly([-24, -17, -13, -17, -10, -1, -19, 6, -27, -1])
-          .fill(0x485654)
-          .stroke({ color: 0xb8aa74, width: 1 });
-        g.poly([18, -7, 25, -33, 29, -36, 25, -6]).fill(0xa5b6b1);
-      } else {
-        g.moveTo(20, 1).lineTo(21, -45).stroke({ color: 0x635b4c, width: 3 });
-        g.poly([21, -53, 28, -44, 21, -37, 15, -44])
-          .fill(color)
-          .stroke({ color: 0xe0c799, width: 1 });
-      }
-    }
-    // Family-specific anatomy is layered over the articulated common skeleton.
-    if (['bat', 'drake', 'imp'].includes(family))
-      for (const side of [-1, 1])
-        g.poly([
-          side * 9,
-          -28,
-          side * 31,
-          -53,
-          side * 49,
-          -26,
-          side * 33,
-          -31,
-          side * 24,
-          -12,
-          side * 17,
-          -22,
-          side * 9,
-          -9,
-        ])
-          .fill({ color, alpha: 0.9 })
-          .stroke({ color: 0x9daca1, width: 1 });
-    if (['wolf', 'rat', 'drake'].includes(family)) {
-      g.moveTo(11, -4)
-        .bezierCurveTo(35, -4, 30, -27, 39, -31)
-        .stroke({ color, width: family === 'rat' ? 3 : 7 });
-      g.poly([-8, -20, 0, -30, 12, -20, 0, -11]).fill(0xa3aa95);
-    }
-    if (family === 'minotaur')
-      for (const side of [-1, 1])
-        g.poly([
-          side * 6,
-          -46,
-          side * 17,
-          -48,
-          side * 22,
-          -64,
-          side * 26,
-          -54,
-          side * 20,
-          -40,
-          side * 8,
-          -38,
-        ])
-          .fill(0xd7c89d)
-          .stroke({ color: 0x635d4c, width: 1 });
-    if (family === 'archer') {
-      g.moveTo(21, -43).bezierCurveTo(47, -30, 47, -9, 21, 5).stroke({ color: 0xc4ad7d, width: 2 });
-      g.moveTo(21, -43).lineTo(23, -17).lineTo(21, 5).stroke({ color: 0xc7cfbb, width: 1 });
-    }
-    if (family === 'zombie') {
-      g.poly([-14, -21, -23, -27, -29, -18, -25, -5, -18, -8, -8, -13]).fill(0x7a8260);
-      g.ellipse(3, -14, 6, 8).fill(0x545e4a).stroke({ color: 0x9a6c61, width: 1 });
-    }
-    if (family === 'insect') {
-      g.ellipse(0, -10, 19, 15)
-        .fill({ color: 0xabc25a, alpha: 0.8 })
-        .stroke({ color: 0xe1ce7f, width: 1 });
-      g.ellipse(-5, -13, 5, 7).fill({ color: 0xe0e8a0, alpha: 0.5 });
-    }
-    if (family === 'spider')
-      for (const side of [-1, 1])
-        for (let i = 0; i < 4; i++)
-          g.moveTo(side * 10, -10 - i * 3)
-            .lineTo(side * (25 + i * 3), -32 + i * 11)
-            .lineTo(side * (36 + i * 2), -22 + i * 12)
-            .stroke({ color: 0xa19e8b, width: 2 });
-    if (['ghost', 'revenant'].includes(family)) {
-      g.poly([-13, -40, -22, -4, -11, 7, -7, 0, 0, 12, 7, 0, 14, 6, 22, -6, 13, -40])
-        .fill({ color, alpha: 0.45 })
-        .stroke({ color: 0xb7cfdd, alpha: 0.4, width: 1 });
-      this.form.alpha = 0.72;
-    }
-    if (family === 'cultist') {
-      g.poly([-12, -37, 0, -65, 12, -37, 0, -31])
-        .fill(0x4e3c57)
-        .stroke({ color: 0xab8da3, width: 1 });
-      g.poly([-9, -23, -19, 11, 0, 5, 18, 11, 9, -23]).fill(0x443347);
-    }
-    if (family === 'ent') {
-      for (const side of [-1, 1])
-        g.moveTo(side * 8, -35)
-          .lineTo(side * 20, -51)
-          .lineTo(side * 32, -56)
-          .moveTo(side * 20, -51)
-          .lineTo(side * 18, -68)
-          .stroke({ color: 0x8d9a72, width: 4 });
-      g.moveTo(-5, -27)
-        .lineTo(-8, 0)
-        .moveTo(4, -28)
-        .lineTo(6, 0)
-        .stroke({ color: 0xa4a575, width: 3 });
-    }
-    if (family === 'golem') {
-      g.poly([-20, -34, -32, -28, -29, -10, -15, -13])
-        .fill(color)
-        .stroke({ color: 0xc0926d, width: 2 });
-      g.poly([18, -35, 32, -31, 29, -11, 14, -15])
-        .fill(color)
-        .stroke({ color: 0xc0926d, width: 2 });
-      g.moveTo(0, -30)
-        .lineTo(-3, -18)
-        .lineTo(4, -12)
-        .lineTo(0, -4)
-        .stroke({ color: 0xf2ad68, width: 3 });
-    }
-    if (family === 'shaman') {
-      g.poly([-13, -44, -18, -60, -5, -52, 1, -67, 6, -51, 20, -60, 13, -43])
-        .fill(0x8bbfc8)
-        .stroke({ color: 0xc9e2d6, width: 1 });
-    }
-    if (family === 'assassin') {
-      g.poly([-12, -39, 0, -57, 12, -39, 0, -32]).fill(0x303445).stroke({ color, width: 1 });
-      g.poly([-17, -5, -25, -31, -29, -36, -24, -3]).fill(0xd4c8df);
-    }
-    if (family === 'knight') {
-      g.poly([-15, -30, -23, -40, -29, -25, -13, -15])
-        .fill(0x677784)
-        .stroke({ color: 0xc8bf8c, width: 1 });
-      g.poly([15, -30, 23, -40, 29, -25, 13, -15])
-        .fill(0x677784)
-        .stroke({ color: 0xc8bf8c, width: 1 });
-      g.poly([-10, -42, 0, -56, 10, -42, 5, -30, -5, -30])
-        .fill(0x899598)
-        .stroke({ color: 0xb6b6a3, width: 1 });
-      g.rect(-8, -40, 16, 3).fill(0x283940);
-    }
-    if (family === 'scorpion') {
-      g.moveTo(0, -20).bezierCurveTo(-21, -45, -8, -74, 12, -57).stroke({ color, width: 7 });
-      g.poly([8, -60, 17, -56, 16, -48, 10, -52]).fill(0xdac794);
-      for (const side of [-1, 1])
-        g.poly([
-          side * 10,
-          -7,
-          side * 30,
-          -15,
-          side * 34,
-          -31,
-          side * 25,
-          -26,
-          side * 27,
-          -20,
-          side * 13,
-          -15,
-        ])
-          .fill(color)
-          .stroke({ color: 0xb9b68e, width: 1 });
-    }
-    if (['worm', 'serpent'].includes(family)) {
-      g.moveTo(-5, -12).bezierCurveTo(-36, 1, 28, 25, 36, 2).stroke({ color, width: 12 });
-      for (let i = 0; i < 5; i++)
-        g.moveTo(-7 + i * 8, 9)
-          .lineTo(-5 + i * 8, 16)
-          .stroke({ color: 0xe3c79b, alpha: 0.55, width: 1 });
-      g.poly([-10, -40, 0, -49, 11, -40, 5, -30, -5, -30]).fill(color);
-      g.moveTo(0, -30)
-        .lineTo(0, -19)
-        .lineTo(-5, -15)
-        .moveTo(0, -19)
-        .lineTo(4, -15)
-        .stroke({ color: 0xe28e8a, width: 1 });
-    }
-    if (family === 'eye') {
-      g.ellipse(0, -27, 25, 19).fill(0x9faaaa).stroke({ color: 0xc4cebc, width: 2 });
-      g.ellipse(0, -27, 12, 14)
-        .fill(color)
-        .ellipse(0, -27, 4, 11)
-        .fill(0x17292b)
-        .ellipse(-5, -33, 3, 4)
-        .fill(0xe8e5b5);
-      for (let i = -2; i <= 2; i++)
-        g.moveTo(i * 8, -10)
-          .bezierCurveTo(i * 15, 0, i * 4, 10, i * 11, 15)
-          .stroke({ color, width: 2 });
-    }
-    if (family === 'jailer') {
-      g.moveTo(-19, -1)
-        .lineTo(-29, 8)
-        .lineTo(-34, 1)
-        .lineTo(-43, 8)
-        .stroke({ color: 0xa3aaa4, width: 2 });
-      g.poly([-48, 1, -39, 5, -39, 15, -48, 20, -56, 13, -55, 5])
-        .fill(0x596569)
-        .stroke({ color: 0xb8bbae, width: 2 });
-    }
-    if (family === 'dummy') {
-      this.legs.forEach((leg) => (leg.visible = false));
-      g.clear()
-        .poly([-10, 10, -5, -55, 6, -55, 10, 10])
-        .fill(0x76634a)
-        .stroke({ color: 0xb8a17b, width: 1 });
-      g.moveTo(-4, -48)
-        .lineTo(-1, 4)
-        .moveTo(3, -50)
-        .lineTo(5, 6)
-        .stroke({ color: 0x443c32, width: 1.5 });
-      g.moveTo(-28, -26).lineTo(28, -26).stroke({ color: 0x847253, width: 7 });
-      g.ellipse(0, -33, 21, 24)
-        .fill(0xb1a078)
-        .stroke({ color: 0x5d594e, width: 3 })
-        .ellipse(0, -33, 14, 17)
-        .stroke({ color: 0x69594e, width: 2 })
-        .ellipse(0, -33, 6, 8)
-        .fill(0x6c4c48);
-      g.poly([-4, -45, 4, -45, 4, -21, -4, -21]).stroke({ color: 0xd6c398, alpha: 0.5, width: 1 });
-      g.moveTo(-18, 11).lineTo(18, 11).stroke({ color: 0x787565, width: 5 });
-    }
-    if (boss) {
-      g.poly([-9, -44, -25, -63, -22, -73, -13, -53, -5, -49])
-        .fill(0xc7b887)
-        .poly([8, -44, 25, -63, 23, -73, 13, -53, 5, -49])
-        .fill(0xc7b887);
-      g.poly([-17, -25, -31, -37, -27, -13, -15, -8])
-        .fill(color)
-        .stroke({ color: 0xc7a06b, width: 1 });
-      g.poly([17, -25, 31, -37, 27, -13, 15, -8]).fill(color).stroke({ color: 0xc7a06b, width: 1 });
-      this.form.scale.set(3.5);
-    }
-    this.form.addChild(g);
+    this.addChild(shadow, this.form);
+    this.hitFilter.matrix = [0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 1, 0];
+    const body = new Graphics();
+    drawPixelCreature(body, def.family.toLowerCase(), color, boss);
+    this.form.addChild(body);
+    if (boss) this.form.scale.set(2);
     this.addChild(this.bar);
     this.drawHealth(1);
   }
@@ -323,22 +431,22 @@ export class MonsterRig extends Container {
     this.flash = 0.07;
   }
   drawHealth(ratio: number) {
-    const w = this.boss ? 86 : 34,
-      y = this.boss ? -275 : -57;
+    const w = this.boss ? 90 : 36,
+      y = this.boss ? -183 : -81;
     this.bar
       .clear()
-      .roundRect(-w / 2, y, w, 4, 2)
-      .fill(0x171b23)
-      .roundRect(-w / 2, y, Math.max(0, w * ratio), 4, 2)
-      .fill(this.boss ? 0xe36a78 : this.elite ? 0xd8b774 : 0xa65663);
+      .rect(-w / 2 - 2, y - 2, w + 4, 8)
+      .fill(INK)
+      .rect(-w / 2, y, w, 4)
+      .fill(0x3c3644)
+      .rect(-w / 2, y, Math.round(w * Math.max(0, Math.min(1, ratio))), 4)
+      .fill(this.boss ? 0xe97c81 : this.elite ? 0xe9c680 : 0xc87a83);
     this.bar.alpha = ratio < 1 || this.elite || this.boss ? 1 : 0;
   }
   update(time: number, dt: number, moving: boolean) {
     this.flash = Math.max(0, this.flash - dt);
     this.form.filters = this.flash > 0 ? [this.hitFilter] : [];
-    this.form.y = moving ? Math.sin(time * 8) * 2 : 0;
-    this.legs.forEach(
-      (leg, i) => (leg.rotation = moving ? Math.sin(time * 8 + i * Math.PI) * 0.23 : 0),
-    );
+    this.form.y = moving ? Math.round(Math.sin(time * 10) * 2) : 0;
+    this.form.x = moving ? Math.round(Math.cos(time * 5)) : 0;
   }
 }

@@ -1,0 +1,107 @@
+.journey-panel {
+  display: grid;
+  gap: 18px;
+}
+.journey-panel .card {
+  padding: 20px;
+}
+.journey-panel h3 {
+  margin: 8px 0;
+}
+.journey-panel p {
+  line-height: 1.7;
+}
+.loot-chances {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(95px, 1fr));
+  gap: 8px;
+  margin: 14px 0;
+}
+.loot-chances > div {
+  position: relative;
+  display: grid;
+  gap: 5px;
+  padding: 10px 8px 14px;
+  background: #101e27;
+  border: 2px solid #30454e;
+  font-size: 12px;
+}
+.loot-chances i {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  height: 4px;
+  background: currentColor;
+}
+.journey-set-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 16px 0;
+}
+.journey-set-options button {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px;
+  border: 2px solid #43525b;
+  background: #1a2930;
+  color: #cad5c9;
+}
+.journey-set-options button.active {
+  border-color: #d6b66f;
+  background: #334038;
+}
+.journey-core {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.journey-milestones {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+.journey-milestones article {
+  display: flex;
+  gap: 15px;
+  align-items: center;
+}
+.journey-milestones .claimed {
+  border-color: #72927a;
+}
+.journey-marker {
+  display: grid;
+  place-items: center;
+  width: 38px;
+  flex-shrink: 0;
+}
+.skill-node.locked {
+  opacity: 0.58;
+}
+.unlearned-skill {
+  opacity: 0.4;
+}
+.unlearned-skill .skill-cast {
+  display: grid;
+  place-items: center;
+}
+.run-progression-summary {
+  text-align: left;
+  max-height: 180px;
+  overflow: auto;
+  padding: 12px;
+  border: 2px solid #796b49;
+  background: #1b2b30;
+  color: #e5d7a5;
+  font-size: 13px;
+  line-height: 1.8;
+}
+@media (max-width: 650px) {
+  .journey-milestones {
+    grid-template-columns: 1fr;
+  }
+  .journey-panel .card {
+    padding: 14px;
+  }
+}

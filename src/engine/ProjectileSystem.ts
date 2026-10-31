@@ -1,4 +1,5 @@
 import { Graphics, Container } from 'pixi.js';
+import { pixelStamp } from '../render/PixelArt';
 export interface CastContext {
   resourceGranted: boolean;
 }
@@ -36,62 +37,27 @@ export class ProjectileSystem {
     options: Partial<Projectile> = {},
   ) {
     if (this.items.length >= 150) return;
-    const view = new Graphics()
-      .poly([-18, -2, 4, -2, 4, -5, 14, 0, 4, 5, 4, 2, -18, 2])
-      .fill(color)
-      .moveTo(-28, 0)
-      .lineTo(8, 0)
-      .stroke({ color: 0xf3f4d9, width: 1, alpha: 0.7 });
-    if (skillId.includes('orb')) {
-      view
-        .clear()
-        .circle(0, 0, 10)
-        .fill({ color, alpha: 0.35 })
-        .circle(0, 0, 7)
-        .stroke({ color, width: 2 })
-        .poly([-3, -5, 4, -3, 5, 3, -2, 6, -6, 0])
-        .fill(0xdbf8f2);
-      for (let i = 0; i < 6; i++) {
-        const a = (i * Math.PI) / 3;
-        view
-          .moveTo(Math.cos(a) * 10, Math.sin(a) * 10)
-          .lineTo(Math.cos(a) * 15, Math.sin(a) * 15)
-          .stroke({ color, width: 1 });
-      }
-    } else if (skillId.includes('missile')) {
-      view
-        .clear()
-        .poly([-20, 0, 0, -6, 11, 0, 0, 6])
-        .fill({ color, alpha: 0.65 })
-        .poly([-8, 0, 1, -3, 7, 0, 1, 3])
-        .fill(0xf4e7ff);
-    } else if (skillId.includes('spear') || skillId.includes('splinter')) {
-      view
-        .clear()
-        .moveTo(-22, 0)
-        .lineTo(8, 0)
-        .stroke({ color: 0xe4ddc2, width: 3 })
-        .poly([4, -5, 15, 0, 4, 5, 7, 0])
-        .fill(0xd9e2c9);
-      for (let i = -15; i < 4; i += 6)
-        view
-          .moveTo(i, -3)
-          .lineTo(i + 1, 3)
-          .stroke({ color: 0x637c70, width: 1 });
-    } else if (
-      skillId.includes('knives') ||
-      skillId.includes('blade') ||
-      skillId === 'shatter_spear'
-    ) {
-      view
-        .clear()
-        .poly([-14, -3, 10, -4, 19, 0, 9, 4, -14, 3, -8, 0])
-        .fill(0xbfcfd1)
-        .stroke({ color, width: 1 })
-        .moveTo(-7, 0)
-        .lineTo(14, 0)
-        .stroke({ color: 0xf2efdc, width: 1 });
-    }
+    const view = new Graphics();
+    const palette = { o: 0x20303c, c: color, h: 0xf5e9ca, b: 0x8b9c9c };
+    const rows = skillId.includes('orb')
+      ? [
+          '...ooo...',
+          '..occco..',
+          '.ochhhco.',
+          'ochhhhcco',
+          'ochhhhcco',
+          '.occhcco.',
+          '..occo...',
+          '...oo....',
+        ]
+      : skillId.includes('missile')
+        ? ['.....cc...', '..ccchcc..', 'ccchhhhcc.', '..ccchcc..', '.....cc...']
+        : skillId.includes('spear') || skillId.includes('splinter')
+          ? ['.......h...', 'bbbhhhhhh..', 'hhhhhhhhhhh', 'bbbhhhhhh..', '.......h...']
+          : skillId.includes('blade') || skillId.includes('knives')
+            ? ['.....bb....', '..bbhhhb...', 'bbhhhhhhhh.', '..bbhhhbb..', '.....bb....']
+            : ['......cc...', 'ccc...chc..', 'hhhhhhhhhhc', 'ccc...chc..', '......cc...'];
+    pixelStamp(view, rows, palette, -18, -rows.length * 1.5, 3);
     this.layer.addChild(view);
     const p: Projectile = {
       x,
@@ -151,7 +117,7 @@ export class ProjectileSystem {
         oldY = p.y;
       p.x += p.vx * dt;
       p.y += p.vy * dt;
-      p.view.position.set(p.x, p.y);
+      p.view.position.set(Math.round(p.x), Math.round(p.y));
       p.view.rotation = Math.atan2(p.vy, p.vx);
       for (const t of targets) {
         if (t.hp <= 0 || p.hits.has(t.id)) continue;

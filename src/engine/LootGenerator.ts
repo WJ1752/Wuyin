@@ -3,6 +3,7 @@ import { SLOTS, SLOT_NAMES } from '../core/types';
 import { AFFIXES } from '../data/affixes';
 import { SETS } from '../data/sets';
 import { LEGENDARIES } from '../data/legendaries';
+import { getLootProfile, type LootSource } from '../data/progression';
 
 export interface LootOptions {
   slot?: Slot;
@@ -11,6 +12,7 @@ export interface LootOptions {
   legendaryId?: string;
   primal?: boolean;
   gambling?: boolean;
+  source?: LootSource;
   ownedSetPieces?: string[];
   rng?: () => number;
 }
@@ -19,20 +21,14 @@ export function generateLoot(classId: ClassId, level: number, options: LootOptio
   const pick = <T>(values: T[]) =>
     values[Math.min(values.length - 1, Math.floor(random() * values.length))];
   let slot = options.slot ?? pick(SLOTS);
-  const roll = random();
+  const profile = getLootProfile(level, options.source ?? (options.gambling ? 'gamble' : 'world'));
+  let roll = random();
   let rarity: Rarity =
     options.rarity ??
-    (roll < (options.gambling ? 0.3 : 0.14)
-      ? 'set'
-      : roll < (options.gambling ? 0.67 : 0.4)
-        ? 'legendary'
-        : roll < 0.7
-          ? 'epic'
-          : roll < 0.9
-            ? 'rare'
-            : roll < 0.97
-              ? 'uncommon'
-              : 'common');
+    (Object.entries(profile.chances).find(([, chance]) => (roll -= chance) < 0)?.[0] as Rarity) ??
+    'uncommon';
+  const primal = options.primal || rarity === 'primal';
+  if (rarity === 'primal') rarity = random() < 0.45 ? 'set' : 'legendary';
   let set = SETS.find((s) => s.id === options.setId);
   let legendary = LEGENDARIES.find((l) => l.id === options.legendaryId);
   if (legendary) {
@@ -52,12 +48,12 @@ export function generateLoot(classId: ClassId, level: number, options: LootOptio
       rarity = 'legendary';
     }
   }
-  if (!set && (legendary || rarity === 'legendary' || rarity === 'primal')) {
+  if (!set && (legendary || rarity === 'legendary')) {
     const candidates = LEGENDARIES.filter(
       (l) => (!l.classId || l.classId === classId) && l.slot === slot,
     );
     if (!legendary && !candidates.length && options.slot) {
-      if (['head', 'chest', 'hands', 'legs', 'feet'].includes(slot)) {
+      if (level >= 31 && ['head', 'chest', 'hands', 'legs', 'feet'].includes(slot)) {
         set = pick(SETS.filter((s) => s.classId === classId));
         rarity = 'set';
       } else rarity = 'epic';
@@ -70,19 +66,38 @@ export function generateLoot(classId: ClassId, level: number, options: LootOptio
       slot = legendary.slot;
     }
   }
-  const primal =
-    options.primal ||
-    rarity === 'primal' ||
-    ((set || legendary) &&
-      random() < Math.min(0.15, 0.08 + level / 2200 + (options.gambling ? 0.02 : 0)));
   if (primal) rarity = 'primal';
   else if (set) rarity = 'set';
   else if (legendary) rarity = 'legendary';
-  const quality = primal ? 1.3 : 0.7 + random() * 0.3;
+  const quality = primal
+    ? 1.3
+    : {
+        common: 0.42,
+        uncommon: 0.56,
+        rare: 0.68,
+        epic: 0.8,
+        legendary: 0.9,
+        set: 0.9,
+        primal: 1.3,
+      }[rarity] +
+      random() * 0.1;
+  const affixQuality = {
+    common: 0.18,
+    uncommon: 0.3,
+    rare: 0.5,
+    epic: 0.72,
+    legendary: 1,
+    set: 1,
+    primal: 1,
+  }[rarity];
   const scale = 1 + Math.max(0, level - 1) * 0.085;
   const pool = [...AFFIXES];
   const affixes = [];
-  for (let i = 0; i < (set || legendary ? 4 : rarity === 'common' ? 1 : 3); i++) {
+  for (
+    let i = 0;
+    i < (set || legendary ? 4 : rarity === 'common' ? 1 : rarity === 'epic' ? 3 : 2);
+    i++
+  ) {
     const total = pool.reduce((sum, a) => sum + a.weight, 0);
     let weight = random() * total;
     let index = pool.findIndex((a) => (weight -= a.weight) <= 0);
@@ -92,7 +107,8 @@ export function generateLoot(classId: ClassId, level: number, options: LootOptio
       id: affix.id,
       value: primal
         ? affix.max * 1.3
-        : Math.round((affix.min + random() * (affix.max - affix.min)) * 10000) / 10000,
+        : Math.round((affix.min + random() * (affix.max - affix.min) * affixQuality) * 10000) /
+          10000,
     });
   }
   return {

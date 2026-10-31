@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Application, Container } from 'pixi.js';
-import { Sword } from 'lucide-react';
+import { Sword } from './PixelIcons';
 import type { ClassId, SaveData } from '../core/types';
 import { CharacterRig } from '../render/ProceduralRig';
 import { preloadCharacterTextures } from '../render/CharacterTextures';
@@ -31,8 +31,9 @@ export function CharacterPreview({
           width: 170,
           height: 220,
           backgroundAlpha: 0,
-          antialias: true,
-          resolution: Math.min(window.devicePixelRatio || 1, 2),
+          antialias: false,
+          resolution: 1,
+          roundPixels: true,
           autoDensity: true,
           preference: 'webgl',
         });

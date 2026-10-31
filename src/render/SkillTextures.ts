@@ -3,7 +3,7 @@ import { getSkillSvg } from '../data/visuals';
 
 const textures = new Map<string, Texture>();
 
-/** UI and combat share the same per-skill artwork; Pixi caches the rasterized SVG. */
+/** Native 24px artwork stays crisp through the same texture cache as the UI. */
 export async function preloadSkillTextures(ids: string[]): Promise<void> {
   await Promise.all(
     [...new Set(ids)].map(async (id) => {
@@ -11,7 +11,8 @@ export async function preloadSkillTextures(ids: string[]): Promise<void> {
       const svg = getSkillSvg(id);
       if (!svg) throw new Error(`技能视觉配置缺失：${id}`);
       const src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
-      const texture = await Assets.load<Texture>({ src, data: { resolution: 2 } });
+      const texture = await Assets.load<Texture>({ src, data: { resolution: 1 } });
+      texture.source.scaleMode = 'nearest';
       textures.set(id, texture);
     }),
   );
