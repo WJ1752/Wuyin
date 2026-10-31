@@ -37,7 +37,15 @@ import { SKILLS } from '../data/skillTrees';
 import { SETS } from '../data/sets';
 import { LEGENDARIES } from '../data/legendaries';
 import { AFFIXES, GEMS, PETS } from '../data/affixes';
-import { computeStats, cubeSlot, skillPoints, useGameStore } from '../state/gameStore';
+import {
+  computeStats,
+  cubeSlot,
+  MAX_INVENTORY,
+  MAX_STASH,
+  skillPoints,
+  useGameStore,
+} from '../state/gameStore';
+import { AccountPanel } from './AccountPanel';
 import { formatBigNumber } from '../core/format';
 import './systems.css';
 import { audio } from '../audio/SynthAudio';
@@ -57,6 +65,8 @@ const icons: Record<Slot, typeof Sword> = {
   jewelry: Gem,
 };
 const TITLES: Record<string, [string, string, typeof Sword]> = {
+  accounts: ['旅人名册', 'ACCOUNTS & CHARACTERS', BookOpen],
+  stash: ['账号共享仓库', 'SHARED STASH', Package],
   character: ['行者档案', 'CHARACTER & INVENTORY', Sword],
   skills: ['命运之树', 'THE PATH OF POWER', BookOpen],
   journey: ['行者旅程', 'THE ROAD TO RESONANCE', BookOpen],
@@ -188,6 +198,9 @@ function ItemDetails({
       <span className="eyebrow">
         {RARITY_NAMES[item.rarity]} / {SLOT_NAMES[item.slot]}
       </span>
+      <p className="item-class-label">
+        {CLASSES.find((hero) => hero.id === (set?.classId ?? l?.classId))?.name ?? '全职业'}适用
+      </p>
       <div className="item-detail-heading">
         <ItemIcon item={item} size={54} />
         <h3>{item.name}</h3>
@@ -422,6 +435,15 @@ function CharacterPanel() {
               {!equipped && (
                 <button
                   className="ghost-button"
+                  disabled={!!store.labBackup}
+                  onClick={() => store.depositItem(item.id)}
+                >
+                  存入共享仓库
+                </button>
+              )}
+              {!equipped && (
+                <button
+                  className="ghost-button"
                   onClick={() => {
                     store.salvage(item.id);
                     setSelected('');
@@ -476,6 +498,109 @@ function CharacterPanel() {
           选择装备查看数值与已穿戴装备的对比。背包上限 240，溢出掉落将转为锻造材料。
         </p>
       </section>
+    </div>
+  );
+}
+
+function StashPanel() {
+  const store = useGameStore();
+  const account = store.accounts.find((entry) => entry.id === store.activeAccountId)!;
+  const [selected, setSelected] = useState('');
+  const [filter, setFilter] = useState('all');
+  const locked = !!store.labBackup || store.inCombat;
+  const inStash = account.stash.some((item) => item.id === selected);
+  const item = [...account.stash, ...store.save.inventory].find((entry) => entry.id === selected);
+  const owner = (entry: Item) =>
+    SETS.find((set) => set.id === entry.setId)?.classId ??
+    LEGENDARIES.find((legendary) => legendary.id === entry.legendaryId)?.classId;
+  const filterItems = (items: Item[]) =>
+    items.filter(
+      (entry) =>
+        filter === 'all' ||
+        (filter === 'usable'
+          ? !owner(entry) || owner(entry) === store.save.classId
+          : owner(entry) === filter),
+    );
+  return (
+    <div>
+      <p className="muted">
+        {account.name}的共享仓库。存取保留装备、词条、宝石和洗练进度；角色背包不会随切换而共用。
+      </p>
+      {locked && <p className="positive">演武与远征期间不能存取仓库，请先返回开荒营地。</p>}
+      <label className="stash-filter">
+        装备职业
+        <select
+          className="system-select"
+          value={filter}
+          onChange={(event) => setFilter(event.target.value)}
+        >
+          <option value="all">全部装备</option>
+          <option value="usable">当前角色可用</option>
+          {CLASSES.map((hero) => (
+            <option key={hero.id} value={hero.id}>
+              {hero.name}专属
+            </option>
+          ))}
+        </select>
+      </label>
+      <div className="system-columns stash-columns">
+        <section>
+          <div className="section-heading">
+            <h3>角色背包</h3>
+            <span>
+              {store.save.inventory.length} / {MAX_INVENTORY}
+            </span>
+          </div>
+          <div className="item-grid">
+            {filterItems(store.save.inventory).map((entry) => (
+              <ItemTile
+                key={entry.id}
+                item={entry}
+                selected={selected === entry.id}
+                onClick={() => setSelected(entry.id)}
+              />
+            ))}
+          </div>
+          {!filterItems(store.save.inventory).length && <Empty>暂无符合筛选条件的背包装备。</Empty>}
+        </section>
+        <section>
+          <div className="section-heading">
+            <h3>账号共享仓库</h3>
+            <span>
+              {account.stash.length} / {MAX_STASH}
+            </span>
+          </div>
+          <div className="item-grid">
+            {filterItems(account.stash).map((entry) => (
+              <ItemTile
+                key={entry.id}
+                item={entry}
+                selected={selected === entry.id}
+                onClick={() => setSelected(entry.id)}
+              />
+            ))}
+          </div>
+          {!filterItems(account.stash).length && (
+            <Empty>把异职业装备或备用装备存入这里，供同账号角色领取。</Empty>
+          )}
+        </section>
+      </div>
+      {item && (
+        <ItemDetails item={item} compare={store.save.equipment[item.slot]}>
+          <button
+            className="gold-button"
+            disabled={
+              locked ||
+              (inStash
+                ? store.save.inventory.length >= MAX_INVENTORY
+                : account.stash.length >= MAX_STASH)
+            }
+            onClick={() => (inStash ? store.withdrawItem(item.id) : store.depositItem(item.id))}
+          >
+            {inStash ? '取出到当前角色背包' : '存入账号共享仓库'}
+          </button>
+        </ItemDetails>
+      )}
     </div>
   );
 }
@@ -1307,7 +1432,8 @@ function SettingsPanel() {
       <section className="card">
         <h3>旅程档案</h3>
         <p className="muted">
-          每 3 秒自动保存至本机。离线收益最多累计 8 小时。导入会替换当前开荒进度，建议先导出备份。
+          每 3 秒保存全部本地账号、角色与共享仓库。离线收益最多累计 8 小时。
+          导入账号档会替换本机账号档案；旧版单角色档迁入当前角色。建议先导出备份。
         </p>
         <div className="button-row">
           <button className="gold-button" onClick={store.exportSave}>
@@ -1333,7 +1459,7 @@ function SettingsPanel() {
           onChange={async (e) => {
             const f = e.target.files?.[0];
             if (f) {
-              if (f.size > 2000000) store.setNotice('存档文件不能超过 2 MB。');
+              if (f.size > 20 * 1024 * 1024) store.setNotice('存档文件不能超过 20 MB。');
               else store.importSave(await f.text());
             }
             e.target.value = '';
@@ -1355,7 +1481,7 @@ function SettingsPanel() {
         <h3>重新启程</h3>
         {reset ? (
           <>
-            <p>将清除当前本机进度。建议先导出备份。</p>
+            <p>将重置当前角色的成长与背包。账号共享仓库及其他角色保留，建议先导出备份。</p>
             <div className="button-row">
               <button className="ghost-button" onClick={() => setReset(false)}>
                 保留进度
@@ -1367,7 +1493,7 @@ function SettingsPanel() {
                   setReset(false);
                 }}
               >
-                确认重置本机存档
+                确认重置当前角色
               </button>
             </div>
           </>
@@ -1453,7 +1579,11 @@ export function SystemsModal({ panel, onClose }: { panel: string | null; onClose
           </button>
         </header>
         <div className="modal-body">
-          {panel === 'character' ? (
+          {panel === 'accounts' ? (
+            <AccountPanel />
+          ) : panel === 'stash' ? (
+            <StashPanel />
+          ) : panel === 'character' ? (
             <CharacterPanel />
           ) : panel === 'journey' ? (
             <JourneyPanel />

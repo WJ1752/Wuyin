@@ -3,6 +3,8 @@ import { SKILLS } from './skillTrees';
 import { SETS } from './sets';
 
 export type LootSource = 'world' | 'boss' | 'goblin' | 'gamble';
+// Class-specific world loot uses this split; universal items remain usable by all.
+export const SMART_LOOT_CURRENT_CLASS_CHANCE = 0.8;
 export const RARITY_UNLOCK_STAGE: Record<Rarity, number> = {
   common: 1,
   uncommon: 1,
@@ -13,16 +15,18 @@ export const RARITY_UNLOCK_STAGE: Record<Rarity, number> = {
   primal: 71,
 };
 const RARITIES: Rarity[] = ['common', 'uncommon', 'rare', 'epic', 'legendary', 'set', 'primal'];
-// Interpolate within each chapter. A newly introduced rarity starts uncommon,
-// then becomes a dependable reward as the player pushes further into that chapter.
+// Include the last stage before every unlock, so locked weights never leak into
+// normalization and a new chapter introduces its rarity a little at a time.
 const LOOT_CURVE = [
   { stage: 1, weights: [62, 38, 0, 0, 0, 0, 0] },
-  { stage: 4, weights: [42, 48, 10, 0, 0, 0, 0] },
-  { stage: 8, weights: [22, 40, 32, 6, 0, 0, 0] },
-  { stage: 15, weights: [8, 24, 46, 22, 0, 0, 0] },
-  { stage: 16, weights: [7, 22, 44, 23, 4, 0, 0] },
+  { stage: 3, weights: [54, 46, 0, 0, 0, 0, 0] },
+  { stage: 4, weights: [51, 47, 2, 0, 0, 0, 0] },
+  { stage: 7, weights: [36, 45, 19, 0, 0, 0, 0] },
+  { stage: 8, weights: [33, 45, 20, 2, 0, 0, 0] },
+  { stage: 15, weights: [12, 27, 43, 18, 0, 0, 0] },
+  { stage: 16, weights: [11, 26, 42, 20, 1, 0, 0] },
   { stage: 30, weights: [3, 12, 34, 33, 18, 0, 0] },
-  { stage: 31, weights: [3, 10, 31, 34, 19, 3, 0] },
+  { stage: 31, weights: [3, 11, 33, 34, 18, 1, 0] },
   { stage: 50, weights: [1, 5, 20, 31, 27, 16, 0] },
   { stage: 70, weights: [1, 3, 13, 27, 34, 22, 0] },
   { stage: 71, weights: [1, 3, 12.8, 27, 34, 22, 0.2] },

@@ -75,7 +75,7 @@ test('every class has five tiers, valid parent branches, three builds and seven 
 });
 
 test('builds reference own-class skills and use independent bonus ratios', () => {
-  const bonuses = [6.5, 9, 7.2, 7.5, 9.6, 8, 8, 7, 9, 8.5, 7.8, 7.5, 8, 7.6, 7.2];
+  const bonuses = [6.5, 9, 7.2, 7.5, 9.6, 3, 0.8, 7, 9, 8.5, 7.8, 2, 2, 7.6, 7.2];
   SETS.forEach((set, index) => {
     assert.equal(SKILLS.find((skill) => skill.id === set.skillId)?.classId, set.classId);
     assert.equal(set.effect, set.id);

@@ -20,6 +20,7 @@ import {
   Moon,
   Pause,
   PawPrint,
+  Package,
   Play,
   Settings,
   Shield,
@@ -51,31 +52,24 @@ import './styles.css';
 
 const NAV = [
   { id: 'character', label: '角色装备', sub: 'CHARACTER', icon: Shield },
+  { id: 'stash', label: '共享仓库', sub: 'ACCOUNT STASH', icon: Package },
   { id: 'skills', label: '技能之书', sub: 'SKILLS', icon: BookOpen },
   { id: 'cube', label: '魔盒共鸣', sub: 'RESONANCE', icon: Hexagon },
   { id: 'forge', label: '余烬铁匠', sub: 'BLACKSMITH', icon: Hammer },
   { id: 'gamble', label: '米娅秘藏', sub: 'MYSTERIES', icon: Diamond },
   { id: 'pets', label: '契约伙伴', sub: 'COMPANIONS', icon: PawPrint },
 ];
-const CLASS_GLYPHS = ['⌁', '⚒', '✧', '☽', 'ϟ'];
 function App() {
-  const {
-    save,
-    ready,
-    notice,
-    hydrate,
-    setNotice,
-    selectClass,
-    selectStage,
-    updateSettings,
-    completeRun,
-  } = useGameStore();
+  const { save, ready, notice, hydrate, setNotice, selectStage, updateSettings, completeRun } =
+    useGameStore();
   const [panel, setPanel] = useState<string | null>(null);
   const [config, setConfig] = useState<CombatConfig | null>(null);
   const [result, setResult] = useState<RunResult | null>(null);
   const [runSummary, setRunSummary] = useState('');
   const [showGuide, setShowGuide] = useState(false);
   const labBackup = useGameStore((s) => s.labBackup);
+  const account = useGameStore((s) => s.accounts.find((entry) => entry.id === s.activeAccountId));
+  const character = account?.characters.find((entry) => entry.id === account.activeCharacterId);
   const classDef = CLASSES.find((c) => c.id === save.classId) ?? CLASSES[0];
   const stats = useGameStore.getState().getStats();
   const lootProfile = getLootProfile(save.selectedStage);
@@ -117,13 +111,15 @@ function App() {
     setPanel(id);
   };
   const enter = (training = false) => {
+    useGameStore.getState().setInCombat(true);
     setNotice('');
     audio.play('pylon');
     audio.setTrack('rift');
     setResult(null);
-    setConfig({ ...createCombatConfig(save), training });
+    setConfig({ ...createCombatConfig(save, labBackup ? [] : account?.stash), training });
   };
   const leave = () => {
+    useGameStore.getState().setInCombat(false);
     setConfig(null);
     audio.setTrack('town');
   };
@@ -180,6 +176,9 @@ function App() {
               </span>
             </div>
             <div className="top-actions">
+              <button className="text-button account-shortcut" onClick={() => open('accounts')}>
+                {account?.name ?? '本地账号'} · 角色
+              </button>
               <button
                 className="icon-button"
                 aria-label={save.muted ? '开启音效' : '静音'}
@@ -206,8 +205,10 @@ function App() {
               </div>
               <div className="hero-heading">
                 <div>
-                  <h2>{classDef.name}</h2>
-                  <p>{classDef.title}</p>
+                  <h2>{labBackup ? classDef.name : (character?.name ?? classDef.name)}</h2>
+                  <p>
+                    {classDef.name} · {classDef.title}
+                  </p>
                 </div>
                 <span className="level-medallion">
                   <small>等级</small>
@@ -222,23 +223,9 @@ function App() {
                   {classDef.weapon} · {classDef.mainStat}
                 </span>
               </div>
-              <div className="class-selector" aria-label="切换职业">
-                {CLASSES.map((c, i) => (
-                  <button
-                    key={c.id}
-                    title={`切换为${c.name}`}
-                    className={c.id === save.classId ? 'active' : ''}
-                    onClick={() => {
-                      selectClass(c.id);
-                      audio.play('equip');
-                    }}
-                    aria-label={`切换为${c.name}`}
-                    aria-pressed={c.id === save.classId}
-                  >
-                    {CLASS_GLYPHS[i]}
-                  </button>
-                ))}
-              </div>
+              <button className="outline-button full-width" onClick={() => open('accounts')}>
+                选择角色 · 每账号 6 个角色位 <ChevronRight size={15} />
+              </button>
               <div className="hero-stats">
                 <div>
                   <Swords size={15} />

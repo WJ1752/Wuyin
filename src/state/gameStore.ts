@@ -1,5 +1,7 @@
 import { create } from 'zustand';
 import type {
+  AccountData,
+  AccountSave,
   ClassId,
   CombatConfig,
   Item,
@@ -28,7 +30,10 @@ import {
 
 const SAVE_KEY = 'mist-continent-save-v1';
 const RECOVERY_KEY = 'mist-continent-recovery-v1';
-const MAX_INVENTORY = 240;
+export const MAX_INVENTORY = 240;
+export const MAX_STASH = 480;
+export const MAX_CHARACTERS = 6;
+export const MAX_IMPORT_BYTES = 20 * 1024 * 1024;
 // Each loadout keeps exactly one armor slot free for its build-defining relic.
 const BUILD_RELICS: Record<string, { worn: string[]; cube: string[] }> = {
   stormcaller: {
@@ -36,8 +41,8 @@ const BUILD_RELICS: Record<string, { worn: string[]; cube: string[] }> = {
     cube: ['yang', 'aquila', 'squirt'],
   },
   marauder: {
-    worn: ['yang', 'ninth_satchel', 'olda', 'berserker_charm'],
-    cube: ['dawn', 'aquila', 'zodiac'],
+    worn: ['yang', 'ninth_satchel', 'olda', 'elements'],
+    cube: ['dawn', 'aquila', 'squirt'],
   },
   frost_hunter: {
     worn: ['froststring', 'dead_mans', 'sacred_walkers', 'elements'],
@@ -113,10 +118,10 @@ function preferBuildSkills(save: SaveData, skillId: string) {
         (node.kind !== 'basic' || node.id === basic) &&
         (node.kind !== 'core' || (node.id === core && focus.kind !== 'basic'));
 }
-export function newSave(): SaveData {
+export function newSave(classId: ClassId = 'ranger'): SaveData {
   return {
     version: 1,
-    classId: 'ranger',
+    classId,
     level: 1,
     xp: 0,
     gold: 1500,
@@ -131,7 +136,7 @@ export function newSave(): SaveData {
     cube: {},
     forge: Object.fromEntries(SLOTS.map((s) => [s, 0])) as Record<Slot, number>,
     gems: Object.fromEntries(GEMS.map((g) => [g.id, [3, 0, 0, 0, 0, 0, 0, 0, 0, 0]])),
-    skills: starters('ranger'),
+    skills: starters(classId),
     autoSkills: Object.fromEntries(SKILLS.map((s) => [s.id, s.kind !== 'movement'])),
     petId: PETS[0]?.id ?? 'goblin',
     petLevels: Object.fromEntries(PETS.map((p, i) => [p.id, i === 0 ? 1 : 0])),
@@ -226,7 +231,7 @@ export function computeStats(save: SaveData): Stats {
   stats.damageReduction = Math.min(0.75, stats.damageReduction);
   return stats;
 }
-export function createCombatConfig(save: SaveData): CombatConfig {
+export function createCombatConfig(save: SaveData, stash: Item[] = []): CombatConfig {
   return {
     classId: save.classId,
     level: save.level,
@@ -238,7 +243,7 @@ export function createCombatConfig(save: SaveData): CombatConfig {
     cube: { ...save.cube },
     petId: save.petId,
     petLevel: save.petLevels[save.petId] ?? 1,
-    ownedSetPieces: [...save.inventory, ...Object.values(save.equipment)]
+    ownedSetPieces: [...save.inventory, ...Object.values(save.equipment), ...stash]
       .filter((item): item is Item => !!item?.setId)
       .map((item) => `${item.setId}:${item.slot}`),
   };
@@ -540,6 +545,142 @@ export function validateSave(input: unknown, historical = false): SaveData {
   return save;
 }
 
+const identity = () =>
+  globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+const validName = (name: unknown): name is string =>
+  typeof name === 'string' &&
+  name === name.trim() &&
+  name.length > 0 &&
+  name.length <= 24 &&
+  !/[\u0000-\u001f\u007f]/.test(name);
+const nameKey = (name: string) => name.normalize('NFKC').toLocaleLowerCase();
+
+export function newAccountSave(save = newSave()): AccountSave {
+  const character = { id: identity(), name: '初始行者', save: clone(save) };
+  const account: AccountData = {
+    id: identity(),
+    name: '本地账号',
+    activeCharacterId: character.id,
+    characters: [character],
+    stash: [],
+  };
+  return {
+    format: 'mist-continent-accounts',
+    version: 1,
+    activeAccountId: account.id,
+    accounts: [account],
+    lastSaved: save.lastSaved,
+  };
+}
+
+export function validateAccountSave(input: unknown): AccountSave {
+  // Existing single-character saves migrate into the first slot without moving gear.
+  if (isRecord(input) && input.format === undefined) return newAccountSave(validateSave(input));
+  if (
+    !isRecord(input) ||
+    input.format !== 'mist-continent-accounts' ||
+    input.version !== 1 ||
+    !bounded(input.lastSaved, 0, Date.now() + 86400000) ||
+    !Array.isArray(input.accounts) ||
+    !input.accounts.length
+  )
+    throw new Error('账号存档格式无效。');
+  const identities = new Set<string>();
+  const names = new Set<string>();
+  const itemIds = new Set<string>();
+  const checkIdentity = (id: unknown) => {
+    if (typeof id !== 'string' || !id || id.length > 100 || identities.has(id))
+      throw new Error('账号或角色标识重复或无效。');
+    identities.add(id);
+  };
+  const checkItems = (items: Item[]) => {
+    for (const item of items) {
+      if (itemIds.has(item.id)) throw new Error('角色或仓库中存在重复装备。');
+      itemIds.add(item.id);
+    }
+  };
+  const accounts = input.accounts.map((raw): AccountData => {
+    if (
+      !isRecord(raw) ||
+      !validName(raw.name) ||
+      names.has(nameKey(raw.name)) ||
+      !Array.isArray(raw.characters) ||
+      raw.characters.length < 1 ||
+      raw.characters.length > MAX_CHARACTERS ||
+      !Array.isArray(raw.stash) ||
+      raw.stash.length > MAX_STASH
+    )
+      throw new Error('账号名称、角色槽或仓库无效。');
+    checkIdentity(raw.id);
+    names.add(nameKey(raw.name));
+    const characterNames = new Set<string>();
+    const characters = raw.characters.map((character) => {
+      if (
+        !isRecord(character) ||
+        !validName(character.name) ||
+        characterNames.has(nameKey(character.name))
+      )
+        throw new Error('角色名称无效或重复。');
+      checkIdentity(character.id);
+      characterNames.add(nameKey(character.name));
+      const save = validateSave(character.save);
+      checkItems([...save.inventory, ...Object.values(save.equipment)] as Item[]);
+      return { id: character.id as string, name: character.name, save };
+    });
+    if (!characters.some((character) => character.id === raw.activeCharacterId))
+      throw new Error('当前角色不存在。');
+    // Reuse the existing item validator, with chunks respecting its backpack limit.
+    for (let offset = 0; offset < raw.stash.length; offset += MAX_INVENTORY)
+      validateSave({ ...newSave(), inventory: raw.stash.slice(offset, offset + MAX_INVENTORY) });
+    checkItems(raw.stash as Item[]);
+    return {
+      id: raw.id as string,
+      name: raw.name,
+      activeCharacterId: raw.activeCharacterId as string,
+      characters,
+      stash: clone(raw.stash) as Item[],
+    };
+  });
+  if (!accounts.some((account) => account.id === input.activeAccountId))
+    throw new Error('当前账号不存在。');
+  return {
+    format: 'mist-continent-accounts',
+    version: 1,
+    accounts,
+    activeAccountId: input.activeAccountId as string,
+    lastSaved: input.lastSaved as number,
+  };
+}
+
+function syncCharacter(accounts: AccountData[], accountId: string, save: SaveData) {
+  return accounts.map((account) =>
+    account.id !== accountId
+      ? account
+      : {
+          ...account,
+          characters: account.characters.map((character) =>
+            character.id === account.activeCharacterId ? { ...character, save } : character,
+          ),
+        },
+  );
+}
+function activeSave(data: Pick<AccountSave, 'accounts' | 'activeAccountId'>): SaveData {
+  const account = data.accounts.find((account) => account.id === data.activeAccountId)!;
+  return account.characters.find((character) => character.id === account.activeCharacterId)!.save;
+}
+export function snapshotAccounts(
+  state: Pick<GameState, 'accounts' | 'activeAccountId' | 'save' | 'labBackup'>,
+): AccountSave {
+  const save = { ...(state.labBackup ?? state.save), lastSaved: Date.now() };
+  return clone({
+    format: 'mist-continent-accounts',
+    version: 1,
+    accounts: syncCharacter(state.accounts, state.activeAccountId, save),
+    activeAccountId: state.activeAccountId,
+    lastSaved: save.lastSaved,
+  });
+}
+
 let dbPromise: Promise<IDBDatabase> | undefined;
 function database(): Promise<IDBDatabase> {
   if (!dbPromise)
@@ -574,11 +715,15 @@ async function writeDisk(save: unknown, key = SAVE_KEY): Promise<void> {
 }
 let hydrated = false;
 let saving = false;
+let saveRequested = false;
 let recoveryBlocked = false;
 let autosave: ReturnType<typeof setInterval> | undefined;
 
 interface GameState {
   save: SaveData;
+  accounts: AccountData[];
+  activeAccountId: string;
+  inCombat: boolean;
   ready: boolean;
   notice: string;
   labBackup: SaveData | null;
@@ -588,6 +733,13 @@ interface GameState {
   persist: () => Promise<void>;
   setNotice: (text: string) => void;
   selectClass: (id: ClassId) => void;
+  createAccount: (name: string) => void;
+  switchAccount: (id: string) => void;
+  createCharacter: (name: string, classId: ClassId) => void;
+  switchCharacter: (id: string) => void;
+  depositItem: (id: string) => void;
+  withdrawItem: (id: string) => void;
+  setInCombat: (value: boolean) => void;
   selectStage: (stage: number) => void;
   updateSettings: (settings: Partial<SaveData>) => void;
   completeRun: (result: RunResult) => void;
@@ -642,7 +794,12 @@ function addItems(save: SaveData, items: Item[]) {
     } else save.inventory.push(item);
   }
 }
-function chapterRewards(save: SaveData, stage: number, runItems: Item[]): string[] {
+function chapterRewards(
+  save: SaveData,
+  stage: number,
+  runItems: Item[],
+  stash: Item[] = [],
+): string[] {
   save.progression ??= { version: 1, clearedStage: 0, claimedMilestones: [] };
   save.progression.clearedStage = Math.max(save.progression.clearedStage, stage);
   const earned: string[] = [];
@@ -668,7 +825,12 @@ function chapterRewards(save: SaveData, stage: number, runItems: Item[]): string
       ...(milestone.rarity === 'set'
         ? {
             setId: set.id,
-            ownedSetPieces: [...save.inventory, ...Object.values(save.equipment), ...runItems]
+            ownedSetPieces: [
+              ...save.inventory,
+              ...Object.values(save.equipment),
+              ...runItems,
+              ...stash,
+            ]
               .filter((part): part is Item => !!part?.setId)
               .map((part) => `${part.setId}:${part.slot}`),
           }
@@ -691,20 +853,39 @@ export const useGameStore = create<GameState>((set, get) => {
   const mutate = (fn: (save: SaveData) => string | void) => {
     const save = clone(get().save);
     const notice = fn(save);
-    set({ save, ...(notice ? { notice } : {}) });
+    set({
+      save,
+      ...(!get().labBackup
+        ? { accounts: syncCharacter(get().accounts, get().activeAccountId, save) }
+        : {}),
+      ...(notice ? { notice } : {}),
+    });
   };
+  const requireCamp = () => {
+    if (get().inCombat || get().labBackup) {
+      set({ notice: '请先结束战斗与流派体验，返回营地后管理账号、角色和仓库。' });
+      return false;
+    }
+    return true;
+  };
+  const initial = newAccountSave();
   return {
-    save: newSave(),
+    save: activeSave(initial),
+    accounts: initial.accounts,
+    activeAccountId: initial.activeAccountId,
+    inCombat: false,
     ready: false,
     notice: '',
     labBackup: null,
     lastGamble: [],
     corruptBackup: null,
     setNotice: (notice) => set({ notice }),
+    setInCombat: (inCombat) => set({ inCombat }),
     async hydrate() {
       if (hydrated) return;
       hydrated = true;
       let loaded: unknown;
+      const candidates: { source: string; value: unknown }[] = [];
       let fallback = false;
       let corruptBackup: string | null = null;
       const damaged: { source: string; raw: string }[] = [];
@@ -721,6 +902,7 @@ export const useGameStore = create<GameState>((set, get) => {
       }
       try {
         loaded = await readDisk();
+        if (loaded) candidates.push({ source: 'IndexedDB', value: loaded });
       } catch {
         fallback = true;
       }
@@ -733,22 +915,28 @@ export const useGameStore = create<GameState>((set, get) => {
           } catch {
             damaged.push({ source: 'localStorage', raw: local });
           }
-          if (
-            (backup && !loaded) ||
-            (isRecord(loaded) &&
-              isRecord(backup) &&
-              Number(backup.lastSaved) > Number(loaded.lastSaved))
-          )
-            loaded = backup;
+          if (backup) candidates.push({ source: 'localStorage', value: backup });
         }
       } catch {
         fallback = true;
       }
-      let save = newSave();
+      let data = newAccountSave();
+      let save = activeSave(data);
       let notice = '欢迎来到雾隐营地。选择秘境，开始你的第一场远征。';
-      if (loaded) {
+      let restored = false;
+      candidates.sort(
+        (a, b) =>
+          Number(isRecord(b.value) ? b.value.lastSaved : 0) -
+          Number(isRecord(a.value) ? a.value.lastSaved : 0),
+      );
+      for (const candidate of candidates) {
         try {
-          save = validateSave(loaded);
+          const valid = validateAccountSave(candidate.value);
+          if (restored) continue;
+          data = valid;
+          loaded = candidate.value;
+          restored = true;
+          save = activeSave(data);
           const hours = Math.min(8, Math.max(0, (Date.now() - save.lastSaved) / 3600000));
           if (hours >= 0.05) {
             const gold = Math.floor(hours * (120 + (save.progression?.clearedStage ?? 0) * 20));
@@ -757,13 +945,16 @@ export const useGameStore = create<GameState>((set, get) => {
             save.crystals += crystals;
             notice = `离线营地收益：${gold} 金币 · ${crystals} 奥术结晶（最多累计 8 小时）`;
           }
-          if (isRecord(loaded) && loaded.progression === undefined)
+          if (isRecord(loaded) && loaded.format === undefined)
+            notice += ' 原角色已迁入本地账号的首个角色槽，背包与装备完整保留。';
+          if (isRecord(loaded) && loaded.format === undefined && loaded.progression === undefined)
             notice += ' 技能已迁移到学习路径，超出等级或前置的技能点已返还；装备与资源保留。';
         } catch {
-          damaged.push({ source: 'IndexedDB / save', raw: JSON.stringify(loaded, null, 2) });
-          notice = '原存档无法读取，原始内容已留存。可在设置中导出恢复备份，或导入有效存档。';
+          damaged.push({ source: candidate.source, raw: JSON.stringify(candidate.value, null, 2) });
         }
       }
+      if (candidates.length && !restored)
+        notice = '原存档无法读取，原始内容已留存。可在设置中导出恢复备份，或导入有效存档。';
       if (damaged.length) {
         if (corruptBackup) damaged.unshift({ source: 'previous recovery', raw: corruptBackup });
         corruptBackup =
@@ -795,7 +986,14 @@ export const useGameStore = create<GameState>((set, get) => {
       }
       if (fallback) notice += ' 当前使用浏览器备份存储。';
       save.lastSaved = Date.now();
-      set({ save, ready: true, notice, corruptBackup });
+      set({
+        save,
+        accounts: syncCharacter(data.accounts, data.activeAccountId, save),
+        activeAccountId: data.activeAccountId,
+        ready: true,
+        notice,
+        corruptBackup,
+      });
       if (!autosave)
         autosave = setInterval(() => {
           void get().persist();
@@ -804,10 +1002,7 @@ export const useGameStore = create<GameState>((set, get) => {
         window.addEventListener('pagehide', () => {
           if (recoveryBlocked) return;
           try {
-            localStorage.setItem(
-              SAVE_KEY,
-              JSON.stringify({ ...(get().labBackup ?? get().save), lastSaved: Date.now() }),
-            );
+            localStorage.setItem(SAVE_KEY, JSON.stringify(snapshotAccounts(get())));
           } catch {
             /* IndexedDB remains authoritative. */
           }
@@ -815,46 +1010,147 @@ export const useGameStore = create<GameState>((set, get) => {
       }
     },
     async persist() {
-      if (!get().ready || saving || recoveryBlocked) return;
-      saving = true;
-      const save = clone(get().labBackup ?? get().save);
-      save.lastSaved = Date.now();
-      try {
-        await writeDisk(save);
-      } catch {
-        try {
-          localStorage.setItem(SAVE_KEY, JSON.stringify(save));
-        } catch {
-          set({ notice: '存档写入失败：浏览器空间不足，请在设置中导出备份。' });
-        }
-      }
-      saving = false;
-    },
-    selectClass(id) {
-      if (!CLASSES.some((c) => c.id === id)) return;
-      const current = get().save;
-      if (current.classId === id) return;
-      const equippedItems = Object.values(current.equipment).filter((item): item is Item => !!item);
-      if (current.inventory.length + equippedItems.length > MAX_INVENTORY) {
-        set({
-          notice: `背包空间不足，还需腾出 ${current.inventory.length + equippedItems.length - MAX_INVENTORY} 个空位再切换职业。`,
-        });
+      if (!get().ready || recoveryBlocked) return;
+      if (saving) {
+        saveRequested = true;
         return;
       }
-      mutate((s) => {
-        // Returning worn gear is a transfer, never a loot pickup or salvage operation.
-        s.inventory.push(...Object.values(s.equipment).filter((item): item is Item => !!item));
-        s.equipment = {};
-        s.classId = id;
-        if (s.progression) delete s.progression.targetSetId;
-        for (const slot of ['weapon', 'armor', 'jewelry'] as const) {
-          const relic = LEGENDARIES.find((l) => l.id === s.cube[slot]);
-          if (relic?.classId && relic.classId !== id) delete s.cube[slot];
+      saving = true;
+      do {
+        saveRequested = false;
+        const save = snapshotAccounts(get());
+        try {
+          await writeDisk(save);
+        } catch {
+          try {
+            localStorage.setItem(SAVE_KEY, JSON.stringify(save));
+          } catch {
+            set({ notice: '存档写入失败：浏览器空间不足，请在设置中导出备份。' });
+          }
         }
-        if (!SKILLS.some((n) => n.classId === id && s.skills[n.id]))
-          Object.assign(s.skills, starters(id));
-        return `已切换为${CLASSES.find((c) => c.id === id)!.name}，装备已收回背包。`;
+      } while (saveRequested && !recoveryBlocked);
+      saving = false;
+    },
+    createAccount(name) {
+      if (!requireCamp()) return;
+      name = name.trim();
+      if (!validName(name)) {
+        set({ notice: '账号名称需为 1–24 个字符，不能包含控制字符。' });
+        return;
+      }
+      if (get().accounts.some((account) => nameKey(account.name) === nameKey(name))) {
+        set({ notice: '此账号名称已存在。' });
+        return;
+      }
+      const data = snapshotAccounts(get());
+      const account = newAccountSave().accounts[0];
+      account.name = name;
+      set({
+        accounts: [...data.accounts, account],
+        activeAccountId: account.id,
+        save: clone(account.characters[0].save),
+        lastGamble: [],
+        notice: `已创建本地账号「${name}」，每个账号最多可创建 ${MAX_CHARACTERS} 个角色。`,
       });
+      void get().persist();
+    },
+    switchAccount(id) {
+      if (!requireCamp() || id === get().activeAccountId) return;
+      const data = snapshotAccounts(get());
+      if (!data.accounts.some((account) => account.id === id)) return;
+      data.activeAccountId = id;
+      set({
+        accounts: data.accounts,
+        activeAccountId: id,
+        save: clone(activeSave(data)),
+        lastGamble: [],
+        notice: `已登录本地账号「${data.accounts.find((account) => account.id === id)!.name}」。`,
+      });
+      void get().persist();
+    },
+    createCharacter(name, classId) {
+      if (!requireCamp() || !CLASSES.some((hero) => hero.id === classId)) return;
+      const data = snapshotAccounts(get());
+      const account = data.accounts.find((account) => account.id === data.activeAccountId)!;
+      if (account.characters.length >= MAX_CHARACTERS) {
+        set({ notice: `本账号的 ${MAX_CHARACTERS} 个角色槽已满。` });
+        return;
+      }
+      name = name.trim();
+      if (!validName(name)) {
+        set({ notice: '角色名称需为 1–24 个字符，不能包含控制字符。' });
+        return;
+      }
+      if (account.characters.some((character) => nameKey(character.name) === nameKey(name))) {
+        set({ notice: '本账号内已存在同名角色。' });
+        return;
+      }
+      const character = { id: identity(), name, save: newSave(classId) };
+      account.characters.push(character);
+      account.activeCharacterId = character.id;
+      set({
+        accounts: data.accounts,
+        save: clone(character.save),
+        lastGamble: [],
+        notice: `角色「${name}」已创建。背包、成长与资源独立；装备可通过账号仓库转交。`,
+      });
+      void get().persist();
+    },
+    switchCharacter(id) {
+      if (!requireCamp()) return;
+      const data = snapshotAccounts(get());
+      const account = data.accounts.find((account) => account.id === data.activeAccountId)!;
+      const character = account.characters.find((character) => character.id === id);
+      if (!character || id === account.activeCharacterId) return;
+      account.activeCharacterId = id;
+      set({
+        accounts: data.accounts,
+        save: clone(character.save),
+        lastGamble: [],
+        notice: `已切换角色「${character.name}」。`,
+      });
+      void get().persist();
+    },
+    depositItem(id) {
+      if (!requireCamp()) return;
+      const data = snapshotAccounts(get());
+      const account = data.accounts.find((account) => account.id === data.activeAccountId)!;
+      const save = activeSave(data);
+      const index = save.inventory.findIndex((item) => item.id === id);
+      if (index < 0) return;
+      if (account.stash.length >= MAX_STASH) {
+        set({ notice: `账号仓库已满（${MAX_STASH} 件），请先取出装备。` });
+        return;
+      }
+      const [item] = save.inventory.splice(index, 1);
+      account.stash.push(item);
+      set({ accounts: data.accounts, save, notice: `已将 ${item.name} 存入账号共享仓库。` });
+      void get().persist();
+    },
+    withdrawItem(id) {
+      if (!requireCamp()) return;
+      const data = snapshotAccounts(get());
+      const account = data.accounts.find((account) => account.id === data.activeAccountId)!;
+      const index = account.stash.findIndex((item) => item.id === id);
+      if (index < 0) return;
+      const save = activeSave(data);
+      if (save.inventory.length >= MAX_INVENTORY) {
+        set({ notice: '当前角色背包已满，请先整理。' });
+        return;
+      }
+      const [item] = account.stash.splice(index, 1);
+      // Transfers bypass loot collection: auto-salvage never destroys stored equipment.
+      save.inventory.push(item);
+      set({ accounts: data.accounts, save, notice: `已取出 ${item.name} 到当前角色背包。` });
+      void get().persist();
+    },
+    selectClass(id) {
+      if (!requireCamp() || !CLASSES.some((hero) => hero.id === id)) return;
+      if (get().save.classId === id) return;
+      const account = get().accounts.find((account) => account.id === get().activeAccountId)!;
+      const character = account.characters.find((character) => character.save.classId === id);
+      if (character) get().switchCharacter(character.id);
+      else get().createCharacter(CLASSES.find((hero) => hero.id === id)!.name, id);
     },
     selectStage(stage) {
       mutate((s) => {
@@ -920,7 +1216,14 @@ export const useGameStore = create<GameState>((set, get) => {
           s.level++;
         }
         if (result.won) {
-          chapterNotices.push(...chapterRewards(s, result.stage, result.items));
+          chapterNotices.push(
+            ...chapterRewards(
+              s,
+              result.stage,
+              result.items,
+              get().accounts.find((account) => account.id === get().activeAccountId)!.stash,
+            ),
+          );
           s.clears++;
           s.bestTime = s.bestTime ? Math.min(s.bestTime, result.seconds) : result.seconds;
           if (result.stage >= s.highestStage)
@@ -1082,6 +1385,7 @@ export const useGameStore = create<GameState>((set, get) => {
           ownedSetPieces: [
             ...s.inventory,
             ...Object.values(s.equipment).filter((i): i is Item => !!i),
+            ...get().accounts.find((account) => account.id === get().activeAccountId)!.stash,
           ]
             .filter((i) => i.setId)
             .map((i) => `${i.setId}:${i.slot}`),
@@ -1090,6 +1394,9 @@ export const useGameStore = create<GameState>((set, get) => {
       addItems(s, items);
       set({
         save: s,
+        ...(!get().labBackup
+          ? { accounts: syncCharacter(get().accounts, get().activeAccountId, s) }
+          : {}),
         lastGamble: items,
         notice: `米娅揭开命运：${items.filter((i) => ['legendary', 'set', 'primal'].includes(i.rarity)).length} 件珍稀战利品`,
       });
@@ -1210,6 +1517,7 @@ export const useGameStore = create<GameState>((set, get) => {
       });
     },
     activateBuild(setId) {
+      if (get().inCombat) return;
       const def = SETS.find((t) => t.id === setId);
       const build = BUILD_RELICS[setId];
       if (!def || !build) return;
@@ -1249,6 +1557,7 @@ export const useGameStore = create<GameState>((set, get) => {
       });
     },
     activateRecord(id) {
+      if (get().inCombat) return;
       const backup = get().labBackup ?? clone(get().save);
       const record = backup.runRecords?.find((r) => r.id === id);
       if (!record) {
@@ -1270,13 +1579,13 @@ export const useGameStore = create<GameState>((set, get) => {
       });
     },
     leaveLab() {
+      if (get().inCombat) return;
       const backup = get().labBackup;
       if (backup)
         set({ save: backup, labBackup: null, lastGamble: [], notice: '已返回原本的开荒进度。' });
     },
     exportSave() {
-      const save = clone(get().labBackup ?? get().save);
-      save.lastSaved = Date.now();
+      const save = snapshotAccounts(get());
       const blob = new Blob([JSON.stringify(save, null, 2)], { type: 'application/json' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -1299,16 +1608,28 @@ export const useGameStore = create<GameState>((set, get) => {
       void get().persist();
     },
     importSave(text) {
+      if (!requireCamp()) return;
       try {
-        if (text.length > 2000000) throw new Error('文件过大。');
+        if (new TextEncoder().encode(text).length > MAX_IMPORT_BYTES)
+          throw new Error('文件超过 20 MiB。');
         const parsed = JSON.parse(text);
-        const save = validateSave(parsed);
+        let data: AccountSave;
+        if (isRecord(parsed) && parsed.format === undefined) {
+          // Importing a legacy save only replaces the selected character.
+          data = snapshotAccounts(get());
+          const imported = validateSave(parsed);
+          data.accounts = syncCharacter(data.accounts, data.activeAccountId, imported);
+          data = validateAccountSave(data);
+        } else data = validateAccountSave(parsed);
+        const save = activeSave(data);
         save.lastSaved = Date.now();
         set({
           save,
+          accounts: data.accounts,
+          activeAccountId: data.activeAccountId,
           labBackup: null,
           lastGamble: [],
-          notice: `存档导入成功。${isRecord(parsed) && parsed.progression === undefined ? '旧技能已按学习路径迁移，多余点数可重新分配。' : ''}`,
+          notice: `存档导入成功。${isRecord(parsed) && parsed.format === undefined ? '旧单角色档已迁入当前角色槽，其他角色与仓库保留。' : '账号、角色与共享仓库已恢复。'}${recoveryBlocked ? '原始恢复备份尚未写入磁盘，请先导出恢复备份；自动保存仍暂停。' : ''}`,
         });
         void get().persist();
       } catch (error) {
@@ -1316,7 +1637,15 @@ export const useGameStore = create<GameState>((set, get) => {
       }
     },
     resetProgress() {
-      set({ save: newSave(), labBackup: null, lastGamble: [], notice: '新的远征已经开始。' });
+      if (!requireCamp()) return;
+      const save = newSave(get().save.classId);
+      set({
+        save,
+        accounts: syncCharacter(get().accounts, get().activeAccountId, save),
+        labBackup: null,
+        lastGamble: [],
+        notice: `当前角色已重新开始远征，账号仓库与其他角色保留。${recoveryBlocked ? '原始恢复备份尚未写入磁盘，请先导出恢复备份；自动保存仍暂停。' : ''}`,
+      });
       void get().persist();
     },
   };

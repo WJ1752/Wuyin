@@ -504,6 +504,12 @@ export class GameEngine {
         free: this.buffs.has('channeling'),
         cooldowns: this.cooldowns,
         auto: this.config.autoSkills,
+        focus:
+          this.set('vyr', 2) && this.buffs.has('archon')
+            ? this.skills.find((skill) => skill.kind === 'basic')?.id
+            : this.set('immortal_thorns', 4)
+              ? 'war_cry'
+              : undefined,
       });
       if (selected) this.cast(selected.id);
     }
@@ -1201,13 +1207,13 @@ export class GameEngine {
       }
     }
     if (this.buffs.has('archon') && skill.kind === 'basic') {
+      const beam = { ...skill, element: 'arcane' as const, effect: 'archon_beam' };
       const beamTargets = targets.filter(
         (e) =>
           Math.abs(Math.sin(Math.atan2(e.y - this.y, e.x - this.x) - angle) * this.distance(e)) <
           35,
       );
-      for (const e of beamTargets)
-        this.hit(e, { ...skill, element: 'arcane' }, multiplier * 2, true, false, cast);
+      for (const e of beamTargets) this.hit(e, beam, multiplier * 2, true, false, cast);
       this.vfx.lightning(
         this.x,
         this.y - 25,
@@ -1217,12 +1223,13 @@ export class GameEngine {
       );
       if (this.set('vyr', 2))
         for (const e of targets.slice(0, 3)) {
-          this.hit(e, skill, multiplier, true, false, cast);
+          this.hit(e, beam, multiplier, true, false, cast);
           this.vfx.lightning(tx, ty, e.x, e.y, 0xd2aaff);
         }
       return;
     }
     if (skill.kind === 'ultimate') {
+      if (skill.effect === 'archon') this.laserStacks = 0;
       this.ultimateBonus = skill.multiplier;
       this.buffs.add('ultimate', skill.name, skill.duration || 15, '#' + color.toString(16));
       this.buffs.add(skill.effect, skill.name, skill.duration || 15);
@@ -1332,15 +1339,8 @@ export class GameEngine {
             this.applyVulnerability(e, 'warcry', 0.35 * this.rankScale(skill.id), this.shieldTime);
         }
       if (this.set('immortal_thorns', 4) && skill.effect === 'warcry')
-        this.area(
-          this.x,
-          this.y,
-          420,
-          skill,
-          (this.config.stats.armor / Math.max(1, this.config.stats.attack)) *
-            10 *
-            (1 + this.power('shield_of_ancients')),
-        );
+        for (const enemy of targets)
+          if (this.distance(enemy) < 420 + enemy.radius) this.hitThorns(enemy, skill);
       this.vfx.ring(this.x, this.y, color, 100);
       return;
     }
@@ -1683,6 +1683,7 @@ export class GameEngine {
       if (set.id === 'frost_hunter') applies = e.slow > 0 || e.stun > 0;
       if (set.id === 'wild_vines') applies = e.poison > 0;
       if (set.id === 'inarius') applies = this.distance(e) < 150;
+      if (set.id === 'immortal_thorns') applies = skill.effect === 'thorns';
       if (set.id === 'marauder' && skill.effect === 'multishot') {
         independent.push(this.buffs.stacks('barrage') * 0.9);
         continue;
@@ -1691,7 +1692,7 @@ export class GameEngine {
         independent.push(this.buffs.stacks('earthbreaker') * 1.2);
         continue;
       }
-      if (set.id === 'vyr') applies = this.buffs.has('archon');
+      if (set.id === 'vyr') applies = this.buffs.has('archon') && skill.effect === 'archon_beam';
       if (set.id === 'trang_oul') applies = skill.element === 'poison';
       if (set.id === 'delsere') applies = ['orb', 'nova'].includes(skill.effect);
       if (applies)
@@ -1797,7 +1798,8 @@ export class GameEngine {
       this.shake = Math.max(this.shake, 2.5);
       if (this.random() < 0.25) this.vfx.burst(e.x, e.y, ELEMENT_COLORS[skill.element], 5);
     }
-    if (this.buffs.has('archon')) this.laserStacks++;
+    if (this.buffs.has('archon') && skill.effect === 'archon_beam')
+      this.laserStacks = Math.min(60, this.laserStacks + 1);
     if (!dot && canProc && skill.kind === 'basic' && !cast?.resourceGranted) {
       this.resource = Math.min(
         stats.maxResource,
@@ -1899,15 +1901,7 @@ export class GameEngine {
       if (this.set('earthbreaker', 2) && skill.effect === 'hammer' && this.random() < 0.35)
         this.drop('health', e.x, e.y);
       if (this.set('immortal_thorns', 2)) {
-        this.hit(
-          e,
-          { ...skill, id: 'thorns', effect: 'thorns', multiplier: 1 },
-          (this.config.stats.armor / Math.max(1, stats.attack)) *
-            10 *
-            (this.set('immortal_thorns', 4) ? 9 : 1) *
-            (1 + this.power('shield_of_ancients')),
-          false,
-        );
+        this.hitThorns(e, skill);
       }
       if (this.power('windforce') && this.random() < this.power('windforce')) {
         e.x += (e.x - this.x) * 0.08;
@@ -1916,6 +1910,23 @@ export class GameEngine {
       }
     }
     if (e.hp <= 0) this.kill(e);
+  }
+  private hitThorns(enemy: Enemy, source: SkillDef) {
+    this.hit(
+      enemy,
+      {
+        ...source,
+        id: 'thorns',
+        effect: 'thorns',
+        kind: 'passive',
+        element: 'physical',
+        multiplier: 1,
+      },
+      ((this.config.stats.armor * 10 + this.config.stats.thorns) /
+        Math.max(1, this.config.stats.attack)) *
+        (1 + this.power('shield_of_ancients')),
+      false,
+    );
   }
   private kill(e: Enemy) {
     if (e.deadTime !== undefined) return;
@@ -2128,7 +2139,7 @@ export class GameEngine {
             z.radius,
             z.skill,
             (z.multiplier * 0.4) /
-              (['rain', 'blackhole', 'vines'].includes(z.skill.effect) ? z.life : 1),
+              (['rain', 'blackhole', 'vines', 'meteor'].includes(z.skill.effect) ? z.life : 1),
           );
         if (z.skill.effect === 'rain') {
           for (let j = 0; j < 5; j++) {

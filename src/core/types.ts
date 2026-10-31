@@ -188,6 +188,25 @@ export interface SaveData {
   };
   runRecords?: RunRecord[];
 }
+export interface CharacterData {
+  id: string;
+  name: string;
+  save: SaveData;
+}
+export interface AccountData {
+  id: string;
+  name: string;
+  activeCharacterId: string;
+  characters: CharacterData[];
+  stash: Item[];
+}
+export interface AccountSave {
+  format: 'mist-continent-accounts';
+  version: 1;
+  activeAccountId: string;
+  accounts: AccountData[];
+  lastSaved: number;
+}
 export interface RunRecord {
   id: string;
   stage: number;

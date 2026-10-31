@@ -35,10 +35,13 @@ export function LootChances({ stage, source = 'world' }: { stage: number; source
 }
 
 export function JourneyPanel() {
-  const { save, selectProgressionSet } = useGameStore();
+  const { save, selectProgressionSet, accounts, activeAccountId, labBackup } = useGameStore();
+  const stash = labBackup
+    ? []
+    : (accounts.find((account) => account.id === activeAccountId)?.stash ?? []);
   const target = progressionSet(save);
   const collected = new Set(
-    [...save.inventory, ...Object.values(save.equipment)]
+    [...save.inventory, ...Object.values(save.equipment), ...stash]
       .filter((item) => item?.setId === target.id)
       .map((item) => item!.slot),
   );
@@ -52,11 +55,15 @@ export function JourneyPanel() {
           品质随层数平滑变化；首领与哥布林提高高品质权重，但不会越过解锁门槛。下方为普通掉落品质概率，限定部位会按可用装备调整。
         </p>
         <LootChances stage={save.selectedStage} />
+        <p className="muted">
+          刷本产出的职业专属装备有 80% 属于当前角色职业，其余四职业各 5%；通用传奇不受职业限制。
+          异职业装备可存入账号共享仓库，交给其他角色。秘藏与旅程奖励定向当前职业。
+        </p>
       </section>
       <section className="card">
         <span className="eyebrow">选择你的第一个流派</span>
         <h3>
-          套装追寻 · 已收集 {collected.size}/5 · 已穿戴 {worn} 件
+          套装追寻 · 背包与仓库已收集 {collected.size}/5 · 已穿戴 {worn} 件
         </h3>
         <div className="journey-set-options">
           {SETS.filter((set) => set.classId === save.classId).map((set) => (

@@ -1,9 +1,14 @@
 import type { ClassId, Item, Rarity, Slot } from '../core/types';
 import { SLOTS, SLOT_NAMES } from '../core/types';
 import { AFFIXES } from '../data/affixes';
+import { CLASSES } from '../data/classes';
 import { SETS } from '../data/sets';
 import { LEGENDARIES } from '../data/legendaries';
-import { getLootProfile, type LootSource } from '../data/progression';
+import {
+  getLootProfile,
+  SMART_LOOT_CURRENT_CLASS_CHANCE,
+  type LootSource,
+} from '../data/progression';
 
 export interface LootOptions {
   slot?: Slot;
@@ -31,13 +36,24 @@ export function generateLoot(classId: ClassId, level: number, options: LootOptio
   if (rarity === 'primal') rarity = random() < 0.45 ? 'set' : 'legendary';
   let set = SETS.find((s) => s.id === options.setId);
   let legendary = LEGENDARIES.find((l) => l.id === options.legendaryId);
+  // Class identity is rolled before choosing an item, keeping classes with more
+  // entries from overwhelming the current hero. Targeted rewards stay targeted.
+  const lootClassId =
+    !set &&
+    !legendary &&
+    (rarity === 'set' || rarity === 'legendary') &&
+    !options.gambling &&
+    options.source !== 'gamble' &&
+    random() >= SMART_LOOT_CURRENT_CLASS_CHANCE
+      ? pick(CLASSES.filter((hero) => hero.id !== classId)).id
+      : classId;
   if (legendary) {
     set = undefined;
     rarity = 'legendary';
     slot = legendary.slot;
   } else if (set) rarity = 'set';
   if (set || rarity === 'set') {
-    set ??= pick(SETS.filter((s) => s.classId === classId));
+    set ??= pick(SETS.filter((s) => s.classId === lootClassId));
     const armor: Slot[] = ['head', 'chest', 'hands', 'legs', 'feet'];
     if (!options.slot) {
       const setId = set.id;
@@ -50,18 +66,18 @@ export function generateLoot(classId: ClassId, level: number, options: LootOptio
   }
   if (!set && (legendary || rarity === 'legendary')) {
     const candidates = LEGENDARIES.filter(
-      (l) => (!l.classId || l.classId === classId) && l.slot === slot,
+      (l) => (!l.classId || l.classId === lootClassId) && l.slot === slot,
     );
     if (!legendary && !candidates.length && options.slot) {
       if (level >= 31 && ['head', 'chest', 'hands', 'legs', 'feet'].includes(slot)) {
-        set = pick(SETS.filter((s) => s.classId === classId));
+        set = pick(SETS.filter((s) => s.classId === lootClassId));
         rarity = 'set';
       } else rarity = 'epic';
     } else {
       legendary ??= pick(
         candidates.length
           ? candidates
-          : LEGENDARIES.filter((l) => !l.classId || l.classId === classId),
+          : LEGENDARIES.filter((l) => !l.classId || l.classId === lootClassId),
       );
       slot = legendary.slot;
     }

@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   newSave,
+  newAccountSave,
   validateSave,
   useGameStore,
   computeStats,
@@ -16,7 +17,16 @@ import { GEMS } from '../src/data/affixes';
 import type { Item } from '../src/core/types';
 
 function reset() {
-  useGameStore.setState({ save: newSave(), labBackup: null, notice: '', lastGamble: [] });
+  const data = newAccountSave();
+  useGameStore.setState({
+    save: data.accounts[0].characters[0].save,
+    accounts: data.accounts,
+    activeAccountId: data.activeAccountId,
+    inCombat: false,
+    labBackup: null,
+    notice: '',
+    lastGamble: [],
+  });
   return useGameStore.getState();
 }
 function gemTotal() {
@@ -73,15 +83,14 @@ test('gambling pays exactly once and insufficient shards make no mutation', () =
   assert.equal(s.inventory.length, 10);
   assert.ok(s.inventory.every((i) => i.slot === 'head'));
 });
-test('class switching preserves worn gear with auto salvage and blocks an overflowing transfer', () => {
+test('class selection changes character slots and preserves even a full original backpack', () => {
   reset();
   const save = newSave();
   save.autoSalvage = true;
   const weapon = generateLoot('ranger', 1, { slot: 'weapon', rarity: 'rare' });
   weapon.gem = { id: 'ruby', level: 1 };
-  const chest = generateLoot('ranger', 1, { legendaryId: 'immortal_armor', primal: true });
-  save.equipment = { weapon, chest };
-  save.inventory = Array.from({ length: 238 }, (_, index) => ({
+  save.equipment = { weapon };
+  save.inventory = Array.from({ length: 240 }, (_, index) => ({
     ...weapon,
     id: `stored-${index}`,
   }));
@@ -89,22 +98,15 @@ test('class switching preserves worn gear with auto salvage and blocks an overfl
   useGameStore.getState().selectClass('barbarian');
   const switched = useGameStore.getState().save;
   assert.equal(switched.classId, 'barbarian');
+  assert.equal(switched.level, 1);
   assert.deepEqual(switched.equipment, {});
-  assert.equal(switched.inventory.length, 240);
-  assert.deepEqual(switched.inventory.slice(-2), JSON.parse(JSON.stringify([weapon, chest])));
-  assert.equal(switched.crystals, save.crystals);
-  assert.equal(switched.souls, save.souls);
-  assert.deepEqual(switched.gems, save.gems);
-
-  const full = {
-    ...save,
-    inventory: [...save.inventory, { ...weapon, id: 'overflow-1' }, { ...chest, id: 'overflow-2' }],
-  };
-  useGameStore.setState({ save: full });
-  const original = JSON.stringify(full);
-  useGameStore.getState().selectClass('barbarian');
-  assert.equal(JSON.stringify(useGameStore.getState().save), original);
-  assert.match(useGameStore.getState().notice, /背包空间不足/);
+  assert.equal(switched.inventory.length, 0);
+  useGameStore.getState().selectClass('ranger');
+  const restored = useGameStore.getState().save;
+  assert.deepEqual(restored.equipment, JSON.parse(JSON.stringify(save.equipment)));
+  assert.deepEqual(restored.inventory, JSON.parse(JSON.stringify(save.inventory)));
+  assert.equal(restored.crystals, save.crystals);
+  assert.deepEqual(restored.gems, save.gems);
 });
 test('all fifteen laboratory loadouts restore original progress and grant no run rewards', () => {
   reset();
@@ -180,17 +182,15 @@ test('clear records keep historical gear and replay in an isolated restorable sa
   const beforeReplay = JSON.stringify(useGameStore.getState().save);
   useGameStore.getState().activateRecord(record.id);
   assert.deepEqual(useGameStore.getState().save.equipment.weapon, originalWeapon);
-  useGameStore
-    .getState()
-    .completeRun({
-      won: true,
-      stage: 1,
-      seconds: 10,
-      kills: 100,
-      gold: 10000,
-      shards: 500,
-      items: [],
-    });
+  useGameStore.getState().completeRun({
+    won: true,
+    stage: 1,
+    seconds: 10,
+    kills: 100,
+    gold: 10000,
+    shards: 500,
+    items: [],
+  });
   useGameStore.getState().leaveLab();
   assert.equal(JSON.stringify(useGameStore.getState().save), beforeReplay);
   assert.equal(validateSave(JSON.parse(beforeReplay)).runRecords!.length, 1);

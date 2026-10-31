@@ -68,7 +68,11 @@ test('learning starts with one attack, gates ranks and parent branches, and refu
   assert.deepEqual(useGameStore.getState().save.skills, { hunting_arrow: 1 });
   assert.equal(useGameStore.getState().save.autoSkills.hunting_arrow, true);
   useGameStore.getState().selectClass('sorcerer');
-  assert.equal(Object.keys(useGameStore.getState().save.skills).length, 2);
+  assert.equal(Object.keys(useGameStore.getState().save.skills).length, 1);
+  assert.equal(useGameStore.getState().save.classId, 'sorcerer');
+  assert.equal(useGameStore.getState().save.level, 1);
+  useGameStore.getState().selectClass('ranger');
+  assert.equal(useGameStore.getState().save.level, 5);
 });
 
 test('chapter set gifts also avoid pieces picked up during the same rift', () => {
