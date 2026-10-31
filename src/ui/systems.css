@@ -244,6 +244,15 @@
   color: var(--rarity);
   font-size: 17px;
 }
+.item-detail-heading {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 10px;
+}
+.item-detail-heading h3 {
+  margin: 0;
+}
 .item-base-stats {
   display: flex;
   gap: 25px;
@@ -529,6 +538,13 @@
   place-items: center;
   border-radius: 50%;
   background: #c7a86308;
+}
+.skill-node .asset-icon {
+  opacity: 0.55;
+}
+.skill-node.unlocked .asset-icon,
+.skill-node.selected .asset-icon {
+  opacity: 1;
 }
 .skill-parent {
   font-size: 9px;

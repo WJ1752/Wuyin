@@ -1,4 +1,5 @@
 import type { ClassId } from '../core/types';
+import { CHARACTER_ART } from '../render/CharacterTextures';
 
 export function HeroArt({
   classId = 'ranger',
@@ -7,158 +8,15 @@ export function HeroArt({
   classId?: ClassId;
   small?: boolean;
 }) {
-  const colors = {
-    ranger: '#70b9a6',
-    barbarian: '#d38b58',
-    sorcerer: '#aaa2ee',
-    necromancer: '#99c5ac',
-    druid: '#92bd82',
-  };
-  const color = colors[classId];
   return (
-    <svg
-      viewBox="0 0 240 300"
+    <img
+      src={CHARACTER_ART[classId].src}
       className={small ? 'hero-art small' : 'hero-art'}
-      aria-label="职业角色立绘"
-      role="img"
-    >
-      <defs>
-        <radialGradient id={`aura-${classId}`}>
-          <stop stopColor={color} stopOpacity=".25" />
-          <stop offset="1" stopColor={color} stopOpacity="0" />
-        </radialGradient>
-        <linearGradient id={`armor-${classId}`} x2="1" y2="1">
-          <stop stopColor="#87918c" />
-          <stop offset=".3" stopColor="#34454a" />
-          <stop offset=".65" stopColor="#142227" />
-          <stop offset="1" stopColor="#657270" />
-        </linearGradient>
-      </defs>
-      <ellipse cx="120" cy="264" rx="108" ry="29" fill={`url(#aura-${classId})`} />
-      <ellipse cx="120" cy="262" rx="66" ry="12" fill="none" stroke={color} opacity=".2" />
-      <path
-        d="M96 83Q69 92 61 154L41 251 91 238 117 262 140 237 193 247Q164 199 165 123L143 80Z"
-        fill="#101c24"
-        stroke="#405154"
-      />
-      <path d="M96 92L70 233 107 210 121 246 133 212 178 235 143 95" fill="#1b3035" opacity=".7" />
-      <path
-        d="M99 179L92 228 85 258 112 258 124 200 133 231 134 260 158 260 145 178"
-        fill="#202b2e"
-        stroke="#75817a"
-      />
-      <path
-        d="M91 230L112 235 111 258 80 261 83 253Z M133 235L154 231 160 259 130 262Z"
-        fill="#384347"
-        stroke="#a29472"
-      />
-      <path
-        d="M91 104L121 89 151 105 147 156 136 181 103 180 91 155Z"
-        fill={`url(#armor-${classId})`}
-        stroke="#9a977e"
-      />
-      <path
-        d="M99 119L119 134 142 114M103 135L120 145 140 132M105 151L122 157 139 146"
-        fill="none"
-        stroke="#a79870"
-        strokeWidth="2"
-      />
-      <path
-        d="M96 100L77 91 64 115 88 130 102 114M145 100L165 91 180 117 156 128 141 115"
-        fill="#3b494c"
-        stroke="#b8a878"
-      />
-      <path
-        d="M71 121L65 155 75 177 88 167 84 134M164 123L174 150 165 178 152 171 155 135"
-        fill="#27373c"
-        stroke="#879081"
-      />
-      <path
-        d="M65 148L85 151 90 173 72 180ZM157 151L175 149 172 175 151 180Z"
-        fill="#4c5857"
-        stroke="#ac9b75"
-      />
-      <path d="M106 159L141 159 142 173 102 173Z" fill="#493e32" stroke="#b39b62" />
-      <path d="M116 159L129 159 132 168 121 175 113 168Z" fill={color} />
-      <path
-        d="M100 93L98 58 111 36 135 39 148 61 143 93 124 107Z"
-        fill="#273b40"
-        stroke="#84988d"
-      />
-      <path d="M106 71L120 51 139 70 135 88 122 97 108 86Z" fill="#101c20" />
-      <path d="M108 73L119 77M127 77L138 72" stroke={color} strokeWidth="3" />
-      <path d="M111 88L123 92 134 86" fill="none" stroke="#627169" />
-      {classId === 'ranger' && (
-        <g>
-          <path d="M57 84Q4 157 63 232M57 84L64 232" fill="none" stroke="#c4ac73" strokeWidth="4" />
-          <path
-            d="M57 84Q26 151 63 232M57 84L42 155 63 232"
-            fill="none"
-            stroke="#4a8175"
-            strokeWidth="2"
-          />
-          <path d="M39 151L122 159M35 151L45 146 44 156Z" stroke="#dfd4a5" fill="#dfd4a5" />
-          <path d="M158 96L181 57M164 103L193 61M170 107L201 71" stroke="#8b957f" strokeWidth="3" />
-        </g>
-      )}
-      {classId === 'barbarian' && (
-        <g>
-          <path
-            d="M103 53L82 33 86 66 104 75M141 53L163 33 159 65 142 75"
-            fill="#c0b087"
-            stroke="#5e6259"
-          />
-          <path d="M169 82L152 244" stroke="#9f8157" strokeWidth="7" />
-          <path
-            d="M165 96Q205 75 208 135L163 121 134 136 138 100Z"
-            fill="#9aa3a0"
-            stroke="#d2c6a1"
-          />
-        </g>
-      )}
-      {classId === 'sorcerer' && (
-        <g>
-          <path
-            d="M101 58L98 23 115 45 124 17 132 45 149 26 144 61"
-            fill="#847aa0"
-            stroke="#c3b589"
-          />
-          <path d="M172 67L158 251" stroke="#b49b70" strokeWidth="5" />
-          <path d="M170 36L190 57 171 80 151 57Z" fill="#645389" stroke="#c4b4e0" />
-          <path d="M171 44L179 57 170 70 161 57Z" fill={color} />
-          <circle cx="58" cy="166" r="17" fill="#7a66bd" opacity=".6" />
-          <circle cx="58" cy="166" r="10" fill="#d9cef9" />
-        </g>
-      )}
-      {classId === 'necromancer' && (
-        <g>
-          <path
-            d="M99 61L102 29 114 43 122 23 132 43 144 30 146 63"
-            fill="#aeb2a1"
-            stroke="#565e56"
-          />
-          <path d="M172 69L149 254" stroke="#9a9278" strokeWidth="5" />
-          <path d="M161 79Q203 71 213 121Q217 53 167 50L145 67Z" fill="#c0c7b4" stroke="#688f82" />
-          <path d="M52 156L69 156 77 171 68 183 57 183 45 172Z" fill="#adc0ad" />
-          <path d="M52 165L59 171 52 175M68 165L62 171 68 175" fill="#192c25" />
-        </g>
-      )}
-      {classId === 'druid' && (
-        <g>
-          <path
-            d="M97 62L95 34 112 45 133 43 150 30 146 68 135 59 121 69 108 59Z"
-            fill="#728977"
-            stroke="#c2c6a2"
-          />
-          <path
-            d="M66 168L39 220 48 230 77 175M161 169L188 214 179 229 151 178"
-            fill="#b7c9c0"
-            stroke="#6ca495"
-          />
-        </g>
-      )}
-      <path d="M116 114L123 108 130 114 123 125Z" fill={color} />
-    </svg>
+      alt="职业角色立绘"
+      style={{ objectFit: 'contain', objectPosition: 'center bottom' }}
+      decoding="async"
+      draggable={false}
+    />
   );
 }
 

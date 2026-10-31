@@ -1,7 +1,8 @@
-import { Container, Graphics } from 'pixi.js';
+import { Container, Graphics, Sprite } from 'pixi.js';
 import type { ClassId, Item, SaveData, Slot } from '../core/types';
 import { RARITY_COLORS } from '../core/types';
 import { SETS } from '../data/sets';
+import { CHARACTER_ART, getCharacterTexture, getEquipmentTexture } from './CharacterTextures';
 
 const COLORS = {
   ranger: 0x84c5a1,
@@ -10,17 +11,13 @@ const COLORS = {
   necromancer: 0x94c9b3,
   druid: 0xb2cbe1,
 };
-const hashIdentity = (value: string) => {
-  let hash = 0;
-  for (const character of value) hash = (Math.imul(hash, 31) + character.charCodeAt(0)) >>> 0;
-  return hash;
-};
 function gearStyle(item: Item | undefined, fallback: number) {
   const set = SETS.find((entry) => entry.id === item?.setId);
   const color = set?.color ?? (item ? RARITY_COLORS[item.rarity] : undefined);
   return {
     color: color ? Number.parseInt(color.slice(1), 16) : fallback,
-    variant: item ? hashIdentity(item.legendaryId ?? item.setId ?? item.name) % 4 : 0,
+    // The shared SVG asset supplies item identity; these are only mounting shapes.
+    variant: item?.rarity === 'primal' ? 3 : set ? 2 : item?.legendaryId ? 1 : 0,
     equipped: Boolean(item),
     primal: item?.rarity === 'primal',
     set: Boolean(set),
@@ -63,11 +60,13 @@ export class CharacterRig extends Container {
   private rightArm = new Container();
   private aura = new Graphics();
   private body = new Container();
+  private portrait: Sprite | null = null;
   private heading = 1;
   private attackTime = 0;
   constructor(
     public classId: ClassId,
     equipment: SaveData['equipment'] = {},
+    options: { summon?: boolean } = {},
   ) {
     super();
     const style = (slot: Slot) => gearStyle(equipment[slot], COLORS[classId]);
@@ -111,6 +110,18 @@ export class CharacterRig extends Container {
           0.4,
         );
       }
+    }
+    const texture = options.summon ? undefined : getCharacterTexture(classId);
+    if (texture) {
+      const art = CHARACTER_ART[classId];
+      this.portrait = new Sprite(texture);
+      this.portrait.anchor.set(art.anchorX, art.ground);
+      this.portrait.width = 88;
+      this.portrait.height = 88;
+      this.portrait.y = 12;
+      this.body.addChild(this.portrait);
+      this.addEquipmentLayers(equipment);
+      return;
     }
     this.cloak
       .poly([-13, -31, -22, 3, -12, 10, -4, 4, 5, 13, 18, 3, 12, -31])
@@ -465,6 +476,76 @@ export class CharacterRig extends Container {
   attack() {
     this.attackTime = 0.25;
   }
+  /** Equip-specific inlaid emblems and weapon outlines sit above the painted base. */
+  private addEquipmentLayers(equipment: SaveData['equipment']) {
+    const art = CHARACTER_ART[this.classId];
+    const mounts: Record<ClassId, Record<Slot, [number, number, number]>> = {
+      ranger: {
+        head: [0.51, 0.2, 7],
+        chest: [0.54, 0.64, 10],
+        hands: [0.78, 0.63, 7],
+        legs: [0.54, 0.81, 9],
+        feet: [0.52, 0.91, 8],
+        jewelry: [0.55, 0.56, 6],
+        weapon: [0.83, 0.53, 26],
+        offhand: [0.25, 0.45, 12],
+      },
+      barbarian: {
+        head: [0.46, 0.27, 8],
+        chest: [0.49, 0.6, 12],
+        hands: [0.74, 0.56, 8],
+        legs: [0.48, 0.8, 10],
+        feet: [0.47, 0.9, 9],
+        jewelry: [0.51, 0.66, 7],
+        weapon: [0.78, 0.27, 28],
+        offhand: [0.23, 0.68, 14],
+      },
+      sorcerer: {
+        head: [0.49, 0.29, 8],
+        chest: [0.55, 0.65, 10],
+        hands: [0.79, 0.64, 7],
+        legs: [0.55, 0.82, 9],
+        feet: [0.55, 0.91, 8],
+        jewelry: [0.54, 0.69, 6],
+        weapon: [0.24, 0.49, 26],
+        offhand: [0.84, 0.55, 13],
+      },
+      necromancer: {
+        head: [0.47, 0.28, 7],
+        chest: [0.45, 0.6, 10],
+        hands: [0.63, 0.6, 7],
+        legs: [0.43, 0.79, 9],
+        feet: [0.43, 0.89, 8],
+        jewelry: [0.45, 0.55, 6],
+        weapon: [0.76, 0.27, 27],
+        offhand: [0.41, 0.73, 12],
+      },
+      druid: {
+        head: [0.57, 0.22, 8],
+        chest: [0.55, 0.64, 10],
+        hands: [0.75, 0.73, 7],
+        legs: [0.55, 0.81, 9],
+        feet: [0.53, 0.91, 8],
+        jewelry: [0.57, 0.59, 6],
+        weapon: [0.83, 0.77, 21],
+        offhand: [0.24, 0.75, 18],
+      },
+    };
+    for (const [slot, item] of Object.entries(equipment) as [Slot, Item][]) {
+      if (!item) continue;
+      const texture = getEquipmentTexture(item);
+      if (!texture) continue;
+      const [x, y, size] = mounts[this.classId][slot];
+      const attachment = new Sprite(texture);
+      attachment.label = `equipment:${slot}`;
+      attachment.anchor.set(0.5);
+      attachment.width = size;
+      attachment.height = size;
+      attachment.position.set((x - art.anchorX) * 88, (y - art.ground) * 88 + 12);
+      // Every equipped slot has its own retained layer, including jewelry and boots.
+      this.body.addChild(attachment);
+    }
+  }
   update(time: number, dt: number, moving: boolean, facing: number, empowered: boolean) {
     this.attackTime = Math.max(0, this.attackTime - dt);
     if (Math.abs(facing) > 0.05) this.heading = Math.sign(facing);
@@ -473,7 +554,12 @@ export class CharacterRig extends Container {
     this.leftLeg.rotation = step;
     this.rightLeg.rotation = -step;
     this.cloak.skew.x = Math.sin(time * 4) * 0.08 + (moving ? 0.1 : 0);
-    this.body.y = Math.sin(time * (moving ? 12 : 3)) * (moving ? 1.5 : 0.8);
+    const bob = Math.sin(time * (moving ? 12 : 3)) * (moving ? 1.5 : 0.8);
+    this.body.y = this.portrait ? Math.round(bob) : bob;
+    // Keep the pixel grid upright; attacks lunge by whole pixels instead of rotating the art.
+    this.body.x = this.portrait
+      ? this.heading * Math.round(Math.sin((this.attackTime / 0.25) * Math.PI) * 3)
+      : 0;
     this.rightArm.rotation = -0.15 + Math.sin((this.attackTime / 0.25) * Math.PI) * -1.2;
     this.leftArm.rotation = -0.1 - step * 0.35;
     this.aura.alpha = empowered ? 1 : 0.6;

@@ -39,6 +39,7 @@ import { useGameStore, createCombatConfig } from './state/gameStore';
 import { SystemsModal } from './ui/SystemsModal';
 import { HeroArt, TownScene } from './ui/SceneArt';
 import { VirtualJoystick } from './ui/VirtualJoystick';
+import { SkillIcon } from './ui/AssetIcon';
 import { GameEngine, getActiveSkills } from './engine/GameEngine';
 import type { CombatConfig, CombatSnapshot, RunResult } from './core/types';
 import { formatBigNumber, formatTime } from './core/format';
@@ -710,17 +711,7 @@ function CombatView({
                   onClick={() => engine.current?.cast(s.id)}
                 >
                   <span className="skill-symbol">
-                    {s.kind === 'ultimate'
-                      ? '✵'
-                      : s.kind === 'movement'
-                        ? '➶'
-                        : s.element === 'ice'
-                          ? '❄'
-                          : s.element === 'lightning'
-                            ? 'ϟ'
-                            : s.element === 'poison'
-                              ? '☽'
-                              : '✧'}
+                    <SkillIcon skillId={s.id} size={38} />
                   </span>
                   {cd > 0 && <span className="cooldown-overlay">{cd.toFixed(1)}</span>}
                   <small className="keybind">{i + 1}</small>

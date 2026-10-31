@@ -1,4 +1,7 @@
 import { Graphics, Container } from 'pixi.js';
+export interface CastContext {
+  resourceGranted: boolean;
+}
 export interface Projectile {
   x: number;
   y: number;
@@ -19,6 +22,7 @@ export interface Projectile {
   scale: number;
   multiplier: number;
   proc: boolean;
+  cast?: CastContext;
 }
 export class ProjectileSystem {
   items: Projectile[] = [];

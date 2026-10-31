@@ -274,6 +274,7 @@ small {
   background: radial-gradient(ellipse, #34464138, transparent 70%);
 }
 .hero-art {
+  image-rendering: pixelated;
   height: 100%;
   width: 100%;
   position: relative;
@@ -1459,6 +1460,16 @@ small {
   color: #bfd1cb;
   text-shadow: 0 0 12px #6abdd5aa;
   font-family: Georgia, serif;
+}
+.asset-icon {
+  display: block;
+  flex-shrink: 0;
+  max-width: 100%;
+  max-height: 100%;
+}
+.skill-symbol .asset-icon {
+  width: 88%;
+  height: 88%;
 }
 .element-fire .skill-cast {
   background: radial-gradient(ellipse at 50% 100%, #643b2b, #251e26);

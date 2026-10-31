@@ -33,7 +33,7 @@ function skill(
     effect,
     description,
     parent,
-    icon: element,
+    icon: id,
   };
 }
 export const SKILLS: SkillDef[] = [

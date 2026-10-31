@@ -16,17 +16,20 @@ import { LEGENDARIES } from '../data/legendaries';
 import { MONSTERS, BOSSES, ELITE_AFFIXES } from '../data/monsters';
 import { STAGES } from '../data/stages';
 import { CharacterRig } from '../render/ProceduralRig';
+import { preloadCharacterTextures } from '../render/CharacterTextures';
+import { preloadSkillTextures } from '../render/SkillTextures';
 import { MonsterRig } from '../render/MonsterRenderer';
 import { createMap } from '../render/MapGenerator';
 import { VFXManager, ELEMENT_COLORS } from '../render/VFXManager';
 import { FloatingText } from '../render/FloatingText';
 import { calculateDamage, mitigateDamage } from './CombatSystem';
 import { BuffManager, PYLONS } from './BuffAndPylon';
-import { ProjectileSystem } from './ProjectileSystem';
+import { ProjectileSystem, type CastContext } from './ProjectileSystem';
 import { selectAutoCast } from './AutoCastAI';
 import { generateLoot } from './LootGenerator';
 import {
   createMonsterBrain,
+  attackContains,
   stepMonsterAI,
   type MonsterBrain,
   type MonsterAIEvent,
@@ -74,6 +77,8 @@ interface Enemy {
   attackTimer: number;
   stun: number;
   slow: number;
+  slowRatio?: number;
+  armorReduction?: { value: number; expires: number };
   poison: number;
   poisonStacks: number;
   poisonSkill?: SkillDef;
@@ -122,6 +127,13 @@ interface Zone {
   view: Graphics;
   pull: boolean;
   multiplier: number;
+  pulseTimes?: number[];
+  cast?: CastContext;
+}
+interface SummonState {
+  hp: number;
+  maxHp: number;
+  reviveIn: number;
 }
 
 /** Owns one run. Browser listeners, ticker, Pixi resources and timers are disposed together. */
@@ -147,6 +159,7 @@ export class GameEngine {
   private zones: Zone[] = [];
   private buffs = new BuffManager();
   private summons: CharacterRig[] = [];
+  private summonStates = new Map<CharacterRig, SummonState>();
   private ravens: Graphics[] = [];
   private x = 0;
   private y = 0;
@@ -157,6 +170,7 @@ export class GameEngine {
   private resource = 100;
   private shield = 0;
   private shieldTime = 0;
+  private shieldBurst?: { skill: SkillDef; multiplier: number };
   private shadowCharges = 0;
   private ultimateBonus = 0;
   private autoFanTimer = 0;
@@ -184,6 +198,7 @@ export class GameEngine {
   private fanCharge = 0;
   private fanTimer = 0;
   private moving = false;
+  private movementDirection = { x: 0, y: 0 };
   private fps = 60;
   private cooldowns: Record<string, number> = {};
   private powers = new Map<string, number>();
@@ -238,6 +253,11 @@ export class GameEngine {
       if (def) this.powers.set(def.effect, def.max);
     }
     this.applyStaticPowers();
+    await Promise.all([
+      preloadCharacterTextures(config.classId, config.equipment),
+      preloadSkillTextures(this.skills.map((skill) => skill.id)),
+    ]);
+    if (this.disposed) return;
     this.app = new Application();
     await this.app.init({
       resizeTo: host,
@@ -302,7 +322,6 @@ export class GameEngine {
       s.critDamage += Math.max(0, s.critChance - 0.5) * p('oraviel');
       s.critChance = 0.5;
     }
-    if (p('reilena')) s.independent.push(s.maxResource * p('reilena'));
     if (p('shield_of_ancients')) s.armor *= 1.2;
     if (this.learned('glass_cannon')) {
       s.independent.push(0.25 * this.rankScale('glass_cannon'));
@@ -315,6 +334,7 @@ export class GameEngine {
       s.maxResource += 40 * this.rankScale('overwhelming_essence');
       this.resource = s.maxResource;
     }
+    if (p('reilena')) s.independent.push(s.maxResource * p('reilena'));
     if (this.learned('stormborn')) s.attackSpeed += 0.2 * this.rankScale('stormborn');
     if (this.learned('predator')) s.dodge += 0.08 * this.rankScale('predator');
   }
@@ -399,8 +419,7 @@ export class GameEngine {
   private update(dt: number) {
     this.elapsed += dt;
     this.buffs.tick(dt);
-    this.shieldTime = Math.max(0, this.shieldTime - dt);
-    if (this.shieldTime === 0) this.shield = 0;
+    this.updateShield(dt);
     this.comboTimer -= dt;
     if (this.comboTimer <= 0) this.combo = 0;
     for (const id of Object.keys(this.cooldowns)) {
@@ -431,13 +450,14 @@ export class GameEngine {
     mx /= len;
     my /= len;
     this.moving = Math.hypot(mx, my) > 0.1;
+    this.movementDirection = { x: mx, y: my };
     if (mx) this.facing = mx;
     const speed =
       this.config.stats.moveSpeed *
       (this.elapsed < this.slowUntil && !this.buffs.has('ultimate') ? 1 - this.slowRatio : 1) *
       (this.buffs.has('speed') ? 1.6 : 1) *
       (this.buffs.has('berserker') ? 1.4 : 1) *
-      (this.buffs.has('wolf') ? 1.45 : 1) *
+      (this.buffs.has('wolf') ? 1.4 : 1) *
       (this.set('wasteland', 2) && this.buffs.has('whirlwind') ? 1.4 : 1) *
       (this.power('bulkathos') && this.buffs.has('whirlwind') ? 1 + this.power('bulkathos') : 1);
     this.x = Math.max(-780, Math.min(780, this.x + mx * speed * dt));
@@ -514,19 +534,16 @@ export class GameEngine {
         const enemy = this.enemies.find((e) => e.id === id);
         const skill = this.skill(p.skillId);
         if (!enemy || !skill) return;
-        this.hit(enemy, skill, p.multiplier, p.proc);
+        this.hit(enemy, skill, p.multiplier, p.proc, false, p.cast);
         if (p.proc && ['explosive', 'elemental', 'orb'].includes(skill.effect)) {
-          this.vfx.burst(enemy.x, enemy.y, p.color, 8);
-          this.area(
+          this.explode(
             enemy.x,
             enemy.y,
             skill.effect === 'orb' ? 80 : 45,
             skill,
-            0.4 *
-              (skill.effect === 'orb' && this.set('delsere', 2) ? 2 : 1) *
-              (this.power('endless_depths') && skill.effect === 'orb'
-                ? 1 + 2 * this.power('endless_depths')
-                : 1),
+            p.multiplier * 0.4 * (skill.effect === 'orb' && this.set('delsere', 2) ? 2 : 1),
+            true,
+            p.cast,
           );
         }
         if (p.proc && skill.id === 'magic_missile' && this.learned('seeking_missile'))
@@ -567,10 +584,7 @@ export class GameEngine {
       (p) => {
         if (p.skillId === 'frozen_orb' && p.proc) {
           const skill = this.skill(p.skillId);
-          if (skill) {
-            this.vfx.burst(p.x, p.y, p.color, 18, true);
-            this.area(p.x, p.y, 110, skill, p.multiplier);
-          }
+          if (skill) this.explode(p.x, p.y, 110, skill, p.multiplier);
         }
       },
     );
@@ -809,11 +823,22 @@ export class GameEngine {
         );
       }
       e.slow = Math.max(0, e.slow - dt);
+      if (e.slow === 0) e.slowRatio = undefined;
+      if (e.armorReduction && e.armorReduction.expires <= this.elapsed)
+        e.armorReduction = undefined;
+      if ((e.curse ?? 0) > 0 && !e.boss && e.hp / e.maxHp < 0.15) {
+        e.hp = 0;
+        this.kill(e);
+        continue;
+      }
       e.attackTimer -= dt;
       const d = this.distance(e),
         a = Math.atan2(this.y - e.y, this.x - e.x);
       const speed =
-        e.def.speed * (e.slow > 0 ? 0.4 : 1) * (e.stun > 0 ? 0 : 1) * (e.goblin ? -1.7 : 1);
+        e.def.speed *
+        (e.slow > 0 ? 1 - (e.slowRatio ?? 0.6) : 1) *
+        (e.stun > 0 ? 0 : 1) *
+        (e.goblin ? -1.7 : 1);
       if (e.goblin) {
         if (e.age > 5) {
           this.vfx.ring(e.x, e.y, 0xb798f0, 45);
@@ -833,14 +858,16 @@ export class GameEngine {
         e.y -= Math.sin(a) * dt * 200;
       }
       if (e.poison > 0) {
-        e.poison -= dt;
+        const poisonTime = Math.min(dt, e.poison);
+        e.poison = Math.max(0, e.poison - dt);
         this.hit(
           e,
           e.poisonSkill ?? this.skills[0],
-          dt * 0.4 * Math.max(1, e.poisonStacks),
+          poisonTime * 0.4 * Math.max(1, e.poisonStacks),
           false,
           true,
         );
+        if (e.poison === 0) e.poisonStacks = 0;
       }
       if ((e.bleed ?? 0) > 0) {
         e.bleed = Math.max(0, e.bleed! - dt);
@@ -868,7 +895,7 @@ export class GameEngine {
       hp: e.hp,
       maxHp: e.maxHp,
       attack: e.def.attack,
-      speed: e.def.speed * (e.slow > 0 ? 0.4 : 1),
+      speed: e.def.speed * (e.slow > 0 ? 1 - (e.slowRatio ?? 0.6) : 1),
       elite: e.elite,
       affix: ELITE_AFFIXES[e.affix]?.id,
       stunned: e.stun > 0,
@@ -959,6 +986,20 @@ export class GameEngine {
         this.shake = Math.max(this.shake, 5);
         this.vfx.burst(event.targetX, event.targetY, ELEMENT_COLORS[event.element], 18, true);
       }
+      for (const summon of this.summons) {
+        const state = this.summonStates.get(summon);
+        if (!state || state.hp <= 0 || !attackContains(event, summon.x, summon.y)) continue;
+        state.hp = Math.max(
+          0,
+          state.hp -
+            mitigateDamage(
+              event.damage * (STAGES[this.config.stage - 1]?.damageMultiplier ?? 1),
+              this.config.stats,
+            ),
+        );
+        summon.alpha = 0.25 + (0.4 * state.hp) / state.maxHp;
+        if (state.hp <= 0) this.defeatSummon(summon);
+      }
       if (event.playerHit) {
         this.takeDamage(event.damage);
         if (event.slow && !this.buffs.has('ultimate') && !this.buffs.has('invulnerable')) {
@@ -1042,6 +1083,25 @@ export class GameEngine {
       this.buffs.add('final_service_cd', '命匣冷却', 60);
     }
   }
+  private updateShield(dt: number) {
+    this.shieldTime = Math.max(0, this.shieldTime - dt);
+    if (this.shieldTime > 0) return;
+    this.shield = 0;
+    if (this.shieldBurst) {
+      const { skill, multiplier } = this.shieldBurst;
+      this.shieldBurst = undefined;
+      this.area(this.x, this.y, skill.radius, skill, multiplier);
+      this.vfx.burst(this.x, this.y, ELEMENT_COLORS[skill.element], 18, true);
+    }
+  }
+  private slowEnemy(e: Enemy, ratio: number, duration: number) {
+    e.slowRatio = e.slow > 0 ? Math.max(e.slowRatio ?? 0.6, ratio) : ratio;
+    e.slow = Math.max(e.slow, duration);
+  }
+  private freeze(e: Enemy, duration: number) {
+    e.stun = Math.max(e.stun, duration + (this.power('froststring') ? 1 : 0));
+    if (this.set('delsere', 4)) delete this.cooldowns.teleport;
+  }
   private applyVulnerability(e: Enemy, key: string, value: number, duration: number) {
     e.vulnerabilities ??= {};
     e.vulnerabilities[key] = { value, expires: this.elapsed + duration };
@@ -1062,6 +1122,7 @@ export class GameEngine {
   }
   private perform(skill: SkillDef, free: boolean, multiplier = 1) {
     skill = this.resolveSkill(skill);
+    const cast: CastContext = { resourceGranted: false };
     let cost = skill.cost;
     if (this.power('grand_vizier') && skill.effect === 'meteor') cost *= 0.5;
     const zero = free || this.buffs.has('channeling');
@@ -1086,7 +1147,7 @@ export class GameEngine {
         this.config.stats.attackSpeed *
         (this.buffs.has('speed') ? 1.5 : 1) *
         (this.buffs.has('berserker') ? 1.5 : 1) *
-        (this.buffs.has('wolf') ? 1.5 : 1) *
+        (this.buffs.has('wolf') ? 1.6 : 1) *
         (1 + this.buffs.stacks('frenzy') * 0.05) *
         (1 + (this.set('marauder', 4) ? this.buffs.stacks('barrage') * 0.08 : 0)) *
         (this.set('storm_wolf', 4) && skill.effect === 'claw' ? 1.8 : 1) *
@@ -1118,7 +1179,10 @@ export class GameEngine {
       ty = cluster?.y ?? this.y;
     const color = ELEMENT_COLORS[skill.element];
     this.hero.attack();
+    if (!free) this.vfx.signature(skill.id, this.x, this.y);
     this.callbacks.onSound(skill.effect);
+    if (!free && this.config.petId.includes('imp'))
+      this.vfx.burst(this.x, this.y - 20, 0xff9b58, 5);
     if (!free && ['basic', 'core'].includes(skill.kind) && this.buffs.has('vengeance')) {
       for (let i = 0; i < 4; i++)
         this.projectiles.spawn(this.x, this.y - 20, (i * Math.PI) / 2, 0xcfbdf4, 'hunting_arrow', {
@@ -1138,7 +1202,8 @@ export class GameEngine {
           Math.abs(Math.sin(Math.atan2(e.y - this.y, e.x - this.x) - angle) * this.distance(e)) <
           35,
       );
-      for (const e of beamTargets) this.hit(e, { ...skill, element: 'arcane' }, multiplier * 2);
+      for (const e of beamTargets)
+        this.hit(e, { ...skill, element: 'arcane' }, multiplier * 2, true, false, cast);
       this.vfx.lightning(
         this.x,
         this.y - 25,
@@ -1148,7 +1213,7 @@ export class GameEngine {
       );
       if (this.set('vyr', 2))
         for (const e of targets.slice(0, 3)) {
-          this.hit(e, skill, multiplier);
+          this.hit(e, skill, multiplier, true, false, cast);
           this.vfx.lightning(tx, ty, e.x, e.y, 0xd2aaff);
         }
       return;
@@ -1163,42 +1228,80 @@ export class GameEngine {
       return;
     }
     if (skill.kind === 'movement') {
-      const movement = this.moving
-        ? Math.atan2(
-            this.movement.y || (this.keys.has('s') ? 1 : 0) - (this.keys.has('w') ? 1 : 0),
-            this.movement.x || (this.keys.has('d') ? 1 : 0) - (this.keys.has('a') ? 1 : 0),
-          )
-        : angle;
+      const start = { x: this.x, y: this.y };
+      const mx =
+        this.movement.x +
+        (this.keys.has('d') || this.keys.has('arrowright') ? 1 : 0) -
+        (this.keys.has('a') || this.keys.has('arrowleft') ? 1 : 0);
+      const my =
+        this.movement.y +
+        (this.keys.has('s') || this.keys.has('arrowdown') ? 1 : 0) -
+        (this.keys.has('w') || this.keys.has('arrowup') ? 1 : 0);
+      const movement =
+        Math.hypot(mx, my) > 0.1
+          ? Math.atan2(my, mx)
+          : this.moving
+            ? Math.atan2(this.movementDirection.y, this.movementDirection.x)
+            : angle;
       this.vfx.ring(this.x, this.y, color, 45);
-      if (skill.effect === 'shadowstep' && nearest) {
-        this.x = nearest.x + Math.cos(angle) * 30;
-        this.y = nearest.y + Math.sin(angle) * 30;
-        this.buffs.add('guaranteed_crit', '暗影伏击', 3);
+      if (skill.effect === 'shadowstep' && nearest && this.distance(nearest) <= skill.radius) {
+        this.x = Math.max(-780, Math.min(780, nearest.x + Math.cos(angle) * 30));
+        this.y = Math.max(-780, Math.min(780, nearest.y + Math.sin(angle) * 30));
         if (this.power('shadowfang')) {
           this.shadowCharges = 3;
           this.buffs.add('shadowfang', '暗影獠牙 · 3次攻击', 60);
         }
-        this.hit(nearest, skill, multiplier);
+        this.hit(nearest, skill, multiplier, true, false, cast, true);
       } else {
-        this.x = Math.max(-780, Math.min(780, this.x + Math.cos(movement) * 170));
-        this.y = Math.max(-780, Math.min(780, this.y + Math.sin(movement) * 170));
+        this.x = Math.max(-780, Math.min(780, this.x + Math.cos(movement) * skill.radius));
+        this.y = Math.max(-780, Math.min(780, this.y + Math.sin(movement) * skill.radius));
       }
-      this.buffs.add('invulnerable', '无敌', 0.8);
       if (skill.effect === 'teleport') {
         this.shield = this.config.stats.hp * (0.4 + (this.power('cosmic_strand') ? 0.2 : 0));
-        this.shieldTime = 5;
-      }
-      if (skill.effect === 'bloodstep')
+        this.shieldTime = skill.duration;
+        this.shieldBurst = undefined;
+      } else this.buffs.add('invulnerable', '无敌', skill.duration);
+      const dx = this.x - start.x,
+        dy = this.y - start.y;
+      const crossed = this.enemies.filter((e) => {
+        const u = Math.max(
+          0,
+          Math.min(1, ((e.x - start.x) * dx + (e.y - start.y) * dy) / (dx * dx + dy * dy || 1)),
+        );
+        return (
+          e.hp > 0 && Math.hypot(e.x - start.x - dx * u, e.y - start.y - dy * u) < e.radius + 20
+        );
+      });
+      if (skill.effect === 'bloodstep' && crossed.length)
         this.hp = Math.min(
           this.config.stats.hp,
           this.hp + this.config.stats.hp * 0.05 * this.rankScale(skill.id),
         );
-      if (skill.effect === 'dodge')
+      if (skill.effect === 'dodge') {
         this.resource = Math.min(this.config.stats.maxResource, this.resource + 40);
-      if (skill.effect === 'charge') this.area(this.x, this.y, 80, skill, multiplier);
+        const steps = Math.max(1, Math.ceil(Math.hypot(dx, dy) / 45));
+        for (let i = 0; i <= steps; i++)
+          this.makeZone(
+            start.x + (dx * i) / steps,
+            start.y + (dy * i) / steps,
+            30,
+            3,
+            { ...skill, effect: 'caltrops' },
+            0,
+          );
+      }
+      if (skill.effect === 'charge')
+        for (const e of crossed) {
+          this.hit(e, skill, multiplier);
+          if (!e.boss) {
+            e.x += Math.cos(movement) * 45;
+            e.y += Math.sin(movement) * 45;
+          }
+        }
       return;
     }
     if (skill.effect === 'shield' || skill.effect === 'warcry') {
+      this.shieldBurst = skill.effect === 'shield' ? { skill, multiplier } : undefined;
       this.shieldTime =
         (skill.duration || 8) *
         (skill.effect === 'shield' && this.power('earthward')
@@ -1206,10 +1309,9 @@ export class GameEngine {
           : skill.effect === 'warcry'
             ? 1 + this.power('pride')
             : 1);
-      this.shield =
-        this.config.stats.hp *
-        (skill.effect === 'shield' ? 0.45 + this.power('earthward') : 0.2) *
-        this.rankScale(skill.id);
+      if (skill.effect === 'shield')
+        this.shield =
+          this.config.stats.hp * (0.45 + this.power('earthward')) * this.rankScale(skill.id);
       this.buffs.add(
         skill.effect === 'warcry' ? 'warcry' : 'shield',
         skill.name,
@@ -1222,7 +1324,7 @@ export class GameEngine {
       );
       if (skill.effect === 'warcry')
         for (const e of targets) {
-          if (this.distance(e) < 200)
+          if (this.distance(e) < skill.radius)
             this.applyVulnerability(e, 'warcry', 0.35 * this.rankScale(skill.id), this.shieldTime);
         }
       if (this.set('immortal_thorns', 4) && skill.effect === 'warcry')
@@ -1277,23 +1379,43 @@ export class GameEngine {
       if (skill.effect === 'rain') this.vfx.ring(tx, ty, color, radius);
       return;
     }
-    if (['pull', 'nova', 'curse', 'raven', 'summon'].includes(skill.effect)) {
+    if (skill.effect === 'summon') {
+      for (const summon of this.summons) {
+        if ((this.summonStates.get(summon)?.hp ?? 0) <= 0) continue;
+        this.explode(
+          summon.x,
+          summon.y,
+          skill.radius * (this.set('rathma', 4) ? 2 : 1),
+          skill,
+          multiplier,
+          false,
+        );
+        this.defeatSummon(summon);
+      }
+      this.buffs.add('summon_fury', '骸骨狂热', skill.duration);
+      return;
+    }
+    if (skill.effect === 'nova') {
+      this.explode(this.x, this.y, skill.radius, skill, multiplier);
+      return;
+    }
+    if (['pull', 'curse', 'raven'].includes(skill.effect)) {
       const radius = skill.radius || 180;
       for (const e of targets.filter((e) => this.distance(e) < radius)) {
         if (skill.effect === 'pull') {
           e.x = this.x + (e.x - this.x) * 0.25;
           e.y = this.y + (e.y - this.y) * 0.25;
-          e.stun = 1;
-        }
-        if (skill.effect === 'nova') {
-          e.stun = 3;
-          if (this.set('delsere', 4)) delete this.cooldowns.teleport;
+          if (skill.id === 'iron_hook') e.stun = skill.duration;
+          if (skill.id === 'hurricane_break')
+            e.armorReduction = { value: 0.35, expires: this.elapsed + skill.duration };
         }
         if (skill.effect === 'curse') {
-          e.curse = 8;
-          e.slow = 8;
-          this.applyVulnerability(e, 'curse', 0.2 * this.rankScale(skill.id), 8);
-          if (!e.boss && e.hp / e.maxHp < 0.15) this.hit(e, skill, 10000);
+          e.curse = skill.duration;
+          this.slowEnemy(e, 0.6, skill.duration);
+          if (!e.boss && e.hp / e.maxHp < 0.15) {
+            e.hp = 0;
+            this.kill(e);
+          }
         }
         if (skill.effect === 'raven') {
           this.applyVulnerability(
@@ -1304,25 +1426,15 @@ export class GameEngine {
           );
           e.stun = 1.5;
         }
-        this.hit(
-          e,
-          skill,
-          multiplier *
-            (skill.effect === 'nova' && this.power('endless_depths')
-              ? 1 + 2 * this.power('endless_depths')
-              : 1),
-        );
-      }
-      if (skill.effect === 'summon') {
-        for (const summon of this.summons) this.vfx.burst(summon.x, summon.y, color, 12, true);
-        this.area(tx, ty, this.set('rathma', 4) ? 240 : 120, skill, multiplier);
-        this.buffs.add('summon_fury', '骸骨狂热', 8);
+        this.hit(e, skill, multiplier);
       }
       this.vfx.ring(this.x, this.y, color, radius);
       return;
     }
     if (['hammer', 'bash', 'frenzy', 'scythe', 'claw', 'spike', 'siphon'].includes(skill.effect)) {
       let radius = skill.radius || 90;
+      if (skill.effect === 'claw' && this.set('storm_wolf', 4))
+        radius = this.skill('thunder_wolf')!.radius;
       if (skill.effect === 'claw' && this.power('moonfang')) radius *= 1.3;
       if (skill.effect === 'hammer') radius *= 1 + this.buffs.stacks('earthbreaker') * 0.08;
       if (skill.effect === 'bash' && this.learned('seismic_bash')) {
@@ -1330,12 +1442,29 @@ export class GameEngine {
         for (const e of targets) if (this.distance(e) < radius) e.stun = 1;
       }
       if (skill.effect === 'siphon') {
-        for (const e of targets
+        const drained = targets
           .filter((e) => this.distance(e) < radius)
-          .slice(0, this.learned('blood_drain') ? 3 : 1))
-          this.hit(e, skill, multiplier);
-      } else this.area(this.x, this.y, radius, skill, multiplier);
+          .slice(0, this.learned('blood_drain') ? 3 : 1);
+        for (const e of drained) this.hit(e, skill, multiplier, true, false, cast);
+        if (drained.length)
+          this.hp = Math.min(
+            this.config.stats.hp,
+            this.hp +
+              this.config.stats.hp *
+                (this.learned('blood_drain') ? 0.04 * this.rankScale('blood_drain') : 0.02) *
+                (this.power('funerary_pick') ? 2 : 1),
+          );
+      } else {
+        for (let i = 0; i < (skill.effect === 'claw' ? 3 : 1); i++)
+          this.area(this.x, this.y, radius, skill, multiplier, cast);
+      }
       this.vfx.slash(this.x, this.y, angle, color, radius);
+      if (skill.effect === 'bash')
+        for (const e of targets)
+          if (!e.boss && this.distance(e) < radius + e.radius) {
+            e.x += Math.cos(angle) * 35;
+            e.y += Math.sin(angle) * 35;
+          }
       if (skill.effect === 'scythe' && this.set('trang_oul', 2)) {
         for (const offset of [-0.3, 0.3])
           this.projectiles.spawn(this.x, this.y, angle + offset, color, skill.id, {
@@ -1351,7 +1480,7 @@ export class GameEngine {
             proc: false,
             multiplier: skill.multiplier,
           });
-      if (skill.effect === 'claw' && this.learned('thunder_claw') && this.attackCount % 3 === 0)
+      if (skill.effect === 'claw' && this.learned('thunder_claw'))
         for (const e of targets.slice(0, 3)) {
           this.vfx.lightning(this.x, this.y - 20, e.x, e.y);
           this.hit(e, this.skill('thunder_claw'), 1, false);
@@ -1360,38 +1489,53 @@ export class GameEngine {
         this.shake = 7;
         if (this.power('judgment') && targets.filter((e) => this.distance(e) < radius).length <= 3)
           this.resource = Math.min(this.config.stats.maxResource, this.resource + cost);
-        if (this.power('gavel'))
+        if (this.power('gavel')) {
           this.area(
             this.x + Math.cos(angle) * 90,
             this.y + Math.sin(angle) * 90,
             radius,
-            skill,
-            this.power('gavel'),
+            { ...skill, multiplier: this.power('gavel') },
+            multiplier,
           );
+          for (const e of targets)
+            if (
+              !e.boss &&
+              Math.hypot(e.x - this.x - Math.cos(angle) * 90, e.y - this.y - Math.sin(angle) * 90) <
+                radius + e.radius
+            ) {
+              e.x += Math.cos(angle) * 45;
+              e.y += Math.sin(angle) * 45;
+            }
+        }
       }
       if (skill.effect === 'frenzy')
-        this.buffs.add('frenzy', '狂乱', 5, undefined, this.learned('frenzy_flurry') ? 10 : 5);
-      if (skill.effect === 'siphon')
-        this.hp = Math.min(
-          this.config.stats.hp,
-          this.hp +
-            this.config.stats.hp *
-              (this.learned('blood_drain') ? 0.04 * this.rankScale('blood_drain') : 0.02) *
-              (this.power('funerary_pick') ? 2 : 1),
+        this.buffs.add(
+          'frenzy',
+          '狂乱',
+          skill.duration,
+          undefined,
+          this.learned('frenzy_flurry') ? 10 : 5,
         );
       if (skill.effect === 'scythe' && this.power('corroded_fang'))
-        for (const e of targets)
-          if (e.poison > 0) this.hit(e, skill, e.poison * this.power('corroded_fang') * 0.4);
+        for (const e of this.enemies)
+          if (e.hp > 0 && e.poison > 0)
+            this.hit(
+              e,
+              e.poisonSkill,
+              e.poison * 0.4 * Math.max(1, e.poisonStacks) * this.power('corroded_fang'),
+              false,
+              true,
+            );
       return;
     }
     if (skill.effect === 'chain') {
       let previous = { x: this.x, y: this.y };
       for (const e of targets.slice(
         0,
-        4 + (this.power('serpent_spark') ? 2 : 0) + (this.learned('chain_lightning') ? 3 : 0),
+        3 + (this.power('serpent_spark') ? 2 : 0) + (this.learned('chain_lightning') ? 3 : 0),
       )) {
         this.vfx.lightning(previous.x, previous.y, e.x, e.y);
-        this.hit(e, skill, multiplier);
+        this.hit(e, skill, multiplier, true, false, cast);
         previous = e;
       }
       return;
@@ -1429,6 +1573,7 @@ export class GameEngine {
             ? this.power('ninth_satchel')
             : 1;
       this.projectile(skill, angle + (i - (count - 1) / 2) * 0.075, multiplier * extra, {
+        cast,
         homing: skill.effect === 'homing',
         pierce:
           skill.effect === 'boomerang' ||
@@ -1468,8 +1613,6 @@ export class GameEngine {
       skill.element = 'ice';
       skill.multiplier *= 1 + 0.1 * this.rankScale('frost_meteor');
     }
-    if (skill.id === 'death_scythe' && this.learned('poison_scythe'))
-      skill.multiplier *= 1 + 0.5 * this.rankScale('poison_scythe');
     return skill;
   }
   private rankScale(id: string) {
@@ -1487,25 +1630,39 @@ export class GameEngine {
       multiplier,
     });
   }
-  private area(x: number, y: number, radius: number, skill: SkillDef, multiplier = 1) {
+  private area(
+    x: number,
+    y: number,
+    radius: number,
+    skill: SkillDef,
+    multiplier = 1,
+    cast?: CastContext,
+  ) {
     for (const e of this.enemies)
       if (e.hp > 0 && Math.hypot(e.x - x, e.y - y) < radius + e.radius)
-        this.hit(e, skill, multiplier * (1 + this.config.stats.areaDamage));
+        this.hit(e, skill, multiplier * (1 + this.config.stats.areaDamage), true, false, cast);
   }
-  private hit(e: Enemy, skill: SkillDef | undefined, multiplier = 1, canProc = true, dot = false) {
+  private hit(
+    e: Enemy,
+    skill: SkillDef | undefined,
+    multiplier = 1,
+    canProc = true,
+    dot = false,
+    cast?: CastContext,
+    forceCrit = false,
+  ) {
     if (!skill || e.hp <= 0) return;
     skill = this.resolveSkill(skill);
     const stats = { ...this.config.stats, independent: [...this.config.stats.independent] };
     let chance = stats.critChance;
     if (this.buffs.has('berserker')) chance += 0.3;
-    if (skill.effect === 'hammer')
-      chance += (this.resource / Math.max(1, stats.maxResource)) * 0.25;
+    if (skill.effect === 'hammer') chance += Math.floor(this.resource / 5) * 0.01;
     if (this.learned('prodigy') && this.resource > stats.maxResource * 0.9) chance += 0.1;
     if (this.power('winterglass') && e.stun > 0) chance += this.power('winterglass');
     const crit =
       !dot &&
       (skill.effect !== 'thorns' || this.set('immortal_thorns', 4)) &&
-      (this.buffs.has('guaranteed_crit') || this.random() < chance);
+      (forceCrit || this.random() < chance);
     const independent: number[] = [];
     if (this.buffs.has('ultimate')) independent.push(this.ultimateBonus);
     if (this.buffs.has('power')) independent.push(2);
@@ -1556,7 +1713,7 @@ export class GameEngine {
       independent.push(this.power('grand_vizier'));
     if (this.power('deathwish') && this.buffs.has('archon'))
       independent.push(this.power('deathwish'));
-    if (this.power('serpent_spark') && skill.effect === 'chain')
+    if (this.power('serpent_spark') && skill.element === 'lightning')
       independent.push(this.power('serpent_spark'));
     if (this.power('jesseth') && skill.effect === 'summon') independent.push(this.power('jesseth'));
     if (this.power('nayr') && skill.element === 'poison') independent.push(this.power('nayr'));
@@ -1611,7 +1768,11 @@ export class GameEngine {
       crit,
       independent,
       vulnerability: e.vulnerability,
-      armor: (e.boss ? 35 : e.elite ? 20 : 5) + this.config.stage * 0.2,
+      armor:
+        ((e.boss ? 35 : e.elite ? 20 : 5) + this.config.stage * 0.2) *
+        (e.armorReduction && e.armorReduction.expires > this.elapsed
+          ? 1 - e.armorReduction.value
+          : 1),
     });
     if (e.shield > 0) {
       const absorbed = Math.min(e.shield, damage);
@@ -1633,13 +1794,19 @@ export class GameEngine {
       if (this.random() < 0.25) this.vfx.burst(e.x, e.y, ELEMENT_COLORS[skill.element], 5);
     }
     if (this.buffs.has('archon')) this.laserStacks++;
-    if (!dot && skill.kind === 'basic')
+    if (!dot && canProc && skill.kind === 'basic' && !cast?.resourceGranted) {
       this.resource = Math.min(
         stats.maxResource,
         this.resource +
-          (skill.id === 'explosive_arrow' ? 15 : skill.effect === 'bash' ? 18 : 12) +
+          (['explosive_arrow', 'magic_missile', 'bone_spike', 'flying_blade'].includes(skill.id)
+            ? 15
+            : skill.effect === 'bash'
+              ? 18
+              : 12) +
           (this.learned('prodigy') ? 8 * this.rankScale('prodigy') : 0),
       );
+      if (cast) cast.resourceGranted = true;
+    }
     if (skill.effect === 'rain' && this.set('stormcaller', 2))
       this.resource = Math.min(stats.maxResource, this.resource + 3);
     if (this.learned('bloodthirst') && skill.cost > 0 && !dot)
@@ -1652,9 +1819,12 @@ export class GameEngine {
     if (crit && this.learned('stormborn') && skill.element === 'lightning')
       this.resource = Math.min(stats.maxResource, this.resource + 8);
     if (skill.element === 'ice') {
-      e.slow = 3;
-      if (skill.id === 'meteor' && this.learned('frost_meteor')) e.stun = 2;
-      if (this.power('froststring') && e.stun > 0) e.stun = Math.max(e.stun, 3);
+      this.slowEnemy(
+        e,
+        skill.id === 'hunting_arrow' ? 0.3 : 0.4,
+        skill.id === 'hunting_arrow' || skill.id === 'elemental_arrow' ? 2 : 3,
+      );
+      if (skill.id === 'meteor' && this.learned('frost_meteor')) this.freeze(e, 2);
       if (this.set('frost_hunter', 2) && canProc) {
         this.vfx.ring(e.x, e.y, 0xa3def4, 40);
         for (const other of this.enemies)
@@ -1671,12 +1841,24 @@ export class GameEngine {
       e.bleedSkill = { ...skill, multiplier: this.power('lamentation') };
     }
     if (skill.element === 'poison' && !dot) {
-      e.poison = 4 + (this.power('nayr') ? 2 : 0);
-      e.poisonSkill = skill;
+      if (e.poison <= 0) e.poisonStacks = 0;
+      e.poison = (skill.effect === 'scythe' ? skill.duration : 4) + (this.power('nayr') ? 2 : 0);
+      e.poisonSkill =
+        skill.effect === 'scythe'
+          ? {
+              ...skill,
+              multiplier:
+                (0.35 / 0.4) *
+                this.rankScale(skill.id) *
+                (this.learned('poison_scythe') ? 1 + 0.5 * this.rankScale('poison_scythe') : 1),
+            }
+          : skill;
       e.poisonStacks = Math.min(5, e.poisonStacks + 1);
       if (e.poisonStacks === 5 && this.set('trang_oul', 4) && canProc) {
         e.poisonStacks = 0;
-        this.area(e.x, e.y, 95, { ...skill, element: 'physical' }, 2);
+        for (const other of this.enemies)
+          if (other.hp > 0 && Math.hypot(other.x - e.x, other.y - e.y) < 95 + other.radius)
+            this.hit(other, { ...skill, effect: 'plague_nova' }, 2, false);
         this.vfx.ring(e.x, e.y, 0xb9d97b, 95);
       }
     }
@@ -1773,8 +1955,12 @@ export class GameEngine {
       );
     if ((this.power('plaguebranch') || this.learned('poison_scythe')) && e.poison > 0)
       for (const n of this.enemies)
-        if (n.hp > 0 && Math.hypot(n.x - e.x, n.y - e.y) < 200) {
-          n.poison = 4;
+        if (
+          n.hp > 0 &&
+          Math.hypot(n.x - e.x, n.y - e.y) <
+            (this.learned('poison_scythe') ? this.skill('poison_scythe')!.radius : 200)
+        ) {
+          n.poison = Math.max(n.poison, e.poison);
           n.poisonSkill = e.poisonSkill;
           n.poisonStacks = Math.max(n.poisonStacks, 2);
           if (this.power('plaguebranch'))
@@ -1835,6 +2021,34 @@ export class GameEngine {
       this.finish(true);
     }
   }
+  private explode(
+    x: number,
+    y: number,
+    radius: number,
+    skill: SkillDef,
+    multiplier: number,
+    repeat = true,
+    cast?: CastContext,
+  ) {
+    if (skill.effect === 'nova')
+      for (const e of this.enemies)
+        if (e.hp > 0 && Math.hypot(e.x - x, e.y - y) < radius + e.radius)
+          this.freeze(e, skill.duration);
+    this.area(x, y, radius, skill, multiplier, cast);
+    this.vfx.burst(x, y, ELEMENT_COLORS[skill.element], 18, true);
+    this.vfx.ring(x, y, ELEMENT_COLORS[skill.element], radius);
+    if (repeat && ['orb', 'nova'].includes(skill.effect) && this.power('endless_depths'))
+      this.makeZone(
+        x,
+        y,
+        radius,
+        0.4,
+        skill,
+        multiplier * this.power('endless_depths'),
+        [0.2, 0.4],
+        cast,
+      );
+  }
   private makeZone(
     x: number,
     y: number,
@@ -1842,6 +2056,8 @@ export class GameEngine {
     life: number,
     skill: SkillDef,
     multiplier = 1,
+    pulseTimes?: number[],
+    cast?: CastContext,
   ) {
     if (this.zones.length > 35) return;
     const view = new Graphics();
@@ -1857,12 +2073,25 @@ export class GameEngine {
       view,
       pull: skill.effect === 'blackhole',
       multiplier,
+      pulseTimes,
+      cast,
     });
   }
   private updateZones(dt: number) {
     for (let i = this.zones.length - 1; i >= 0; i--) {
       const z = this.zones[i];
       z.age += dt;
+      if (z.pulseTimes) {
+        while (z.pulseTimes.length && z.age >= z.pulseTimes[0]) {
+          z.pulseTimes.shift();
+          this.explode(z.x, z.y, z.radius, z.skill, z.multiplier, false, z.cast);
+        }
+        if (!z.pulseTimes.length) {
+          z.view.destroy();
+          this.zones.splice(i, 1);
+        }
+        continue;
+      }
       if (
         z.skill.effect === 'vines' &&
         this.set('wild_vines', 2) &&
@@ -1900,13 +2129,19 @@ export class GameEngine {
           }
       if (z.tick <= 0) {
         z.tick = 0.4;
-        this.area(
-          z.x,
-          z.y,
-          z.radius,
-          z.skill,
-          (z.multiplier * 0.4) / (z.skill.effect === 'rain' ? z.life : 1),
-        );
+        if (z.skill.effect === 'caltrops') {
+          for (const e of this.enemies)
+            if (e.hp > 0 && Math.hypot(e.x - z.x, e.y - z.y) < z.radius + e.radius)
+              this.slowEnemy(e, 0.6, 3);
+        } else
+          this.area(
+            z.x,
+            z.y,
+            z.radius,
+            z.skill,
+            (z.multiplier * 0.4) /
+              (['rain', 'blackhole', 'vines'].includes(z.skill.effect) ? z.life : 1),
+          );
         if (z.skill.effect === 'rain') {
           for (let j = 0; j < 5; j++) {
             const px = z.x + (this.random() - 0.5) * z.radius,
@@ -2185,7 +2420,37 @@ export class GameEngine {
             this.vfx.ring(e.x, e.y, 0x96dce8, 20);
           }
     }
+    this.updateSummons(dt);
+  }
+  private reviveSummon(summon: CharacterRig) {
+    const state = this.summonStates.get(summon);
+    if (!state) return;
+    state.hp = state.maxHp;
+    state.reviveIn = 0;
+    summon.visible = true;
+    summon.alpha = 0.65;
+    const angle = (this.summons.indexOf(summon) / Math.max(1, this.summons.length)) * Math.PI * 2;
+    summon.x = this.x + Math.cos(angle) * 55;
+    summon.y = this.y + Math.sin(angle) * 40;
+    this.vfx.burst(summon.x, summon.y, 0xc5d8b1, 6);
+  }
+  private defeatSummon(summon: CharacterRig) {
+    const state = this.summonStates.get(summon);
+    if (!state) return;
+    state.hp = 0;
+    state.reviveIn = 3;
+    summon.visible = false;
+    if (this.set('rathma', 2)) this.reviveSummon(summon);
+  }
+  private updateSummons(dt: number) {
     this.summons.forEach((s, i) => {
+      const state = this.summonStates.get(s);
+      if (!state) return;
+      if (state.hp <= 0) {
+        state.reviveIn = Math.max(0, state.reviveIn - dt);
+        if (state.reviveIn === 0) this.reviveSummon(s);
+        else return;
+      }
       const a = this.elapsed * 0.4 + (i / this.summons.length) * Math.PI * 2;
       const target = this.enemies.find((e) => e.hp > 0 && this.distance(e) < 320);
       const warrior = i < 6 || i >= 10;
@@ -2204,12 +2469,19 @@ export class GameEngine {
   private createSummons() {
     const count = this.set('inarius', 2) ? 16 : 10;
     for (let i = 0; i < count; i++) {
-      const rig = new CharacterRig(i >= 6 && i < 10 ? 'sorcerer' : 'necromancer');
+      const rig = new CharacterRig(
+        i >= 6 && i < 10 ? 'sorcerer' : 'necromancer',
+        {},
+        { summon: true },
+      );
       rig.scale.set(0.45);
       rig.alpha = 0.65;
       rig.tint = i >= 6 && i < 10 ? 0xb4cdce : 0xc1c4aa;
       this.entityLayer.addChild(rig);
       this.summons.push(rig);
+      const maxHp = Math.max(1, this.config.stats.hp * 0.35);
+      this.summonStates.set(rig, { hp: maxHp, maxHp, reviveIn: 0 });
+      this.reviveSummon(rig);
     }
   }
   private createPylons() {
@@ -2338,6 +2610,7 @@ export class GameEngine {
         for (let i = 0; i < this.summons.length; i++) {
           const e = near[i % near.length];
           const summon = this.summons[i];
+          if ((this.summonStates.get(summon)?.hp ?? 0) <= 0) continue;
           if (i < 6 || i >= 10) {
             if (Math.hypot(e.x - summon.x, e.y - summon.y) > 80) continue;
             this.vfx.slash(
@@ -2352,8 +2625,8 @@ export class GameEngine {
           this.hit(e, s, 0.25 * (this.buffs.has('summon_fury') ? 2 : 1), false);
         }
     }
-    if (this.set('inarius', 2)) {
-      const s = this.skill('bone_spear');
+    if (this.set('inarius', 2) || this.buffs.has('army')) {
+      const s = this.skill(this.buffs.has('army') ? 'army_of_dead' : 'bone_spear');
       if (s) this.area(this.x, this.y, 150, s, 0.4);
       this.vfx.ring(this.x, this.y, 0xc5d7b1, 150);
     }

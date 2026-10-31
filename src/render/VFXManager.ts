@@ -1,4 +1,5 @@
-import { Container, Graphics } from 'pixi.js';
+import { Container, Graphics, Sprite } from 'pixi.js';
+import { getSkillTexture } from './SkillTextures';
 export const ELEMENT_COLORS: Record<string, number> = {
   physical: 0xe4d6ac,
   fire: 0xffa45c,
@@ -8,21 +9,33 @@ export const ELEMENT_COLORS: Record<string, number> = {
   poison: 0xaedb79,
 };
 interface Effect {
-  view: Graphics;
+  view: Container;
   age: number;
   life: number;
-  update: (view: Graphics, t: number) => void;
+  update: (t: number) => void;
 }
 export class VFXManager {
   private effects: Effect[] = [];
   constructor(private layer: Container) {}
-  private add(view: Graphics, life: number, update: Effect['update']) {
+  private add<T extends Container>(view: T, life: number, update: (view: T, t: number) => void) {
     if (this.effects.length > 180) {
       const first = this.effects.shift();
       first?.view.destroy();
     }
     this.layer.addChild(view);
-    this.effects.push({ view, age: 0, life, update });
+    this.effects.push({ view, age: 0, life, update: (t) => update(view, t) });
+  }
+  signature(id: string, x: number, y: number) {
+    const texture = getSkillTexture(id);
+    if (!texture) return;
+    const glyph = new Sprite(texture);
+    glyph.anchor.set(0.5);
+    glyph.position.set(x, y - 65);
+    glyph.width = glyph.height = 30;
+    this.add(glyph, 0.42, (view, t) => {
+      view.alpha = Math.sin(Math.PI * t) * 0.8;
+      view.y = y - 65 - t * 12;
+    });
   }
   burst(x: number, y: number, color: number, count = 10, large = false) {
     const g = new Graphics();
@@ -110,7 +123,7 @@ export class VFXManager {
       if (e.age >= e.life) {
         e.view.destroy();
         this.effects.splice(i, 1);
-      } else e.update(e.view, e.age / e.life);
+      } else e.update(e.age / e.life);
     }
   }
 }

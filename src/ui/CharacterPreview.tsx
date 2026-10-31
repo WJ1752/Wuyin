@@ -3,6 +3,7 @@ import { Application, Container } from 'pixi.js';
 import { Sword } from 'lucide-react';
 import type { ClassId, SaveData } from '../core/types';
 import { CharacterRig } from '../render/ProceduralRig';
+import { preloadCharacterTextures } from '../render/CharacterTextures';
 
 /** The inventory uses the same articulated model and gear appearance as combat. */
 export function CharacterPreview({
@@ -23,6 +24,9 @@ export function CharacterPreview({
     let initialized = false;
     void (async () => {
       try {
+        const items: SaveData['equipment'] = JSON.parse(appearance);
+        await preloadCharacterTextures(classId, items);
+        if (disposed) return;
         await app.init({
           width: 170,
           height: 220,
@@ -40,9 +44,9 @@ export function CharacterPreview({
         setFailed(false);
         element.appendChild(app.canvas);
         const container = new Container();
-        container.position.set(77, 151);
-        container.scale.set(2.15);
-        const rig = new CharacterRig(classId, JSON.parse(appearance));
+        container.position.set(85, 184);
+        container.scale.set(1.85);
+        const rig = new CharacterRig(classId, items);
         container.addChild(rig);
         app.stage.addChild(container);
         let time = 0;

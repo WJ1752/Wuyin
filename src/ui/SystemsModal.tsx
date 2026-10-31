@@ -42,6 +42,7 @@ import { formatBigNumber } from '../core/format';
 import './systems.css';
 import { audio } from '../audio/SynthAudio';
 import { CharacterPreview } from './CharacterPreview';
+import { ItemIcon, SkillIcon } from './AssetIcon';
 
 const icons: Record<Slot, typeof Sword> = {
   weapon: Sword,
@@ -129,7 +130,7 @@ function ItemTile({
         onBlur={() => setFocused(false)}
       >
         <span className="item-tile-art">
-          <EquipmentIcon slot={item.slot} size={32} />
+          <ItemIcon item={item} size={42} />
           {item.gem && <i style={{ color: GEMS.find((g) => g.id === item.gem!.id)?.color }}>◆</i>}
         </span>
         <span className="item-tile-name">{item.name}</span>
@@ -180,7 +181,10 @@ function ItemDetails({
       <span className="eyebrow">
         {RARITY_NAMES[item.rarity]} / {SLOT_NAMES[item.slot]}
       </span>
-      <h3>{item.name}</h3>
+      <div className="item-detail-heading">
+        <ItemIcon item={item} size={54} />
+        <h3>{item.name}</h3>
+      </div>
       <div className="item-base-stats">
         {item.attack > 0 && (
           <strong>
@@ -329,7 +333,11 @@ function CharacterPanel() {
                 onClick={() => setSelected(save.equipment[slot]?.id ?? '')}
                 title={SLOT_NAMES[slot]}
               >
-                <EquipmentIcon slot={slot} />
+                {save.equipment[slot] ? (
+                  <ItemIcon item={save.equipment[slot]!} size={34} />
+                ) : (
+                  <EquipmentIcon slot={slot} />
+                )}
                 <small>{SLOT_NAMES[slot]}</small>
                 {save.forge[slot] > 0 && <b>+{save.forge[slot]}</b>}
               </button>
@@ -499,15 +507,7 @@ function SkillsPanel() {
                     onClick={() => setSelected(n.id)}
                   >
                     <span className="skill-symbol">
-                      {n.kind === 'passive' ? (
-                        <Sparkles size={22} />
-                      ) : n.kind === 'defense' ? (
-                        <Shield size={22} />
-                      ) : n.kind === 'movement' ? (
-                        <Footprints size={22} />
-                      ) : (
-                        <Sword size={22} />
-                      )}
+                      <SkillIcon skillId={n.id} size={36} />
                     </span>
                     <strong>{n.name}</strong>
                     <small>
@@ -530,7 +530,10 @@ function SkillsPanel() {
             <span className="eyebrow">
               {node.element.toUpperCase()} / TIER {node.tier}
             </span>
-            <h3>{node.name}</h3>
+            <div className="item-detail-heading">
+              <SkillIcon skillId={node.id} size={42} />
+              <h3>{node.name}</h3>
+            </div>
             <p>{node.description}</p>
             <small className="muted">
               伤害倍率 ×{node.multiplier} · 消耗 {node.cost} · 冷却 {node.cooldown}s
@@ -569,7 +572,11 @@ function CubePanel() {
           return (
             <div className={`cube-slot ${def ? 'filled' : ''}`} key={slot}>
               <span className="cube-orbit">
-                <EquipmentIcon slot={slot === 'armor' ? 'chest' : slot} size={32} />
+                {def ? (
+                  <ItemIcon item={{ slot: def.slot, legendaryId: def.id }} size={42} />
+                ) : (
+                  <EquipmentIcon slot={slot === 'armor' ? 'chest' : slot} size={32} />
+                )}
               </span>
               <small>{slot === 'weapon' ? '武器' : slot === 'armor' ? '防具' : '首饰'}共鸣</small>
               <h3>{def?.name ?? '尚未唤醒'}</h3>
@@ -600,7 +607,7 @@ function CubePanel() {
               className={`relic-card ${save.extracted.includes(l.id) ? 'unlocked' : 'locked'}`}
             >
               <div className="relic-heading">
-                <EquipmentIcon slot={l.slot} />
+                <ItemIcon item={{ slot: l.slot, legendaryId: l.id }} size={36} />
                 <h4>{l.name}</h4>
                 {!save.extracted.includes(l.id) && <Lock size={14} />}
               </div>
