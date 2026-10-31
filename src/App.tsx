@@ -36,15 +36,25 @@ import {
 import { CLASSES } from './data/classes';
 import { SKILLS } from './data/skillTrees';
 import { STAGES } from './data/stages';
-import { getLootProfile, getProgressionMilestones } from './data/progression';
+import {
+  availableSkillPoints,
+  getLootProfile,
+  getProgressionMilestones,
+  skillLearningStatus,
+} from './data/progression';
 import { RARITY_COLORS, RARITY_NAMES } from './core/types';
 import type { Rarity } from './core/types';
 import { useGameStore, createCombatConfig } from './state/gameStore';
 import { useCloudStore } from './state/cloudStore';
 import { SystemsModal } from './ui/SystemsModal';
-import { HeroArt, TownScene } from './ui/SceneArt';
+import { HeroArt } from './ui/SceneArt';
+import { NpcHall } from './ui/NpcHall';
 import { VirtualJoystick } from './ui/VirtualJoystick';
 import { SkillIcon } from './ui/AssetIcon';
+import { AdventureGuide } from './ui/AdventureGuide';
+import { useDialog } from './ui/useDialog';
+import { SETS } from './data/sets';
+import { BUILD_GUIDES } from './data/buildGuides';
 import { GameEngine, getActiveSkills } from './engine/GameEngine';
 import type { CombatConfig, CombatSnapshot, RunResult } from './core/types';
 import { formatBigNumber, formatTime } from './core/format';
@@ -59,6 +69,7 @@ const NAV = [
   { id: 'forge', label: '余烬铁匠', sub: 'BLACKSMITH', icon: Hammer },
   { id: 'gamble', label: '米娅秘藏', sub: 'MYSTERIES', icon: Diamond },
   { id: 'pets', label: '契约伙伴', sub: 'COMPANIONS', icon: PawPrint },
+  { id: 'leaderboard', label: '职业榜单', sub: 'CLASS RANKINGS', icon: Crown },
 ];
 function App() {
   const { save, ready, notice, hydrate, setNotice, selectStage, updateSettings, completeRun } =
@@ -86,6 +97,31 @@ function App() {
   const stats = useGameStore.getState().getStats();
   const lootProfile = getLootProfile(save.selectedStage);
   const nextMilestone = getProgressionMilestones(save).find((milestone) => !milestone.claimed);
+  const rewardReady =
+    !!nextMilestone && (save.progression?.clearedStage ?? 0) >= nextMilestone.stage;
+  const activeSet = SETS.filter((set) => set.classId === save.classId)
+    .map((set) => ({
+      ...set,
+      count: Object.values(save.equipment).filter((item) => item?.setId === set.id).length,
+    }))
+    .sort((a, b) => b.count - a.count)[0];
+  const buildGuide = activeSet?.count >= 2 ? BUILD_GUIDES[activeSet.id] : undefined;
+  const points = availableSkillPoints(save);
+  const canLearn = SKILLS.some(
+    (skill) => skill.classId === save.classId && skillLearningStatus(save, skill).canLearn,
+  );
+  const movementLearned = SKILLS.some(
+    (skill) => skill.classId === save.classId && skill.kind === 'movement' && save.skills[skill.id],
+  );
+  const closeGuide = () => {
+    updateSettings({ tutorialSeen: true });
+    setShowGuide(false);
+  };
+  const returnToCamp = () => {
+    setResult(null);
+    leave();
+  };
+  const resultRef = useDialog(!!result, returnToCamp);
   useEffect(() => {
     void hydrate()
       .then(() => useCloudStore.getState().initialize())
@@ -111,21 +147,16 @@ function App() {
     };
   }, []);
   useEffect(() => {
-    const key = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        setPanel(null);
-        setShowGuide(false);
-      }
-    };
-    document.addEventListener('keydown', key);
-    return () => document.removeEventListener('keydown', key);
-  }, []);
+    if (ready && bootReady && !save.tutorialSeen && !labBackup && !config && !panel)
+      setShowGuide(true);
+  }, [ready, bootReady, save.tutorialSeen, labBackup, config, panel]);
   const open = (id: string) => {
     audio.play('click');
     setPanel(id);
   };
   const enter = (training = false) => {
-    if (useGameStore.getState().cloudTransition) {
+    const current = useGameStore.getState();
+    if (current.cloudTransition) {
       setNotice('正在切换云端档案，请稍候再开始远征。');
       return;
     }
@@ -134,7 +165,11 @@ function App() {
     audio.play('pylon');
     audio.setTrack('rift');
     setResult(null);
-    setConfig({ ...createCombatConfig(save, labBackup ? [] : account?.stash), training });
+    const currentAccount = current.accounts.find((entry) => entry.id === current.activeAccountId);
+    setConfig({
+      ...createCombatConfig(current.save, current.labBackup ? [] : currentAccount?.stash),
+      training,
+    });
   };
   const leave = () => {
     useGameStore.getState().setInCombat(false);
@@ -194,11 +229,19 @@ function App() {
               </span>
             </div>
             <div className="top-actions">
+              <button
+                className="icon-button guide-shortcut"
+                aria-label="新手教程与冒险指南"
+                onClick={() => setShowGuide(true)}
+              >
+                <BookOpen />
+              </button>
               <button className="text-button account-shortcut" onClick={() => open('accounts')}>
-                {account?.name ?? '本地账号'} · 角色
+                <span className="account-full-label">{account?.name ?? '本地账号'} · 角色</span>
+                <span className="account-compact-label">角色</span>
               </button>
               <button
-                className="icon-button"
+                className="icon-button mute-shortcut"
                 aria-label={save.muted ? '开启音效' : '静音'}
                 onClick={() => updateSettings({ muted: !save.muted })}
               >
@@ -265,63 +308,21 @@ function App() {
                 角色与装备 <ArrowRight size={15} />
               </button>
               <div className="sidebar-divider" />
-              <div
-                className="small-feature"
-                onClick={() => open('pets')}
-                role="button"
-                tabIndex={0}
-                onKeyDown={(e) => e.key === 'Enter' && open('pets')}
-              >
+              <button className="small-feature" onClick={() => open('pets')}>
                 <PawPrint />
                 <div>
                   <strong>契约之灵</strong>
                   <small>旅途漫长，幸有同伴</small>
                 </div>
                 <ChevronRight size={15} />
-              </div>
+              </button>
             </aside>
-            <section className="camp-panel">
-              <TownScene />
-              <div className="scene-shade" />
-              <div className="location-heading">
-                <div className="eyebrow">
-                  <span className="status-dot" /> SANCTUARY · 安全区域
-                </div>
-                <h1>守望者营地</h1>
-                <p>迷雾未散，篝火不熄。</p>
-              </div>
-              <button className="lab-shortcut" aria-label="流派实验室" onClick={() => open('lab')}>
-                <FlaskConical size={16} />
-                <span>流派实验室</span>
-                <ArrowRight size={14} />
-              </button>
-              <div className="scene-label portal-label">
-                <span className="floating-marker">
-                  <Compass size={20} />
-                </span>
-                <span>源初之门</span>
-                <small>THE PRIMORDIAL RIFT</small>
-              </div>
-              <button className="scene-hotspot forge-hotspot" onClick={() => open('forge')}>
-                <Hammer size={16} />
-                <span>余烬铁匠</span>
-              </button>
-              <button className="scene-hotspot cube-hotspot" onClick={() => open('cube')}>
-                <Hexagon size={16} />
-                <span>魔盒祭坛</span>
-              </button>
-              <button className="scene-hotspot gamble-hotspot" onClick={() => open('gamble')}>
-                <Diamond size={16} />
-                <span>米娅秘藏</span>
-              </button>
-              <div className="camp-bottom">
-                <span>
-                  <Moon size={14} /> 暮色纪元 · 第七日
-                </span>
-                <button className="text-button" onClick={() => enter(true)}>
-                  <Swords size={14} /> 训练木桩 <ArrowRight size={14} />
-                </button>
-              </div>
+            <section className="camp-panel hall-panel">
+              <NpcHall
+                onNavigate={open}
+                onTrain={() => enter(true)}
+                active={!panel && !showGuide}
+              />
             </section>
             <aside className="adventure-sidebar">
               <div className="eyebrow">YOUR NEXT CHAPTER</div>
@@ -426,6 +427,69 @@ function App() {
               </div>
             </aside>
           </main>
+          {buildGuide && (
+            <section className="current-build" aria-label="当前流派">
+              <div>
+                <span className="eyebrow">
+                  YOUR BUILD · {activeSet.count >= 4 ? '四件成型' : '二件共鸣'}
+                </span>
+                <strong>
+                  {activeSet.name} · {buildGuide.style}
+                </strong>
+              </div>
+              <p>
+                {buildGuide.range} · {activeSet.count >= 4 ? buildGuide.rotation : activeSet.two}
+              </p>
+              <button className="text-button" onClick={() => open('lab')}>
+                查看流派打法 <ArrowRight size={14} />
+              </button>
+            </section>
+          )}
+          <section className="camp-next-step" aria-label="冒险待办">
+            <div className="next-step-intro">
+              <Compass size={22} />
+              <div>
+                <span className="eyebrow">NEXT STEP</span>
+                <strong>
+                  {canLearn
+                    ? `有 ${points} 点可分配，先学习技能`
+                    : rewardReady
+                      ? '首通奖励已就绪'
+                      : save.inventory.length
+                        ? '整理战利品，再次出发'
+                        : '从第一场远征开始'}
+                </strong>
+              </div>
+            </div>
+            <div className="camp-tasks">
+              <button onClick={() => open('skills')}>
+                <BookOpen size={16} />
+                <span>
+                  技能之书<small>{points > 0 ? `${points} 点待分配` : '升级获得技能点'}</small>
+                </span>
+                {canLearn && <i className="status-dot" />}
+              </button>
+              <button onClick={() => open('character')}>
+                <Shield size={16} />
+                <span>
+                  角色装备<small>背包 {save.inventory.length} / 240</small>
+                </span>
+              </button>
+              <button onClick={() => open('journey')}>
+                <Compass size={16} />
+                <span>
+                  套装旅程
+                  <small>
+                    {rewardReady
+                      ? '可以领取奖励'
+                      : nextMilestone
+                        ? `下一目标 ${nextMilestone.stage} 层`
+                        : '查看掉落与共鸣'}
+                  </small>
+                </span>
+              </button>
+            </div>
+          </section>
           <nav className="bottom-nav" aria-label="营地功能">
             {NAV.map((n) => (
               <button key={n.id} onClick={() => open(n.id)}>
@@ -438,12 +502,38 @@ function App() {
               </button>
             ))}
           </nav>
+          <nav className="mobile-dock" aria-label="手机快捷操作">
+            <button onClick={() => open('character')}>
+              <Shield size={21} />
+              <span>装备</span>
+            </button>
+            <button onClick={() => open('skills')}>
+              <BookOpen size={21} />
+              <span>技能{canLearn && <i className="status-dot" />}</span>
+            </button>
+            <button
+              className="dock-expedition"
+              onClick={() => enter()}
+              disabled={useGameStore.getState().cloudTransition}
+            >
+              <Compass size={24} />
+              <span>出征 · {save.selectedStage} 层</span>
+            </button>
+            <button onClick={() => open('leaderboard')}>
+              <Crown size={21} />
+              <span>职业榜</span>
+            </button>
+            <button onClick={() => open('services')}>
+              <Package size={21} />
+              <span>更多</span>
+            </button>
+          </nav>
           <footer className="town-footer">
             <button className="text-button" onClick={() => open('accounts')}>
               <span className="status-dot" /> {cloudLabel}
             </button>
             <span>
-              WASD 移动 <i /> 1–6 施放技能 <i /> 空格 闪避
+              WASD 移动 <i /> 1–6 施放技能 <i /> {movementLearned ? '空格 位移' : 'Lv.3 学习位移'}
             </span>
             <span>
               雾隐编年史 <span className="gold">v1.0</span>
@@ -452,9 +542,9 @@ function App() {
         </>
       )}
       {config && <CombatView config={config} onLeave={leave} onFinish={finish} />}
-      <SystemsModal panel={panel} onClose={() => setPanel(null)} />
+      <SystemsModal panel={panel} onClose={() => setPanel(null)} onNavigate={setPanel} />
       {notice && (
-        <div className="toast" role="status">
+        <div className="toast" role={panel ? undefined : 'status'}>
           <Sparkles size={17} />
           <span>{notice}</span>
           <button aria-label="关闭提示" onClick={() => setNotice('')}>
@@ -463,72 +553,28 @@ function App() {
         </div>
       )}
       {showGuide && (
-        <div className="modal-backdrop" onClick={() => setShowGuide(false)}>
-          <section
-            className="modal guide-modal"
-            role="dialog"
-            aria-modal="true"
-            aria-label="冒险指南"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <header className="modal-header">
-              <div>
-                <span className="eyebrow">A WATCHER'S HANDBOOK</span>
-                <h2>迷雾中的第一步</h2>
-              </div>
-              <button className="icon-button" aria-label="关闭" onClick={() => setShowGuide(false)}>
-                <X />
-              </button>
-            </header>
-            <div className="modal-body">
-              <div className="guide-step">
-                <b>01</b>
-                <div>
-                  <h3>走位，就是你的武器</h3>
-                  <p>
-                    WASD、方向键或按住战场拖动移动。技能会自动攻击附近敌人，空格施放位移；技能栏可切换自动与手动。
-                  </p>
-                </div>
-              </div>
-              <div className="guide-step">
-                <b>02</b>
-                <div>
-                  <h3>收集力量，唤醒守关者</h3>
-                  <p>
-                    击败精英并拾取紫色进度球，进度达到 100% 后首领降临。远离红色预警，善用四种圣坛。
-                  </p>
-                </div>
-              </div>
-              <div className="guide-step">
-                <b>03</b>
-                <div>
-                  <h3>让装备改变你的战斗</h3>
-                  <p>
-                    普通难度收集稀有与史诗，困难追寻传奇，大师开始凑齐套装。2 件套初步共鸣，4
-                    件套改变流派玩法；旅程页面可选择目标套装。
-                  </p>
-                </div>
-              </div>
-              <div className="guide-step">
-                <b>04</b>
-                <div>
-                  <h3>每一次升级，都有新的选择</h3>
-                  <p>
-                    初始掌握一个基础技能，每升一级获得 2 点。Lv.3 学习位移，Lv.5 解锁核心技能，Lv.15
-                    开启终极技能；分支需要前置 2 级。技能之书会显示每个节点的学习条件。
-                  </p>
-                </div>
-              </div>
-              <button className="gold-button full-width" onClick={() => setShowGuide(false)}>
-                篝火之外，旅途开始 <ArrowRight size={16} />
-              </button>
-            </div>
-          </section>
-        </div>
+        <AdventureGuide
+          onClose={closeGuide}
+          onNavigate={(id) => {
+            closeGuide();
+            open(id);
+          }}
+          onTrain={() => {
+            closeGuide();
+            enter(true);
+          }}
+        />
       )}
       {result && (
         <div className="modal-backdrop result-backdrop">
-          <section className="result-card" role="dialog" aria-modal="true" aria-label="秘境结算">
+          <div
+            ref={resultRef}
+            className="result-card"
+            role="dialog"
+            aria-modal="true"
+            aria-label="秘境结算"
+            tabIndex={-1}
+          >
             <div className="result-crest">
               {result.won ? <Crown size={52} /> : <Skull size={52} />}
             </div>
@@ -553,16 +599,31 @@ function App() {
               战场掉落 {result.items.length} 件装备 · {formatBigNumber(result.gold)} 金币
             </p>
             <p className="run-progression-summary">{runSummary}</p>
-            <button
-              className="gold-button full-width"
-              onClick={() => {
-                setResult(null);
-                leave();
-              }}
-            >
-              返回守望者营地 <ArrowRight size={16} />
-            </button>
-          </section>
+            <div className="result-actions">
+              <button
+                className="gold-button full-width"
+                onClick={() => {
+                  if (result.won) selectStage(save.highestStage);
+                  enter(!!config?.training);
+                }}
+              >
+                {result.won ? `挑战第 ${save.highestStage} 层` : '再次挑战本层'}{' '}
+                <Swords size={16} />
+              </button>
+              <button
+                className="outline-button full-width"
+                onClick={() => {
+                  returnToCamp();
+                  open(result.won ? 'character' : 'skills');
+                }}
+              >
+                {result.won ? '回营整理装备' : '回营调整技能'} <ArrowRight size={16} />
+              </button>
+              <button className="ghost-button full-width" onClick={returnToCamp}>
+                返回守望者营地
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>
@@ -585,12 +646,38 @@ function CombatView({
   const [snapshot, setSnapshot] = useState<CombatSnapshot | null>(null);
   const [error, setError] = useState('');
   const [leaveDialog, setLeaveDialog] = useState(false);
+  const pauseBeforeLeave = useRef(false);
   const [auto, setAuto] = useState(config.autoSkills);
   const save = useGameStore((s) => s.save);
   const updateSettings = useGameStore((s) => s.updateSettings);
   const skills = getActiveSkills(config);
+  const movement = skills.find((skill) => skill.kind === 'movement');
+  const combatSet = SETS.filter((set) => set.classId === config.classId)
+    .map((set) => ({
+      ...set,
+      count: Object.values(config.equipment).filter((item) => item?.setId === set.id).length,
+    }))
+    .sort((a, b) => b.count - a.count)[0];
+  const combatGuide = combatSet?.count >= 2 ? BUILD_GUIDES[combatSet.id] : undefined;
+  const cancelLeave = () => {
+    setLeaveDialog(false);
+    engine.current?.setPaused(pauseBeforeLeave.current);
+  };
+  const askLeave = () => {
+    pauseBeforeLeave.current = snapshot?.paused ?? false;
+    engine.current?.setPaused(true);
+    setLeaveDialog(true);
+  };
+  const exitRef = useDialog(leaveDialog, cancelLeave);
+  const pausedRef = useDialog(!!snapshot?.paused && !leaveDialog && !error, () =>
+    engine.current?.setPaused(false),
+  );
   useEffect(() => {
     let cancelled = false;
+    setSnapshot(null);
+    setError('');
+    setLeaveDialog(false);
+    setAuto(config.autoSkills);
     const game = new GameEngine();
     engine.current = game;
     void game
@@ -622,19 +709,18 @@ function CombatView({
     const next = !(auto[id] ?? SKILLS.find((s) => s.id === id)?.kind !== 'movement');
     setAuto({ ...auto, [id]: next });
     engine.current?.setAuto(id, next);
+    const current = useGameStore.getState();
+    if (
+      (current.save.autoSkills[id] ??
+        SKILLS.find((skill) => skill.id === id)?.kind !== 'movement') !== next
+    )
+      current.toggleAuto(id);
   };
   return (
     <section className="combat-screen">
       <div className="combat-canvas" ref={host} />
       <div className="combat-top">
-        <button
-          className="icon-button"
-          aria-label="返回营地"
-          onClick={() => {
-            if (!snapshot?.paused) engine.current?.togglePause();
-            setLeaveDialog(true);
-          }}
-        >
+        <button className="icon-button" aria-label="返回营地" onClick={askLeave}>
           <ArrowLeft />
         </button>
         <div className="rift-progress">
@@ -687,6 +773,13 @@ function CombatView({
       <div className="combat-tools">
         <button
           className="icon-button"
+          aria-label="查看流派打法与操作"
+          onClick={() => engine.current?.setPaused(true)}
+        >
+          <BookOpen size={17} />
+        </button>
+        <button
+          className="icon-button"
           aria-label="切换横竖屏布局"
           onClick={() =>
             updateSettings({
@@ -729,25 +822,49 @@ function CombatView({
         <div className="skills-bar">
           {skills.map((s, i) => {
             const cd = snapshot?.cooldowns[s.id] ?? 0;
+            const cost = engine.current?.getSkillCost(s.id) ?? s.cost;
+            const lacksResource = (snapshot?.resource ?? config.stats.maxResource) < cost;
+            const unavailable =
+              !snapshot || snapshot.paused || snapshot.finished || cd > 0 || lacksResource;
+            const reason = !snapshot
+              ? '战场准备中'
+              : snapshot.paused
+                ? '战斗已暂停'
+                : snapshot.finished
+                  ? '本次战斗已结束'
+                  : cd > 0
+                    ? `冷却 ${cd.toFixed(1)} 秒`
+                    : lacksResource
+                      ? `资源不足，需要 ${Math.ceil(cost)} 点`
+                      : cost > 0
+                        ? `消耗 ${Math.ceil(cost)} 点资源`
+                        : '已就绪';
+            const automatic = auto[s.id] ?? s.kind !== 'movement';
             return (
               <div className={`combat-skill element-${s.element}`} key={s.id}>
                 <button
                   className="auto-toggle"
                   aria-label={`切换${s.name}自动施法`}
+                  aria-pressed={automatic}
+                  title={automatic ? '点击改为手动施放' : '点击启用自动施法'}
                   onClick={() => toggleAuto(s.id)}
                 >
-                  {(auto[s.id] ?? s.kind !== 'movement') ? 'AUTO' : '手动'}
+                  {automatic ? 'AUTO' : '手动'}
                 </button>
                 <button
                   className="skill-cast"
-                  title={s.description}
-                  aria-label={`施放${s.name}`}
+                  title={`${s.description}\n${reason}${s.kind === 'movement' ? ' · 空格' : ''}`}
+                  aria-label={`施放${s.name} · ${reason}`}
+                  disabled={unavailable}
                   onClick={() => engine.current?.cast(s.id)}
                 >
                   <span className="skill-symbol">
                     <SkillIcon skillId={s.id} size={38} />
                   </span>
                   {cd > 0 && <span className="cooldown-overlay">{cd.toFixed(1)}</span>}
+                  {!cd && lacksResource && (
+                    <span className="cooldown-overlay resource-warning">缺能</span>
+                  )}
                   <small className="keybind">{i + 1}</small>
                 </button>
                 <span className="skill-name">{s.name}</span>
@@ -780,15 +897,52 @@ function CombatView({
           <small>{CLASSES.find((c) => c.id === config.classId)?.resource}</small>
         </div>
       </div>
-      <VirtualJoystick onMove={(x, y) => engine.current?.setMovement(x, y)} />
-      <div className="combat-help">WASD / 拖动移动 · 空格闪避 · 自动施法 · 手柄左摇杆移动</div>
+      <VirtualJoystick
+        disabled={!snapshot || snapshot.paused || snapshot.finished || leaveDialog}
+        onMove={(x, y) => engine.current?.setMovement(x, y)}
+      />
+      <div className="combat-help">
+        WASD / 拖动移动 · {movement ? `空格 ${movement.name}` : 'Lv.3 回营学习位移'} · Esc 暂停
+      </div>
+      {config.training && !snapshot?.paused && (
+        <div className="training-hint">
+          训练不发放奖励 · 试着移动并切换 AUTO / 手动，左上角返回营地
+        </div>
+      )}
       {snapshot?.paused && !leaveDialog && (
-        <div className="paused-label">
+        <div
+          ref={pausedRef}
+          className="paused-label"
+          role="dialog"
+          aria-modal="true"
+          aria-label="战斗已暂停"
+          tabIndex={-1}
+        >
           <Moon />
           <h2>时间已静止</h2>
+          {combatGuide && (
+            <div className="paused-build-guide">
+              <strong>
+                {combatSet.name} · {combatSet.count >= 4 ? '四件' : '二件'} · {combatGuide.style}
+              </strong>
+              <p>{combatGuide.range}</p>
+              <p>{combatSet.count >= 4 ? combatGuide.rotation : combatSet.two}</p>
+              <small>
+                {combatSet.count >= 4 ? combatGuide.tip : '集齐并穿戴四件，解锁完整流派机制。'}
+              </small>
+            </div>
+          )}
           <button className="gold-button" onClick={() => engine.current?.togglePause()}>
             继续征途 <Play size={16} />
           </button>
+          <button className="outline-button" onClick={askLeave}>
+            返回营地 <ArrowLeft size={16} />
+          </button>
+          <p>
+            WASD / 方向键移动 · 1–6 施法
+            <br />
+            {movement ? `空格施放${movement.name}` : '位移需 Lv.3 在技能之书学习'} · Esc 继续
+          </p>
         </div>
       )}
       {error && (
@@ -802,18 +956,23 @@ function CombatView({
       )}
       {leaveDialog && (
         <div className="modal-backdrop">
-          <div className="card exit-card">
+          <div
+            ref={exitRef}
+            className="card exit-card"
+            role="dialog"
+            aria-modal="true"
+            aria-label="确认返回营地"
+            tabIndex={-1}
+          >
             <h2>返回营地</h2>
-            <p>本次未结算的战利品将留在迷雾中。</p>
+            <p>
+              {config.training
+                ? '训练不发放奖励，可以随时回营调整技能与装备。'
+                : '本次未结算的战利品将留在迷雾中。'}
+            </p>
             <div>
-              <button
-                className="ghost-button"
-                onClick={() => {
-                  setLeaveDialog(false);
-                  engine.current?.togglePause();
-                }}
-              >
-                继续战斗
+              <button className="ghost-button" onClick={cancelLeave}>
+                {pauseBeforeLeave.current ? '保持暂停' : '继续战斗'}
               </button>
               <button className="gold-button" onClick={onLeave}>
                 返回营地

@@ -1,0 +1,633 @@
+import { useEffect, useRef, useState } from 'react';
+import type { CSSProperties, PointerEvent } from 'react';
+import type { LobbyActivity, LobbyPlayer, LobbyResponse } from '../core/types';
+import { RARITY_COLORS, RARITY_NAMES, SLOT_NAMES } from '../core/types';
+import { CLASSES } from '../data/classes';
+import { clampHallPosition, HALL_NPCS } from '../data/npcHall';
+import type { HallNpc } from '../data/npcHall';
+import { NPC_ART } from '../data/npcVisuals';
+import { CHARACTER_ART } from '../render/CharacterTextures';
+import { apiRequest, useCloudStore } from '../state/cloudStore';
+import { useGameStore } from '../state/gameStore';
+import { formatBigNumber } from '../core/format';
+import {
+  BookOpen,
+  ChevronRight,
+  Compass,
+  Crown,
+  Diamond,
+  Hammer,
+  Hexagon,
+  Package,
+  PawPrint,
+  Swords,
+  X,
+} from './PixelIcons';
+import { HallScene } from './HallScene';
+import { VirtualJoystick } from './VirtualJoystick';
+import { useDialog } from './useDialog';
+import './npc-hall.css';
+
+const NPC_ICONS: Record<string, typeof Hammer> = {
+  forge: Hammer,
+  skills: BookOpen,
+  cube: Hexagon,
+  gamble: Diamond,
+  pets: PawPrint,
+  stash: Package,
+  leaderboard: Crown,
+};
+const ACTIVITIES: Record<string, string> = {
+  town: '营地休整',
+  forge: '锻造装备',
+  skills: '研习技能',
+  stash: '整理仓库',
+  cube: '魔盒共鸣',
+  pets: '照看伙伴',
+  gamble: '挑选秘藏',
+  rift: '准备远征',
+};
+const START = { x: 0.5, y: 0.73 };
+const INTERACTION_DISTANCE = 82;
+
+export function NpcHall({
+  onNavigate,
+  onTrain,
+  active,
+}: {
+  onNavigate: (panel: string) => void;
+  onTrain: () => void;
+  active: boolean;
+}) {
+  const save = useGameStore((state) => state.save);
+  const accounts = useGameStore((state) => state.accounts);
+  const activeAccountId = useGameStore((state) => state.activeAccountId);
+  const labBackup = useGameStore((state) => state.labBackup);
+  const userId = useCloudStore((state) => state.user?.id);
+  const cloudStatus = useCloudStore((state) => state.status);
+  const account = accounts.find((entry) => entry.id === activeAccountId);
+  const character = account?.characters.find((entry) => entry.id === account.activeCharacterId);
+  const board = useRef<HTMLDivElement>(null);
+  const [size, setSize] = useState({ width: 500, height: 460 });
+  const [position, setPosition] = useState(START);
+  const positionRef = useRef(START);
+  const [walking, setWalking] = useState(false);
+  const walkingRef = useRef(false);
+  const [facing, setFacing] = useState(1);
+  const [target, setTarget] = useState<{ x: number; y: number } | null>(null);
+  const targetRef = useRef(target);
+  const joystick = useRef({ x: 0, y: 0 });
+  const dragMove = useRef({ x: 0, y: 0 });
+  const drag = useRef<{ id: number; x: number; y: number; moved: boolean } | null>(null);
+  const keys = useRef(new Set<string>());
+  const [selectedNpcId, setSelectedNpcId] = useState<string | null>(null);
+  const [players, setPlayers] = useState<LobbyPlayer[]>([]);
+  const [onlineCount, setOnlineCount] = useState(0);
+  const [network, setNetwork] = useState<'connecting' | 'online' | 'offline'>('connecting');
+  const [publishError, setPublishError] = useState('');
+  const [inspectedPlayer, setInspectedPlayer] = useState<LobbyPlayer | null>(null);
+  const profileRef = useDialog(!!inspectedPlayer, () => setInspectedPlayer(null));
+  const activity = useRef<LobbyActivity>('town');
+  const navigate = useRef(onNavigate);
+  navigate.current = onNavigate;
+  targetRef.current = target;
+  const canPublish = cloudStatus === 'online' && !!userId && !labBackup;
+  const movingEnabled = active && !inspectedPlayer;
+  const distanceTo = (point: { x: number; y: number }) =>
+    Math.hypot((point.x - position.x) * size.width, (point.y - position.y) * size.height);
+  const nearest = [...HALL_NPCS].sort((a, b) => distanceTo(a) - distanceTo(b))[0];
+  const selectedNpc = HALL_NPCS.find((entry) => entry.id === selectedNpcId);
+  const interactionNpc =
+    selectedNpc && distanceTo(selectedNpc) <= INTERACTION_DISTANCE ? selectedNpc : nearest;
+  const inReach = distanceTo(interactionNpc) <= INTERACTION_DISTANCE;
+  const interaction = useRef<() => void>(() => {});
+  const otherPlayers = players.filter((player) => !player.isSelf);
+  const openService = (npc: HallNpc) => {
+    activity.current = ACTIVITIES[npc.panel] ? (npc.panel as LobbyActivity) : 'town';
+    setSelectedNpcId(npc.id);
+    setTarget(null);
+    navigate.current(npc.panel);
+  };
+  interaction.current = () => {
+    if (inReach) openService(interactionNpc);
+  };
+
+  useEffect(() => {
+    if (active) activity.current = 'town';
+  }, [active]);
+  useEffect(() => {
+    const element = board.current;
+    if (!element) return;
+    const resize = new ResizeObserver(() =>
+      setSize({ width: element.clientWidth, height: element.clientHeight }),
+    );
+    resize.observe(element);
+    return () => resize.disconnect();
+  }, []);
+
+  useEffect(() => {
+    let stopped = false;
+    setPublishError('');
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let lastHeartbeat = 0;
+    let published = false;
+    const leave = () => {
+      if (published && useCloudStore.getState().user?.id === userId)
+        void apiRequest('/lobby/leave', 'POST').catch(() => {});
+    };
+    const refresh = async () => {
+      try {
+        if (canPublish && !document.hidden && Date.now() - lastHeartbeat >= 3000) {
+          try {
+            await apiRequest('/lobby/heartbeat', 'POST', {
+              ...positionRef.current,
+              activity: activity.current,
+            });
+            published = true;
+            lastHeartbeat = Date.now();
+            if (!stopped) setPublishError('');
+          } catch {
+            if (!stopped) setPublishError('个人位置尚未同步，可重试登录与云存档同步。');
+          }
+        }
+        if (stopped) {
+          leave();
+          return;
+        }
+        const response = await apiRequest<LobbyResponse>('/lobby');
+        if (stopped) return;
+        if (!Array.isArray(response.players) || !Number.isFinite(response.onlineCount))
+          throw new Error('大厅数据暂不可用');
+        setPlayers(
+          response.players.filter(
+            (player) =>
+              CHARACTER_ART[player.classId] &&
+              Number.isFinite(player.x) &&
+              Number.isFinite(player.y),
+          ),
+        );
+        setOnlineCount(response.onlineCount);
+        setNetwork('online');
+      } catch {
+        if (!stopped) {
+          setPlayers([]);
+          setOnlineCount(0);
+          setNetwork('offline');
+        }
+      } finally {
+        if (!stopped) timer = setTimeout(refresh, document.hidden ? 15000 : 3000);
+      }
+    };
+    void refresh();
+    window.addEventListener('pagehide', leave);
+    return () => {
+      stopped = true;
+      clearTimeout(timer);
+      window.removeEventListener('pagehide', leave);
+      leave();
+    };
+  }, [canPublish, userId]);
+
+  useEffect(() => {
+    const reset = () => {
+      keys.current.clear();
+      joystick.current = { x: 0, y: 0 };
+      dragMove.current = { x: 0, y: 0 };
+      drag.current = null;
+      targetRef.current = null;
+      setTarget(null);
+      walkingRef.current = false;
+      setWalking(false);
+    };
+    if (!movingEnabled) {
+      reset();
+      return;
+    }
+    const keyDown = (event: KeyboardEvent) => {
+      const element = event.target as HTMLElement | null;
+      if (
+        event.defaultPrevented ||
+        event.ctrlKey ||
+        event.altKey ||
+        event.metaKey ||
+        event.isComposing ||
+        element?.closest?.(
+          'input,select,textarea,[contenteditable]:not([contenteditable="false"]),[role="dialog"]',
+        ) ||
+        document.querySelector('[role="dialog"][aria-modal="true"]')
+      )
+        return;
+      const key = event.key.toLowerCase();
+      if (['w', 'a', 's', 'd', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright'].includes(key)) {
+        event.preventDefault();
+        keys.current.add(key);
+        targetRef.current = null;
+        setTarget(null);
+      }
+      if (key === 'e' && !event.repeat) {
+        event.preventDefault();
+        interaction.current();
+      }
+    };
+    const keyUp = (event: KeyboardEvent) => keys.current.delete(event.key.toLowerCase());
+    const visibility = () => {
+      if (document.hidden) reset();
+    };
+    window.addEventListener('keydown', keyDown);
+    window.addEventListener('keyup', keyUp);
+    window.addEventListener('blur', reset);
+    document.addEventListener('visibilitychange', visibility);
+    let frame = 0;
+    let last = performance.now();
+    const tick = (now: number) => {
+      const dt = Math.min(0.05, (now - last) / 1000);
+      last = now;
+      if (!document.hidden) {
+        let x =
+          joystick.current.x +
+          dragMove.current.x +
+          (keys.current.has('d') || keys.current.has('arrowright') ? 1 : 0) -
+          (keys.current.has('a') || keys.current.has('arrowleft') ? 1 : 0);
+        let y =
+          joystick.current.y +
+          dragMove.current.y +
+          (keys.current.has('s') || keys.current.has('arrowdown') ? 1 : 0) -
+          (keys.current.has('w') || keys.current.has('arrowup') ? 1 : 0);
+        const width = board.current?.clientWidth || 500,
+          height = board.current?.clientHeight || 460;
+        const currentTarget = targetRef.current;
+        if (Math.hypot(x, y) < 0.05 && currentTarget) {
+          x = (currentTarget.x - positionRef.current.x) * width;
+          y = (currentTarget.y - positionRef.current.y) * height;
+          if (Math.hypot(x, y) < 4) {
+            x = 0;
+            y = 0;
+            targetRef.current = null;
+            setTarget(null);
+          }
+        } else if (Math.hypot(x, y) >= 0.05 && currentTarget) {
+          targetRef.current = null;
+          setTarget(null);
+        }
+        const length = Math.max(1, Math.hypot(x, y));
+        const isWalking = Math.hypot(x, y) > 0.05;
+        if (isWalking) {
+          const next = clampHallPosition(
+            positionRef.current.x + ((x / length) * 125 * dt) / width,
+            positionRef.current.y + ((y / length) * 125 * dt) / height,
+          );
+          positionRef.current = next;
+          setPosition(next);
+          if (Math.abs(x) > 0.05) setFacing(x < 0 ? -1 : 1);
+        }
+        if (walkingRef.current !== isWalking) {
+          walkingRef.current = isWalking;
+          setWalking(isWalking);
+        }
+      }
+      frame = requestAnimationFrame(tick);
+    };
+    frame = requestAnimationFrame(tick);
+    return () => {
+      cancelAnimationFrame(frame);
+      window.removeEventListener('keydown', keyDown);
+      window.removeEventListener('keyup', keyUp);
+      window.removeEventListener('blur', reset);
+      document.removeEventListener('visibilitychange', visibility);
+      reset();
+    };
+  }, [movingEnabled]);
+
+  const approach = (npc: HallNpc) => {
+    if (!movingEnabled) return;
+    setSelectedNpcId(npc.id);
+    setTarget(clampHallPosition(npc.x, npc.y + 0.09));
+  };
+  const stopPointer = (event: PointerEvent<HTMLDivElement>, cancelled = false) => {
+    const held = drag.current;
+    if (!held || held.id !== event.pointerId) return;
+    if (!held.moved && !cancelled) {
+      const rect = event.currentTarget.getBoundingClientRect();
+      setSelectedNpcId(null);
+      setTarget(
+        clampHallPosition(
+          (event.clientX - rect.left) / rect.width,
+          (event.clientY - rect.top) / rect.height,
+        ),
+      );
+    }
+    drag.current = null;
+    dragMove.current = { x: 0, y: 0 };
+    if (event.currentTarget.hasPointerCapture(event.pointerId))
+      event.currentTarget.releasePointerCapture(event.pointerId);
+  };
+  const status =
+    network === 'offline'
+      ? '大厅暂未连接'
+      : network === 'connecting'
+        ? '连接旅人大厅…'
+        : `大厅 ${onlineCount} 位在线旅人`;
+  return (
+    <section className="npc-hall" aria-label="守望者营地，可走动与NPC交互">
+      <header className="hall-header">
+        <div>
+          <span className="eyebrow">THE WATCHER'S HALL</span>
+          <h2>守望者营地</h2>
+        </div>
+        <span className={`hall-connection ${network}`} role="status">
+          <i />
+          {status}
+        </span>
+      </header>
+      <div className="hall-visitors" aria-label="大厅里的真实旅人">
+        {otherPlayers.length ? (
+          otherPlayers.map((player) => (
+            <button
+              key={player.id}
+              onClick={() => setInspectedPlayer(player)}
+              title={`查看${player.name}的装备与成就`}
+            >
+              <img src={CHARACTER_ART[player.classId].src} alt="" draggable={false} />
+              <span>{player.name}</span>
+              <small>Lv.{player.level}</small>
+            </button>
+          ))
+        ) : (
+          <span>
+            {network === 'offline'
+              ? '可继续走动与使用营地服务；连接恢复后显示其他旅人。'
+              : '暂时没有其他旅人，可以先去拜访营地居民。'}
+          </span>
+        )}
+      </div>
+      <div
+        ref={board}
+        className={`hall-map ${walking ? 'is-walking' : ''}`}
+        role="group"
+        aria-label="营地地图，WASD或方向键移动，点击地面前往，靠近居民后按E交互"
+        tabIndex={0}
+        onPointerDown={(event) => {
+          if (
+            !movingEnabled ||
+            event.button !== 0 ||
+            !event.isPrimary ||
+            drag.current ||
+            (event.target as HTMLElement).closest('button,.virtual-joystick')
+          )
+            return;
+          drag.current = { id: event.pointerId, x: event.clientX, y: event.clientY, moved: false };
+          event.currentTarget.setPointerCapture(event.pointerId);
+          event.currentTarget.focus({ preventScroll: true });
+        }}
+        onPointerMove={(event) => {
+          const held = drag.current;
+          if (!held || held.id !== event.pointerId) return;
+          const x = event.clientX - held.x,
+            y = event.clientY - held.y;
+          if (Math.hypot(x, y) > 6) {
+            held.moved = true;
+            setTarget(null);
+            setSelectedNpcId(null);
+            const length = Math.max(65, Math.hypot(x, y));
+            dragMove.current = { x: x / length, y: y / length };
+          }
+        }}
+        onPointerUp={(event) => stopPointer(event)}
+        onPointerCancel={(event) => stopPointer(event, true)}
+        onLostPointerCapture={(event) => stopPointer(event, true)}
+      >
+        <HallScene />
+        <div className="hall-ground-light" />
+        <div className="hall-portal-caption">
+          <Compass size={20} />
+          <span>
+            暮林驿站<small>每一次远征，都从相遇开始</small>
+          </span>
+        </div>
+        {HALL_NPCS.map((npc) => {
+          const Icon = NPC_ICONS[npc.panel];
+          const near = distanceTo(npc) <= INTERACTION_DISTANCE;
+          return (
+            <button
+              key={npc.id}
+              className={`hall-actor hall-npc npc-${npc.id} ${selectedNpcId === npc.id ? 'selected' : ''} ${near ? 'in-reach' : ''}`}
+              style={
+                {
+                  left: `${npc.x * 100}%`,
+                  top: `${npc.y * 100}%`,
+                  zIndex: Math.round(npc.y * 100),
+                  '--npc-color': npc.color,
+                } as CSSProperties
+              }
+              onClick={() => approach(npc)}
+              aria-label={`走近${npc.name}，${npc.service}`}
+              disabled={!movingEnabled}
+            >
+              <span className="hall-nameplate">
+                <Icon size={13} />
+                {npc.service}
+              </span>
+              <span className="hall-sprite">
+                <img
+                  src={NPC_ART[npc.id].src}
+                  alt={`${npc.name}，${NPC_ART[npc.id].description}`}
+                  draggable={false}
+                />
+              </span>
+              <span className="hall-actor-name">{npc.name}</span>
+            </button>
+          );
+        })}
+        {otherPlayers.map((player) => {
+          const location = clampHallPosition(player.x, player.y);
+          return (
+            <button
+              key={player.id}
+              className="hall-actor hall-player"
+              style={{
+                left: `${location.x * 100}%`,
+                top: `${location.y * 100}%`,
+                zIndex: Math.round(location.y * 100) + 1,
+              }}
+              onClick={() => setInspectedPlayer(player)}
+              aria-label={`查看在线旅人${player.name}的配装与成就`}
+            >
+              <span className="hall-nameplate">
+                {player.name} · Lv.{player.level}
+              </span>
+              <span className="hall-sprite">
+                <img src={CHARACTER_ART[player.classId].src} alt="" draggable={false} />
+              </span>
+              <span className="hall-actor-name">{ACTIVITIES[player.activity] ?? '营地休整'}</span>
+            </button>
+          );
+        })}
+        {target && (
+          <span
+            className="hall-destination"
+            style={{ left: `${target.x * 100}%`, top: `${target.y * 100}%` }}
+          >
+            ◇
+          </span>
+        )}
+        <div
+          className={`hall-actor hall-self ${walking ? 'walking' : ''}`}
+          style={
+            {
+              left: `${position.x * 100}%`,
+              top: `${position.y * 100}%`,
+              zIndex: Math.round(position.y * 100) + 2,
+              '--facing': facing,
+            } as CSSProperties
+          }
+          aria-label={`你的位置，${character?.name ?? CLASSES.find((hero) => hero.id === save.classId)?.name}`}
+        >
+          <span className="hall-nameplate">
+            {character?.name ?? '行者'}
+            <b>你</b>
+          </span>
+          <span className="hall-sprite">
+            <img src={CHARACTER_ART[save.classId].src} alt="你的营地角色" draggable={false} />
+          </span>
+          <span className="hall-self-ring" />
+        </div>
+        <div className="hall-touch-controls">
+          <VirtualJoystick
+            disabled={!movingEnabled}
+            onMove={(x, y) => {
+              joystick.current = { x, y };
+              if (Math.hypot(x, y) > 0.05) {
+                setTarget(null);
+                setSelectedNpcId(null);
+              }
+            }}
+          />
+          <button
+            className="hall-interact gold-button"
+            disabled={!movingEnabled || !inReach}
+            onClick={() => interaction.current()}
+          >
+            <span>
+              <small>
+                {inReach
+                  ? interactionNpc.name
+                  : selectedNpc
+                    ? `走近${selectedNpc.name}`
+                    : '靠近居民后互动'}
+              </small>
+              {inReach ? interactionNpc.service : '正在探索营地'}
+            </span>
+            <kbd>E</kbd>
+            <ChevronRight size={17} />
+          </button>
+        </div>
+      </div>
+      <div className="hall-dialogue" aria-live="polite">
+        <span>
+          {inReach
+            ? `「${interactionNpc.greeting}」`
+            : selectedNpc
+              ? `正在前往${selectedNpc.name}，靠近后点击右下角交互。`
+              : '点击地面前往 · 拖动 / 摇杆 / WASD 移动 · E 与附近居民互动'}
+        </span>
+      </div>
+      <footer className="hall-footer">
+        <button onClick={() => onNavigate('lab')}>
+          <Swords size={15} />
+          流派实验室
+        </button>
+        <button onClick={onTrain}>
+          <Compass size={15} />
+          训练走位
+        </button>
+        <button onClick={() => onNavigate('services')}>
+          <Package size={15} />
+          全部服务
+        </button>
+      </footer>
+      <p className="hall-network-note">
+        {publishError ||
+          (labBackup
+            ? '流派演武为独立体验，不会向大厅发布虚拟配装。'
+            : !canPublish
+              ? '访客可浏览大厅；登录云账号后，其他旅人才能看见你。'
+              : '同屏展示真实旅人；位置约每3秒同步，点击旅人查看配装与成就。')}
+      </p>
+      {inspectedPlayer && (
+        <div className="modal-backdrop">
+          <div
+            ref={profileRef}
+            className="modal hall-profile"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="hall-player-name"
+            tabIndex={-1}
+          >
+            <header className="modal-header">
+              <div>
+                <span className="eyebrow">FELLOW WATCHER</span>
+                <h2 id="hall-player-name">{inspectedPlayer.name}</h2>
+              </div>
+              <button
+                className="icon-button"
+                aria-label="关闭旅人档案"
+                onClick={() => setInspectedPlayer(null)}
+              >
+                <X />
+              </button>
+            </header>
+            <div className="modal-body">
+              <div className="hall-profile-hero">
+                <img src={CHARACTER_ART[inspectedPlayer.classId].src} alt="旅人职业角色" />
+                <div>
+                  <h3>
+                    {CLASSES.find((hero) => hero.id === inspectedPlayer.classId)?.name} · Lv.
+                    {inspectedPlayer.level}
+                  </h3>
+                  <p>
+                    {players.some((player) => player.id === inspectedPlayer.id)
+                      ? (ACTIVITIES[inspectedPlayer.activity] ?? '营地休整')
+                      : '旅人已离开大厅或连接暂不可用'}
+                  </p>
+                </div>
+              </div>
+              <div className="hall-profile-achievements">
+                <span>
+                  通关<b>{formatBigNumber(inspectedPlayer.achievements.clears)}次</b>
+                </span>
+                <span>
+                  最高首通<b>{inspectedPlayer.achievements.clearedStage}层</b>
+                </span>
+                <span>
+                  累计击败<b>{formatBigNumber(inspectedPlayer.achievements.kills)}</b>
+                </span>
+              </div>
+              <h3>当前云端配装</h3>
+              <div className="hall-profile-equipment">
+                {inspectedPlayer.equipment.length ? (
+                  inspectedPlayer.equipment.map((item) => (
+                    <article
+                      key={item.slot}
+                      style={{ '--item-color': RARITY_COLORS[item.rarity] } as CSSProperties}
+                    >
+                      <small>
+                        {SLOT_NAMES[item.slot]} · {RARITY_NAMES[item.rarity]}
+                      </small>
+                      <strong>{item.name}</strong>
+                      <span>Lv.{item.level}</span>
+                    </article>
+                  ))
+                ) : (
+                  <p className="muted">这位旅人尚未穿戴装备。</p>
+                )}
+              </div>
+              <p className="muted hall-profile-note">
+                营地提供在线同屏与档案查看；秘境仍为单人远征。
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+    </section>
+  );
+}

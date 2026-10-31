@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import type { ClassId } from '../core/types';
 import { CLASSES } from '../data/classes';
 import { MAX_CHARACTERS, useGameStore } from '../state/gameStore';
@@ -12,6 +12,8 @@ export function AccountPanel() {
   const [accountName, setAccountName] = useState('');
   const [characterName, setCharacterName] = useState('');
   const [classId, setClassId] = useState<ClassId>('ranger');
+  const nameInput = useRef<HTMLInputElement>(null);
+  const selectedClass = CLASSES.find((hero) => hero.id === classId)!;
   const locked = !!store.labBackup || store.inCombat || store.cloudTransition;
   return (
     <div className="account-panel">
@@ -114,10 +116,19 @@ export function AccountPanel() {
             );
           })}
           {Array.from({ length: MAX_CHARACTERS - account.characters.length }, (_, index) => (
-            <div className="account-character empty" key={`empty-${index}`}>
+            <button
+              type="button"
+              className="account-character empty"
+              disabled={locked}
+              key={`empty-${index}`}
+              onClick={() => {
+                nameInput.current?.scrollIntoView({ block: 'nearest' });
+                nameInput.current?.focus({ preventScroll: true });
+              }}
+            >
               <span>＋</span>
-              <small>空闲角色位</small>
-            </div>
+              <small>创建新角色</small>
+            </button>
           ))}
         </div>
       </section>
@@ -134,6 +145,7 @@ export function AccountPanel() {
           <label>
             角色名称
             <input
+              ref={nameInput}
               value={characterName}
               maxLength={24}
               required
@@ -166,6 +178,11 @@ export function AccountPanel() {
             {account.characters.length >= MAX_CHARACTERS ? '角色位已满' : '创建并进入'}
           </button>
         </div>
+        <p style={{ color: selectedClass.color }}>
+          {selectedClass.name} · {selectedClass.mainStat} · {selectedClass.resource}上限{' '}
+          {selectedClass.maxResource} · 基础生命 {selectedClass.hp}
+        </p>
+        <p className="muted">{selectedClass.lore}</p>
         <p className="muted">新角色从 Lv.1 开始，职业在创建时确定。同一职业也可以创建多个角色。</p>
       </form>
     </div>

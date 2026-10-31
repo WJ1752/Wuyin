@@ -4,7 +4,7 @@
 
 服务使用 Fastify、Node 内置 SQLite、HTTP-only 会话 Cookie 和同源 API。数据库保存注册账号、密码哈希、会话、账号角色与共享仓库的云端快照。前端生产文件也由同一个 Node 服务提供；Caddy 负责 HTTPS。
 
-这是服务器认证与云存档方案。战斗、掉落、经验和装备数值仍在客户端计算；服务端检查存档结构、容量、账号归属和版本冲突，无法证明客户端上传的合法数值来自真实战斗。这一版本不提供权威战斗、反作弊或可信竞技排行榜。
+这是服务器认证与云存档方案。战斗、掉落、经验和装备数值仍在客户端计算；服务端检查存档结构、容量、账号归属和版本冲突，无法证明客户端上传的合法数值来自真实战斗。大厅与在线职业榜使用已同步云档：身份由会话确定，战绩仍属于客户端结算记录，不能作为反作弊竞技认证。
 
 ## 本机开发
 
@@ -123,7 +123,7 @@ const destination = "/app/data/wuyin.sqlite";
 const staged = "/app/data/wuyin.restore.sqlite";
 const check = new DatabaseSync(source, {readOnly:true});
 if (check.prepare("PRAGMA quick_check").get().quick_check !== "ok") throw new Error("Invalid backup");
-if (check.prepare("PRAGMA user_version").get().user_version !== 1) throw new Error("Unsupported database version");
+if (![1, 2].includes(check.prepare("PRAGMA user_version").get().user_version)) throw new Error("Unsupported database version");
 check.prepare("SELECT token_hash FROM sessions LIMIT 0").all();
 check.close();
 copyFileSync(source, staged, constants.COPYFILE_EXCL);
@@ -177,3 +177,19 @@ docker compose logs --tail=100 app proxy
 已在 Node 22.18 上实测备份脚本：保持源数据库 WAL 打开且尚未检查点，备份成功读取全部已提交行；重复目标路径和源路径覆盖均被拒绝，源数据库保持可读。配置已与服务实际路由和启动参数交叉核对。
 
 当前工作环境未安装 Docker，未执行镜像构建、Compose 启动、ACME 签发或真实公网恢复演练。以上命令与配置已提供，部署机器仍应执行文档中的启动和恢复验收；本轮没有连接或修改远端服务器。
+
+
+## 多玩家大厅与职业榜（2026-11-01）
+
+同源服务新增以下接口，继续使用现有 Cookie、CSRF、来源检查与速率限制：
+
+| 接口 | 功能 |
+| --- | --- |
+| `GET /api/lobby` | 游客也可读取真实在线角色、归一化位置、公开装备与成就；最多返回100名 |
+| `POST /api/lobby/heartbeat` | 登录并同步云档后发送 `x`、`y`（0–1）与活动状态；角色身份从服务端存档取得 |
+| `POST /api/lobby/leave` | 当前登录会话离开大厅，断线45秒自动过期，退出登录级联清除 |
+| `GET /api/leaderboard?classId=ranger` | 读取指定职业前20名，支持 ranger/barbarian/sorcerer/necromancer/druid |
+
+在线榜每账号、每职业取已同步通关记录中的最佳一条；优先层数、其次用时。公开字段为角色昵称、职业、等级、成绩和套装名称，不包含登录账号名、用户ID或完整存档。排行榜展示客户端战绩，仍不提供权威战斗验证。
+
+数据库会由版本1自动升级到版本2，新增会话关联的 `lobby_presence` 表。升级前按上文备份；新旧备份均可恢复并由服务启动时迁移。保持单服务实例部署，角色移动使用短轮询，当前没有分区、组队副本或聊天服务。

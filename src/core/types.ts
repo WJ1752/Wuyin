@@ -278,6 +278,46 @@ export interface GameCallbacks {
   onFinish: (result: RunResult) => void;
   onSound: (name: string) => void;
 }
+
+export interface LeaderboardEntry {
+  rank: number;
+  name: string;
+  classId: ClassId;
+  level: number;
+  stage: number;
+  seconds: number;
+  kills: number;
+  date: number;
+  setName: string | null;
+}
+export interface LeaderboardResponse {
+  classId: ClassId;
+  entries: LeaderboardEntry[];
+  total: number;
+  source: 'cloud';
+  updatedAt: number;
+}
+export type LobbyActivity =
+  'town' | 'forge' | 'skills' | 'stash' | 'cube' | 'pets' | 'gamble' | 'rift';
+export interface LobbyPlayer {
+  id: string;
+  name: string;
+  classId: ClassId;
+  level: number;
+  x: number;
+  y: number;
+  activity: LobbyActivity;
+  updatedAt: number;
+  isSelf: boolean;
+  equipment: Pick<Item, 'slot' | 'name' | 'rarity' | 'level' | 'setId' | 'legendaryId'>[];
+  achievements: { clears: number; clearedStage: number; kills: number };
+}
+export interface LobbyResponse {
+  players: LobbyPlayer[];
+  onlineCount: number;
+  serverTime: number;
+  ttlMs: number;
+}
 export const SLOTS: Slot[] = [
   'weapon',
   'offhand',

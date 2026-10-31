@@ -110,6 +110,29 @@ test('manual skill settings and cooldowns prevent unwanted auto-casts', () => {
   assert.equal(selectAutoCast([hammer], { ...state, auto: { ancestor_hammer: false } }), undefined);
 });
 
+test('auto-cast uses the actual reduced skill cost while preserving resource limits', () => {
+  const meteor = SKILLS.find((skill) => skill.id === 'meteor')!;
+  const state = {
+    hpRatio: 1,
+    nearby: 1,
+    enemies: 1,
+    elite: true,
+    resource: meteor.cost / 2,
+    free: false,
+    cooldowns: {},
+    auto: {},
+  };
+  assert.equal(selectAutoCast([meteor], state), undefined);
+  assert.equal(
+    selectAutoCast([meteor], { ...state, costs: { meteor: meteor.cost / 2 } })?.id,
+    'meteor',
+  );
+  assert.equal(
+    selectAutoCast([meteor], { ...state, costs: { meteor: meteor.cost / 2 }, resource: 0 }),
+    undefined,
+  );
+});
+
 test('all legendary primal items retain their identity, max power and 130% affixes through save validation', () => {
   const save = newSave();
   for (const legendary of LEGENDARIES) {

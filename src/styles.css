@@ -1139,7 +1139,7 @@ small {
   color: #bfac7f;
 }
 .guide-modal {
-  max-width: 640px;
+  max-width: 680px;
 }
 .guide-step {
   display: flex;
@@ -2548,5 +2548,540 @@ small {
   }
   .cooldown-overlay {
     font-size: 13px;
+  }
+}
+
+/* Clear next actions and the same compact pixel panels across input modes. */
+.small-feature {
+  width: 100%;
+  text-align: left;
+}
+.guide-shortcut {
+  display: inline-flex !important;
+}
+.camp-next-step {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  padding: 16px 20px;
+  margin-top: 20px;
+  background: #1c3038;
+  border: 2px solid #52645b;
+  box-shadow: var(--pixel-bevel);
+}
+.next-step-intro {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 1;
+  min-width: 0;
+  color: var(--gold);
+}
+.next-step-intro strong {
+  display: block;
+  font-size: 13px;
+  margin-top: 4px;
+  color: #e9e2cd;
+}
+.camp-tasks {
+  display: flex;
+  gap: 10px;
+}
+.camp-tasks button {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border: 1px solid #647b6d;
+  background: #15252e;
+  padding: 10px 14px;
+  text-align: left;
+  font-size: 12px;
+  min-height: 48px;
+}
+.camp-tasks small {
+  display: block;
+  font-size: 10px;
+  color: #afc1b4;
+  margin-top: 4px;
+}
+.camp-tasks button:hover {
+  background: #2d4548;
+  border-color: var(--gold);
+}
+.guide-chapters {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+  padding: 16px 24px 0;
+}
+.guide-chapters button {
+  min-height: 44px;
+  border: 1px solid #52645b;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  font-size: 12px;
+  color: #b7c8bc;
+}
+.guide-chapters button.active {
+  background: #e3b96e18;
+  color: var(--gold);
+  border-color: var(--gold);
+}
+.guide-chapters b {
+  display: grid;
+  place-items: center;
+  font-family: var(--ui-mono);
+  font-weight: 400;
+}
+.guide-content {
+  min-height: 330px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+.guide-heading {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  color: var(--gold);
+}
+.guide-heading h3 {
+  margin: 6px 0 0;
+  font-size: 22px;
+}
+.guide-content > p,
+.guide-callout {
+  font-size: 13px;
+  line-height: 1.9;
+  color: #c0cec2;
+}
+.guide-controls {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  padding: 16px;
+  background: #111f29;
+  font-size: 12px;
+  color: #b8cabc;
+}
+kbd {
+  display: inline-block;
+  font-family: var(--ui-mono);
+  color: #f0d7a8;
+  padding: 3px 6px;
+  border: 1px solid #718275;
+  box-shadow: 0 2px 0 #080f18;
+  margin-right: 4px;
+}
+.guide-callout {
+  padding: 12px 16px;
+  background: #e3b96e0c;
+  border-left: 3px solid var(--gold);
+}
+.guide-milestones {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 12px;
+}
+.guide-milestones li {
+  display: flex;
+  gap: 14px;
+  font-size: 12px;
+  line-height: 1.8;
+}
+.guide-milestones b {
+  color: var(--gold);
+  min-width: 110px;
+  font-weight: 400;
+}
+.guide-milestones span {
+  color: #b9c9bc;
+}
+.guide-content > .outline-button {
+  margin-top: auto;
+  min-height: 44px;
+}
+.guide-footer {
+  border-top: 1px solid var(--line);
+  padding: 16px 24px;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+}
+.guide-footer button {
+  min-height: 44px;
+}
+.result-card {
+  max-height: calc(100dvh - 32px);
+  overflow-y: auto;
+}
+.result-actions {
+  display: grid;
+  gap: 10px;
+  margin-top: 22px;
+}
+.result-actions .gold-button {
+  margin-top: 0;
+}
+.result-actions button {
+  min-height: 44px;
+}
+.auto-toggle {
+  min-height: 28px;
+  border: 1px solid #789a9455;
+  font-size: 9px;
+  letter-spacing: 0;
+  background: #14242bd9;
+  margin-bottom: 4px;
+}
+.auto-toggle[aria-pressed='false'] {
+  color: #edc58e;
+  border-color: #c69b64;
+}
+.skill-cast:disabled {
+  opacity: 0.85;
+}
+.skill-cast:disabled .skill-symbol {
+  opacity: 0.6;
+}
+.resource-warning {
+  font-size: 12px;
+  color: #edba8a;
+}
+.training-hint {
+  position: absolute;
+  left: 50%;
+  top: 88px;
+  transform: translateX(-50%);
+  max-width: calc(100% - 120px);
+  padding: 8px 12px;
+  border: 1px solid #8ca18b77;
+  background: #12232ae8;
+  color: #c7d4bd;
+  font-size: 11px;
+  line-height: 1.8;
+  text-align: center;
+  pointer-events: none;
+}
+@media (max-width: 980px) {
+  .camp-next-step {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 14px;
+  }
+  .camp-tasks {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+  .camp-tasks button {
+    padding: 10px;
+    gap: 8px;
+  }
+}
+@media (max-width: 520px) {
+  .guide-chapters {
+    padding: 12px 14px 0;
+    gap: 4px;
+  }
+  .guide-chapters button {
+    font-size: 11px;
+    gap: 6px;
+  }
+  .guide-content {
+    padding: 18px 16px;
+    min-height: 0;
+    gap: 14px;
+  }
+  .guide-content > p,
+  .guide-callout {
+    font-size: 12px;
+  }
+  .guide-controls {
+    grid-template-columns: 1fr;
+    gap: 10px;
+    padding: 12px;
+  }
+  .guide-milestones li {
+    flex-direction: column;
+    gap: 2px;
+  }
+  .guide-footer {
+    padding: 12px 14px;
+    gap: 8px;
+  }
+  .guide-footer button {
+    font-size: 11px;
+    padding: 10px;
+  }
+  .camp-next-step {
+    padding: 14px 12px;
+  }
+  .camp-tasks {
+    gap: 6px;
+  }
+  .camp-tasks button {
+    flex-direction: column;
+    align-items: flex-start;
+    padding: 10px 8px;
+    font-size: 11px;
+  }
+  .camp-tasks small {
+    font-size: 9px;
+  }
+  .camp-tasks .status-dot {
+    display: none;
+  }
+  .topbar {
+    gap: 8px;
+  }
+  .top-actions {
+    gap: 2px;
+  }
+  .top-actions .icon-button {
+    width: 32px;
+    min-width: 32px;
+  }
+  .training-hint {
+    font-size: 10px;
+    top: 90px;
+    padding: 6px 8px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+}
+
+.account-compact-label {
+  display: none;
+}
+@media (max-width: 520px) {
+  .brand {
+    flex-shrink: 0;
+    gap: 6px;
+  }
+  .brand strong {
+    white-space: nowrap;
+    font-size: 21px;
+    letter-spacing: 2px;
+  }
+  .brand-sigil {
+    font-size: 26px;
+  }
+  .brand small {
+    display: none;
+  }
+  .account-full-label,
+  .top-actions .mute-shortcut {
+    display: none;
+  }
+  .account-compact-label {
+    display: inline;
+  }
+  .account-shortcut {
+    min-height: 40px;
+    white-space: nowrap;
+    padding: 0 4px;
+  }
+}
+
+.hall-panel {
+  min-height: 620px;
+}
+.bottom-nav {
+  grid-template-columns: repeat(8, minmax(0, 1fr));
+}
+.bottom-nav button {
+  min-width: 0;
+}
+.current-build {
+  display: flex;
+  gap: 18px;
+  align-items: center;
+  padding: 16px 20px;
+  margin-top: 20px;
+  border: 2px solid #727c5c;
+  background: #263a35;
+}
+.current-build strong {
+  display: block;
+  margin-top: 4px;
+  font-size: 14px;
+  color: #e5c380;
+}
+.current-build p {
+  flex: 1;
+  font-size: 12px;
+  line-height: 1.8;
+  color: #b9c9bc;
+}
+.mobile-dock {
+  display: none;
+}
+@media (max-width: 980px) {
+  .bottom-nav {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+  .current-build {
+    flex-wrap: wrap;
+  }
+}
+@media (max-width: 760px) {
+  .app:not(.in-combat) {
+    padding-bottom: calc(82px + env(safe-area-inset-bottom, 0px));
+  }
+  .mobile-dock {
+    display: grid;
+    position: fixed;
+    z-index: 30;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    grid-template-columns: 1fr 1fr 1.35fr 1fr 1fr;
+    background: #142630f5;
+    border-top: 3px solid #a3976d;
+    box-shadow: 0 -4px 0 #080f1877;
+    padding: 6px 8px calc(6px + env(safe-area-inset-bottom, 0px));
+    gap: 4px;
+  }
+  .mobile-dock button {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    min-height: 58px;
+    font-size: 11px;
+  }
+  .mobile-dock button span {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+  .mobile-dock .dock-expedition {
+    color: #161f25;
+    background: #dbb575;
+    border: 2px solid #f0d29a;
+    box-shadow: inset -2px -2px #997342;
+  }
+  .mobile-dock .status-dot {
+    width: 5px;
+    height: 5px;
+  }
+  .bottom-nav,
+  .town-layout > .character-sidebar {
+    display: none;
+  }
+  .town-layout {
+    grid-template-columns: 1fr;
+    gap: 14px;
+    padding-top: 12px;
+  }
+  .hall-panel {
+    min-height: 440px;
+    height: calc(100dvh - 164px);
+    grid-column: 1 / -1;
+  }
+  .adventure-sidebar {
+    grid-column: 1 / -1;
+  }
+  .adventure-sidebar > .eyebrow,
+  .adventure-sidebar > h2,
+  .adventure-sidebar > .intro-copy {
+    display: none;
+  }
+  .current-build {
+    padding: 14px;
+    gap: 12px;
+  }
+  .current-build p {
+    flex-basis: 100%;
+  }
+  .toast {
+    bottom: calc(90px + env(safe-area-inset-bottom, 0px));
+  }
+}
+@media (pointer: coarse) {
+  .icon-button {
+    min-width: 44px;
+    min-height: 44px;
+  }
+  .top-actions .icon-button {
+    min-width: 36px;
+    min-height: 44px;
+  }
+  .combat-top .icon-button,
+  .combat-tools .icon-button {
+    min-width: 44px;
+    min-height: 44px;
+  }
+  .combat-skill .auto-toggle {
+    min-height: 34px;
+  }
+  .combat-screen button {
+    touch-action: manipulation;
+  }
+}
+@media (max-height: 600px) and (orientation: landscape) {
+  .modal {
+    max-height: calc(100dvh - 16px);
+  }
+  .modal-header {
+    padding: 12px 18px;
+  }
+  .guide-chapters {
+    padding-top: 8px;
+  }
+  .guide-content {
+    min-height: 0;
+  }
+}
+
+.paused-label {
+  padding: 20px;
+  overflow-y: auto;
+}
+.paused-build-guide {
+  max-width: 500px;
+  padding: 16px;
+  border: 1px solid #8c9a72;
+  background: #152b32;
+}
+.paused-build-guide strong {
+  color: #e1bc7b;
+  font-size: 15px;
+}
+.paused-build-guide p {
+  color: #c7d2be;
+  font-size: 12px;
+  line-height: 1.8;
+  max-width: none;
+  margin-top: 8px;
+}
+.paused-build-guide small {
+  display: block;
+  margin-top: 8px;
+  font-size: 11px;
+  line-height: 1.8;
+  color: #a9b6a0;
+}
+@media (max-height: 600px) {
+  .paused-label {
+    justify-content: flex-start;
+    gap: 12px;
+  }
+  .paused-label h2 {
+    font-size: 22px;
+  }
+  .paused-build-guide {
+    padding: 10px;
   }
 }

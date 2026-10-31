@@ -1,5 +1,8 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { readFileSync } from 'node:fs';
+import { HALL_NPCS } from '../src/data/npcHall';
+import { NPC_ART } from '../src/data/npcVisuals';
 import { SKILLS } from '../src/data/skillTrees';
 import { LEGENDARIES } from '../src/data/legendaries';
 import { SETS } from '../src/data/sets';
@@ -18,6 +21,33 @@ import {
 // meet the requirement for individually recognizable equipment and skills.
 const geometry = (visual: AssetVisual) =>
   JSON.stringify(visual.layers.map(({ path, transform }) => ({ path, transform })));
+
+test('all seven hall residents resolve to self-contained SVGs with distinct body and tool geometry', () => {
+  assert.deepEqual(Object.keys(NPC_ART).sort(), HALL_NPCS.map((npc) => npc.id).sort());
+  const silhouettes = HALL_NPCS.map((npc) => {
+    const art = NPC_ART[npc.id];
+    assert.ok(art.description.length > 0);
+    const svg = readFileSync(
+      new URL(`../public/${art.src.replace(/^\.?\//, '')}`, import.meta.url),
+      'utf8',
+    );
+    assert.match(svg, /<svg\b[^>]*xmlns="http:\/\/www\.w3\.org\/2000\/svg"/);
+    assert.match(svg, /viewBox="0 0 64 80"/);
+    assert.match(svg, /<\/svg>\s*$/);
+    assert.ok(
+      !/<(?:image|text|script)\b|href=/i.test(svg),
+      `${npc.id} must not depend on external art`,
+    );
+    return [...svg.matchAll(/<(?:path|rect|circle|polygon|ellipse)\b[^>]*>/g)]
+      .map(([shape]) => shape.replace(/\s(?:fill|stroke|opacity|id)="[^"]*"/g, ''))
+      .join('');
+  });
+  assert.equal(
+    new Set(silhouettes).size,
+    HALL_NPCS.length,
+    'NPCs must differ in geometry, not just color',
+  );
+});
 
 test('every skill has distinct authored geometry and a self-contained combat SVG', () => {
   assert.deepEqual(Object.keys(SKILL_VISUALS).sort(), SKILLS.map((skill) => skill.id).sort());

@@ -7,6 +7,7 @@ export function selectAutoCast(
     enemies: number;
     elite: boolean;
     resource: number;
+    costs?: Record<string, number>;
     free: boolean;
     cooldowns: Record<string, number>;
     auto: Record<string, boolean>;
@@ -19,7 +20,7 @@ export function selectAutoCast(
       state.auto[s.id] !== false &&
       (state.auto[s.id] === true || s.kind !== 'movement') &&
       !state.cooldowns[s.id] &&
-      (state.free || s.cost <= state.resource),
+      (state.free || (state.costs?.[s.id] ?? s.cost) <= state.resource),
   );
   const priority = (s: SkillDef) =>
     s.id === state.focus

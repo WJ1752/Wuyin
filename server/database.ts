@@ -8,7 +8,7 @@ export function openDatabase(path: string) {
   const db = new DatabaseSync(path);
   db.exec('PRAGMA foreign_keys = ON; PRAGMA journal_mode = WAL; PRAGMA busy_timeout = 5000;');
   const version = db.prepare('PRAGMA user_version').get()?.user_version;
-  if (version !== 0 && version !== 1) {
+  if (version !== 0 && version !== 1 && version !== 2) {
     db.close();
     throw new Error('数据库版本不受支持，请使用匹配的服务器版本。');
   }
@@ -37,7 +37,16 @@ export function openDatabase(path: string) {
       key TEXT PRIMARY KEY,
       value TEXT NOT NULL
     ) STRICT;
-    PRAGMA user_version = 1;
+    CREATE TABLE IF NOT EXISTS lobby_presence (
+      user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+      session_hash TEXT NOT NULL REFERENCES sessions(token_hash) ON DELETE CASCADE,
+      x REAL NOT NULL CHECK(x >= 0 AND x <= 1),
+      y REAL NOT NULL CHECK(y >= 0 AND y <= 1),
+      activity TEXT NOT NULL,
+      updated_at INTEGER NOT NULL
+    ) STRICT;
+    CREATE INDEX IF NOT EXISTS lobby_expiry ON lobby_presence(updated_at);
+    PRAGMA user_version = 2;
     COMMIT;
   `);
   db.prepare('INSERT OR IGNORE INTO metadata(key, value) VALUES (?, ?)').run(

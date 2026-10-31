@@ -29,8 +29,9 @@ import {
   Volume2,
   Package,
   ChevronRight,
+  Compass,
 } from './PixelIcons';
-import type { Item, Slot, Stats } from '../core/types';
+import type { ClassId, Item, LeaderboardResponse, RunRecord, Slot, Stats } from '../core/types';
 import { RARITY_COLORS, RARITY_NAMES, SLOTS, SLOT_NAMES } from '../core/types';
 import { CLASSES } from '../data/classes';
 import { SKILLS } from '../data/skillTrees';
@@ -53,6 +54,9 @@ import { CharacterPreview } from './CharacterPreview';
 import { ItemIcon, SkillIcon } from './AssetIcon';
 import { JourneyPanel, LootChances } from './JourneyPanel';
 import { skillLearningStatus, skillUnlockLevel } from '../data/progression';
+import { BUILD_GUIDES } from '../data/buildGuides';
+import { useDialog } from './useDialog';
+import { apiRequest } from '../state/cloudStore';
 
 const icons: Record<Slot, typeof Sword> = {
   weapon: Sword,
@@ -65,6 +69,7 @@ const icons: Record<Slot, typeof Sword> = {
   jewelry: Gem,
 };
 const TITLES: Record<string, [string, string, typeof Sword]> = {
+  services: ['营地服务', 'CAMP SERVICES', Compass],
   accounts: ['旅人名册', 'ACCOUNTS & CHARACTERS', BookOpen],
   stash: ['账号共享仓库', 'SHARED STASH', Package],
   character: ['行者档案', 'CHARACTER & INVENTORY', Sword],
@@ -74,6 +79,7 @@ const TITLES: Record<string, [string, string, typeof Sword]> = {
   gamble: ['米娅的秘藏', 'FORTUNE FAVORS THE BOLD', Dices],
   forge: ['余烬铁砧', 'THE EMBER FORGE', Hammer],
   pets: ['守望契约', 'COMPANIONS & SEASON', PawPrint],
+  leaderboard: ['职业远征榜', 'CLASS LEADERBOARDS', Crown],
   settings: ['远征设置', 'SETTINGS & CHRONICLE', Settings],
   lab: ['秘境演武场', 'THE BUILD LABORATORY', FlaskConical],
 };
@@ -96,6 +102,70 @@ function affixLabel(id: string, value: number) {
   const d = AFFIXES.find((a) => a.id === id);
   return `${d?.name ?? id} +${d?.unit === '%' ? (value * 100).toFixed(1) : Math.round(value)}${d?.unit ?? ''}`;
 }
+function itemClass(item: Item) {
+  return (
+    SETS.find((set) => set.id === item.setId)?.classId ??
+    LEGENDARIES.find((legendary) => legendary.id === item.legendaryId)?.classId
+  );
+}
+function SalvageButton({ item }: { item: Item }) {
+  const salvage = useGameStore((state) => state.salvage);
+  const [confirm, setConfirm] = useState(false);
+  const precious = ['legendary', 'set', 'primal'].includes(item.rarity);
+  return (
+    <div className="salvage-action">
+      {confirm && <p className="negative">将永久分解「{item.name}」，宝石无损返还。</p>}
+      <div className="button-row">
+        <button
+          className={confirm ? 'danger-button' : 'ghost-button'}
+          onClick={() => {
+            if (precious && !confirm) setConfirm(true);
+            else salvage(item.id);
+          }}
+        >
+          {confirm ? '确认分解' : `分解 · ${precious ? '12 结晶 / 2 魂' : '4 结晶'}`}
+        </button>
+        {confirm && (
+          <button className="ghost-button" onClick={() => setConfirm(false)}>
+            保留装备
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+function ExtractButton({ item }: { item: Item }) {
+  const { save, extract } = useGameStore();
+  const [confirm, setConfirm] = useState(false);
+  const collected = save.extracted.includes(item.legendaryId!);
+  const affordable = save.crystals >= 15 && save.souls >= 1;
+  return (
+    <div>
+      {confirm && <p className="negative">将消耗这件装备，永久解锁其满值共鸣；宝石返还。</p>}
+      <div className="button-row">
+        <button
+          className="gold-button"
+          disabled={collected || !affordable}
+          data-sound="arcane"
+          onClick={() => (confirm ? extract(item.id) : setConfirm(true))}
+        >
+          {collected
+            ? '已收录'
+            : !affordable
+              ? '材料不足 · 15 结晶 + 1 魂'
+              : confirm
+                ? '确认消耗装备并萃取'
+                : '萃取 · 15 结晶 + 1 魂'}
+        </button>
+        {confirm && (
+          <button className="ghost-button" onClick={() => setConfirm(false)}>
+            保留装备
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
 function ItemTile({
   item,
   onClick,
@@ -112,8 +182,7 @@ function ItemTile({
   const button = useRef<HTMLButtonElement>(null);
   const tooltipId = useId();
   const show = hovered || focused;
-  const compare =
-    equipped && JSON.stringify(equipped) !== JSON.stringify(item) ? equipped : undefined;
+  const compare = equipped && equipped.id !== item.id ? equipped : undefined;
   const placeTooltip = () => {
     const rect = button.current?.getBoundingClientRect();
     if (!rect) return;
@@ -130,6 +199,7 @@ function ItemTile({
         className={`item-card rarity-${item.rarity} ${selected ? 'selected' : ''}`}
         style={{ '--rarity': RARITY_COLORS[item.rarity] } as CSSProperties}
         onClick={onClick}
+        aria-pressed={onClick ? selected : undefined}
         aria-describedby={show ? tooltipId : undefined}
         onMouseEnter={() => {
           placeTooltip();
@@ -337,11 +407,33 @@ function CharacterPanel() {
   const { save } = store;
   const [selected, setSelected] = useState<string>('');
   const [filter, setFilter] = useState('all');
+  const [slotFilter, setSlotFilter] = useState('all');
+  const [search, setSearch] = useState('');
+  const [usableOnly, setUsableOnly] = useState(false);
   const [showStats, setShowStats] = useState(false);
+  const detail = useRef<HTMLDivElement>(null);
+  const selectItem = (id: string) => {
+    setSelected(id);
+    requestAnimationFrame(() => detail.current?.scrollIntoView({ block: 'nearest' }));
+  };
   const item = [...save.inventory, ...Object.values(save.equipment)].find(
     (i) => i?.id === selected,
   );
   const equipped = item && save.equipment[item.slot]?.id === item.id;
+  const usable = !item || !itemClass(item) || itemClass(item) === save.classId;
+  const stash = store.accounts.find((account) => account.id === store.activeAccountId)?.stash ?? [];
+  const visibleItems = save.inventory.filter(
+    (entry) =>
+      (filter === 'all' ||
+        (filter === 'set'
+          ? !!entry.setId
+          : filter === 'legendary'
+            ? !!entry.legendaryId
+            : entry.rarity === filter)) &&
+      (slotFilter === 'all' || entry.slot === slotFilter) &&
+      (!usableOnly || !itemClass(entry) || itemClass(entry) === save.classId) &&
+      entry.name.includes(search.trim()),
+  );
   const hero = CLASSES.find((c) => c.id === save.classId)!;
   const stats = computeStats(save);
   return (
@@ -362,7 +454,7 @@ function CharacterPanel() {
                     ? RARITY_COLORS[save.equipment[slot]!.rarity]
                     : undefined,
                 }}
-                onClick={() => setSelected(save.equipment[slot]?.id ?? '')}
+                onClick={() => selectItem(save.equipment[slot]?.id ?? '')}
                 title={SLOT_NAMES[slot]}
               >
                 {save.equipment[slot] ? (
@@ -401,7 +493,11 @@ function CharacterPanel() {
             </span>
           </div>
         </div>
-        <button className="ghost-button wide" onClick={() => setShowStats(!showStats)}>
+        <button
+          className="ghost-button wide"
+          aria-expanded={showStats}
+          onClick={() => setShowStats(!showStats)}
+        >
           {showStats ? '收起' : '查看'}完整属性面板 <ChevronRight size={14} />
         </button>
         {showStats && (
@@ -423,43 +519,77 @@ function CharacterPanel() {
           </div>
         )}
         {item && (
-          <ItemDetails item={item} compare={equipped ? undefined : save.equipment[item.slot]}>
-            <div className="button-row">
-              <button
-                className="gold-button"
-                data-sound="equip"
-                onClick={() => (equipped ? store.unequip(item.slot) : store.equip(item.id))}
-              >
-                {equipped ? '卸下装备' : '穿戴装备'}
-              </button>
-              {!equipped && (
+          <div ref={detail}>
+            <ItemDetails item={item} compare={equipped ? undefined : save.equipment[item.slot]}>
+              <div className="button-row">
                 <button
-                  className="ghost-button"
-                  disabled={!!store.labBackup}
-                  onClick={() => store.depositItem(item.id)}
+                  className="gold-button"
+                  data-sound="equip"
+                  disabled={!usable || (equipped && save.inventory.length >= MAX_INVENTORY)}
+                  onClick={() => (equipped ? store.unequip(item.slot) : store.equip(item.id))}
                 >
-                  存入共享仓库
+                  {!usable
+                    ? '其他职业专属'
+                    : equipped
+                      ? save.inventory.length >= MAX_INVENTORY
+                        ? '背包已满'
+                        : '卸下装备'
+                      : '穿戴装备'}
                 </button>
-              )}
-              {!equipped && (
-                <button
-                  className="ghost-button"
-                  onClick={() => {
-                    store.salvage(item.id);
-                    setSelected('');
-                  }}
-                >
-                  分解
-                </button>
-              )}
-            </div>
-          </ItemDetails>
+                {!equipped && (
+                  <button
+                    className="ghost-button"
+                    disabled={!!store.labBackup || stash.length >= MAX_STASH}
+                    onClick={() => store.depositItem(item.id)}
+                  >
+                    {store.labBackup
+                      ? '演武期间不可存入'
+                      : stash.length >= MAX_STASH
+                        ? '共享仓库已满'
+                        : '存入共享仓库'}
+                  </button>
+                )}
+              </div>
+              {!equipped && <SalvageButton key={item.id} item={item} />}
+            </ItemDetails>
+          </div>
         )}
       </section>
       <section>
         <div className="section-heading">
           <h3>行囊</h3>
-          <span>{save.inventory.length} / 240</span>
+          <span>
+            {save.inventory.length} / {MAX_INVENTORY} · 空余 {MAX_INVENTORY - save.inventory.length}
+          </span>
+        </div>
+        <div className="inventory-filters">
+          <input
+            aria-label="搜索背包装备"
+            placeholder="搜索装备名称"
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+          />
+          <select
+            aria-label="筛选装备部位"
+            className="system-select"
+            value={slotFilter}
+            onChange={(event) => setSlotFilter(event.target.value)}
+          >
+            <option value="all">全部部位</option>
+            {SLOTS.map((slot) => (
+              <option key={slot} value={slot}>
+                {SLOT_NAMES[slot]}
+              </option>
+            ))}
+          </select>
+          <label>
+            <input
+              type="checkbox"
+              checked={usableOnly}
+              onChange={(event) => setUsableOnly(event.target.checked)}
+            />
+            只看本职业可用
+          </label>
         </div>
         <div className="panel-tabs compact">
           <button className={filter === 'all' ? 'active' : ''} onClick={() => setFilter('all')}>
@@ -482,18 +612,19 @@ function CharacterPanel() {
           </button>
         </div>
         <div className="item-grid">
-          {save.inventory
-            .filter((i) => filter === 'all' || (filter === 'set' ? !!i.setId : i.rarity === filter))
-            .map((i) => (
-              <ItemTile
-                key={i.id}
-                item={i}
-                selected={i.id === selected}
-                onClick={() => setSelected(i.id)}
-              />
-            ))}
+          {visibleItems.map((i) => (
+            <ItemTile
+              key={i.id}
+              item={i}
+              selected={i.id === selected}
+              onClick={() => selectItem(i.id)}
+            />
+          ))}
         </div>
         {save.inventory.length === 0 && <Empty>行囊空空。秘境深处，遗物正等待重见天日。</Empty>}
+        {save.inventory.length > 0 && !visibleItems.length && (
+          <Empty>没有符合条件的装备，试试切换品质或清空筛选。</Empty>
+        )}
         <p className="muted system-hint">
           选择装备查看数值与已穿戴装备的对比。背包上限 240，溢出掉落将转为锻造材料。
         </p>
@@ -507,19 +638,21 @@ function StashPanel() {
   const account = store.accounts.find((entry) => entry.id === store.activeAccountId)!;
   const [selected, setSelected] = useState('');
   const [filter, setFilter] = useState('all');
-  const locked = !!store.labBackup || store.inCombat;
+  const detail = useRef<HTMLDivElement>(null);
+  const selectItem = (id: string) => {
+    setSelected(id);
+    requestAnimationFrame(() => detail.current?.scrollIntoView({ block: 'nearest' }));
+  };
+  const locked = !!store.labBackup || store.inCombat || store.cloudTransition;
   const inStash = account.stash.some((item) => item.id === selected);
   const item = [...account.stash, ...store.save.inventory].find((entry) => entry.id === selected);
-  const owner = (entry: Item) =>
-    SETS.find((set) => set.id === entry.setId)?.classId ??
-    LEGENDARIES.find((legendary) => legendary.id === entry.legendaryId)?.classId;
   const filterItems = (items: Item[]) =>
     items.filter(
       (entry) =>
         filter === 'all' ||
         (filter === 'usable'
-          ? !owner(entry) || owner(entry) === store.save.classId
-          : owner(entry) === filter),
+          ? !itemClass(entry) || itemClass(entry) === store.save.classId
+          : itemClass(entry) === filter),
     );
   return (
     <div>
@@ -557,7 +690,7 @@ function StashPanel() {
                 key={entry.id}
                 item={entry}
                 selected={selected === entry.id}
-                onClick={() => setSelected(entry.id)}
+                onClick={() => selectItem(entry.id)}
               />
             ))}
           </div>
@@ -576,7 +709,7 @@ function StashPanel() {
                 key={entry.id}
                 item={entry}
                 selected={selected === entry.id}
-                onClick={() => setSelected(entry.id)}
+                onClick={() => selectItem(entry.id)}
               />
             ))}
           </div>
@@ -586,20 +719,34 @@ function StashPanel() {
         </section>
       </div>
       {item && (
-        <ItemDetails item={item} compare={store.save.equipment[item.slot]}>
-          <button
-            className="gold-button"
-            disabled={
-              locked ||
-              (inStash
-                ? store.save.inventory.length >= MAX_INVENTORY
-                : account.stash.length >= MAX_STASH)
-            }
-            onClick={() => (inStash ? store.withdrawItem(item.id) : store.depositItem(item.id))}
-          >
-            {inStash ? '取出到当前角色背包' : '存入账号共享仓库'}
-          </button>
-        </ItemDetails>
+        <div ref={detail}>
+          <ItemDetails item={item} compare={store.save.equipment[item.slot]}>
+            <button
+              className="gold-button"
+              disabled={
+                locked ||
+                (inStash
+                  ? store.save.inventory.length >= MAX_INVENTORY
+                  : account.stash.length >= MAX_STASH)
+              }
+              onClick={() => {
+                if (inStash) store.withdrawItem(item.id);
+                else store.depositItem(item.id);
+                setSelected('');
+              }}
+            >
+              {locked
+                ? '当前状态不可存取'
+                : inStash
+                  ? store.save.inventory.length >= MAX_INVENTORY
+                    ? '角色背包已满'
+                    : '取出到当前角色背包'
+                  : account.stash.length >= MAX_STASH
+                    ? '共享仓库已满'
+                    : '存入账号共享仓库'}
+            </button>
+          </ItemDetails>
+        </div>
       )}
     </div>
   );
@@ -608,8 +755,12 @@ function StashPanel() {
 function SkillsPanel() {
   const store = useGameStore();
   const { save } = store;
-  const [selected, setSelected] = useState('');
   const nodes = SKILLS.filter((n) => n.classId === save.classId);
+  const [selected, setSelected] = useState(
+    () => nodes.find((n) => skillLearningStatus(save, n).canLearn)?.id ?? nodes[0]?.id ?? '',
+  );
+  const [recommended, setRecommended] = useState('');
+  const description = useRef<HTMLDivElement>(null);
   const node = nodes.find((n) => n.id === selected);
   return (
     <>
@@ -618,18 +769,82 @@ function SkillsPanel() {
           <Sparkles size={17} />
           可用技能点 <b>{skillPoints(save)}</b>
         </span>
-        <button className="ghost-button" onClick={store.resetSkills}>
+        <button
+          className="ghost-button"
+          onClick={() => {
+            store.resetSkills();
+            setRecommended('');
+          }}
+        >
           <RotateCcw size={14} />
           免费洗点
         </button>
       </div>
       <div className="panel-tabs">
         {SETS.filter((t) => t.classId === save.classId).map((t) => (
-          <button key={t.id} onClick={() => store.recommendSkills(t.id)}>
+          <button
+            key={t.id}
+            className={recommended === t.id ? 'active' : ''}
+            aria-pressed={recommended === t.id}
+            onClick={() => {
+              store.recommendSkills(t.id);
+              setRecommended(t.id);
+              setSelected(t.skillId);
+            }}
+          >
             {t.name} · 推荐加点
           </button>
         ))}
       </div>
+      <p className="muted system-hint">
+        推荐加点会免费重新分配当前等级可用点数，并设置流派的自动施法顺序；可随时手动调整。
+      </p>
+      {node && (
+        <div ref={description} className="card skill-description">
+          <div>
+            <span className="eyebrow">
+              {node.kind === 'passive' ? '被动常驻' : '主动技能'} · 等级 {save.skills[node.id] ?? 0}{' '}
+              / 5
+            </span>
+            <div className="item-detail-heading">
+              <SkillIcon skillId={node.id} size={42} />
+              <h3>{node.name}</h3>
+            </div>
+            <p>{node.description}</p>
+            <small className="muted">
+              伤害倍率 ×{node.multiplier} · 消耗 {node.cost} · 冷却 {node.cooldown}s
+              {node.parent ? ` · 前置：${SKILLS.find((n) => n.id === node.parent)?.name}` : ''}
+            </small>
+          </div>
+          <div className="skill-actions">
+            <button
+              className="gold-button"
+              data-sound="upgrade"
+              onClick={() => {
+                store.allocateSkill(node.id);
+                setRecommended('');
+              }}
+              disabled={!skillLearningStatus(save, node).canLearn}
+            >
+              {skillLearningStatus(save, node).canLearn
+                ? `${save.skills[node.id] ? '提升节点' : '学习技能'} · 1 点`
+                : skillLearningStatus(save, node).reason}
+              <ArrowUp size={15} />
+            </button>
+            {node.kind !== 'passive' && !!save.skills[node.id] && (
+              <button
+                className="ghost-button"
+                aria-pressed={save.autoSkills[node.id] !== false}
+                onClick={() => store.toggleAuto(node.id)}
+              >
+                {save.autoSkills[node.id] !== false
+                  ? '自动施放 · 点击改为手动'
+                  : '手动施放 · 点击改为自动'}
+              </button>
+            )}
+          </div>
+        </div>
+      )}
       <div className="skill-tree">
         <p className="muted system-hint">
           初始掌握 1 个基础技能；每升一级获得 2 点。位移 Lv.3 → 核心 Lv.5 → 掌控 Lv.8 → 防御 Lv.10 →
@@ -651,7 +866,11 @@ function SkillsPanel() {
                   <button
                     key={n.id}
                     className={`skill-node ${save.skills[n.id] ? 'unlocked' : ''} ${save.level < skillUnlockLevel(n) ? 'locked' : ''} ${selected === n.id ? 'selected' : ''}`}
-                    onClick={() => setSelected(n.id)}
+                    aria-pressed={selected === n.id}
+                    onClick={() => {
+                      setSelected(n.id);
+                      description.current?.scrollIntoView({ block: 'nearest' });
+                    }}
                   >
                     <span className="skill-symbol">
                       <SkillIcon skillId={n.id} size={36} />
@@ -678,35 +897,6 @@ function SkillsPanel() {
           </section>
         ))}
       </div>
-      {node && (
-        <div className="card skill-description">
-          <div>
-            <span className="eyebrow">
-              {node.element.toUpperCase()} / TIER {node.tier}
-            </span>
-            <div className="item-detail-heading">
-              <SkillIcon skillId={node.id} size={42} />
-              <h3>{node.name}</h3>
-            </div>
-            <p>{node.description}</p>
-            <small className="muted">
-              伤害倍率 ×{node.multiplier} · 消耗 {node.cost} · 冷却 {node.cooldown}s
-              {node.parent ? ` · 前置：${SKILLS.find((n) => n.id === node.parent)?.name}` : ''}
-            </small>
-          </div>
-          <button
-            className="gold-button"
-            data-sound="upgrade"
-            onClick={() => store.allocateSkill(node.id)}
-            disabled={!skillLearningStatus(save, node).canLearn}
-          >
-            {skillLearningStatus(save, node).canLearn
-              ? `${save.skills[node.id] ? '提升节点' : '学习技能'} · 1 点`
-              : skillLearningStatus(save, node).reason}{' '}
-            <ArrowUp size={15} />
-          </button>
-        </div>
-      )}
     </>
   );
 }
@@ -720,6 +910,9 @@ function CubePanel() {
       <p className="muted system-hint">
         萃取将消耗装备、15 奥术结晶与 1
         遗忘之魂，永久收录其传奇特效。共鸣始终按满值生效，同名穿戴与共鸣仅取最高值。
+      </p>
+      <p className="system-wallet">
+        萃取材料 · 奥术结晶 <b>{save.crystals} / 15</b> · 遗忘之魂 <b>{save.souls} / 1</b>
       </p>
       <div className="cube-slots">
         {(['weapon', 'armor', 'jewelry'] as const).map((slot) => {
@@ -779,7 +972,7 @@ function CubePanel() {
               </small>
               <button
                 className="ghost-button wide"
-                disabled={!save.extracted.includes(l.id)}
+                disabled={!save.extracted.includes(l.id) || Object.values(save.cube).includes(l.id)}
                 data-sound="arcane"
                 onClick={() => store.equipCube(l.id)}
               >
@@ -794,14 +987,7 @@ function CubePanel() {
             .filter((i) => i.legendaryId)
             .map((i) => (
               <ItemDetails key={i.id} item={i}>
-                <button
-                  className="gold-button wide"
-                  disabled={save.extracted.includes(i.legendaryId!)}
-                  data-sound="arcane"
-                  onClick={() => store.extract(i.id)}
-                >
-                  {save.extracted.includes(i.legendaryId!) ? '已收录' : '萃取传奇 · 15 结晶 + 1 魂'}
-                </button>
+                <ExtractButton item={i} />
               </ItemDetails>
             ))}
           {!save.inventory.some((i) => i.legendaryId) && (
@@ -816,7 +1002,15 @@ function CubePanel() {
 function GamblePanel() {
   const store = useGameStore();
   const [slot, setSlot] = useState<Slot>('weapon');
-  const [selected, setSelected] = useState<Item>();
+  const [selectedId, setSelectedId] = useState('');
+  const selected = [
+    ...store.save.inventory,
+    ...Object.values(store.save.equipment),
+    ...store.lastGamble,
+  ].find((item) => item?.id === selectedId);
+  const owned = store.save.inventory.some((item) => item.id === selectedId);
+  const equipped = selected && store.save.equipment[selected.slot]?.id === selectedId;
+  const spaces = MAX_INVENTORY - store.save.inventory.length;
   return (
     <>
       <div className="mia-quote">
@@ -843,7 +1037,14 @@ function GamblePanel() {
           className="ghost-button"
           data-sound="gamble"
           onClick={() => store.gamble(slot, 1)}
-          disabled={store.save.shards < 50}
+          disabled={store.save.shards < 50 || spaces < 1}
+          title={
+            spaces < 1
+              ? '背包已满，请先整理装备'
+              : store.save.shards < 50
+                ? '需要 50 神秘碎片'
+                : '获得 1 件指定部位装备'
+          }
         >
           揭开一张 · 50
         </button>
@@ -851,12 +1052,23 @@ function GamblePanel() {
           className="gold-button"
           data-sound="gamble"
           onClick={() => store.gamble(slot, 10)}
-          disabled={store.save.shards < 500}
+          disabled={store.save.shards < 500 || spaces < 10}
+          title={
+            spaces < 10
+              ? '需要至少 10 格背包空间'
+              : store.save.shards < 500
+                ? '需要 500 神秘碎片'
+                : '获得 10 件指定部位装备'
+          }
         >
           <Dices size={16} />
           十连秘藏 · 500
         </button>
       </div>
+      <p className={spaces < 10 ? 'negative system-hint' : 'muted system-hint'}>
+        背包剩余 {spaces} 格 · 单抽需 1 格，十连需 10 格。
+        {store.save.autoSalvage ? '已开启自动分解，史诗及以下结果会转为材料。' : ''}
+      </p>
       <p className="muted system-hint">
         秘藏跟随已通关难度成长；低层不会提前产出传奇、套装或太古。指定部位若没有对应传奇，则转为该阶段可产出的装备。装备留在行囊中。
       </p>
@@ -868,7 +1080,11 @@ function GamblePanel() {
         <div className="gamble-results item-grid" key={store.lastGamble[0].id}>
           {store.lastGamble.map((item, index) => (
             <div key={item.id} style={{ animationDelay: `${index * 0.09}s` }}>
-              <ItemTile item={item} onClick={() => setSelected(item)} />
+              <ItemTile
+                item={item}
+                selected={selectedId === item.id}
+                onClick={() => setSelectedId(item.id)}
+              />
             </div>
           ))}
         </div>
@@ -882,7 +1098,26 @@ function GamblePanel() {
           ))}
         </div>
       )}
-      {selected && <ItemDetails item={selected} compare={store.save.equipment[selected.slot]} />}
+      {selected && (
+        <ItemDetails
+          item={selected}
+          compare={equipped ? undefined : store.save.equipment[selected.slot]}
+        >
+          {owned ? (
+            <button
+              className="gold-button"
+              data-sound="equip"
+              onClick={() => store.equip(selected.id)}
+            >
+              直接穿戴装备
+            </button>
+          ) : (
+            <p className="muted">
+              {equipped ? '已穿戴这件装备。' : '这件装备已离开背包；自动分解的结果已兑换材料。'}
+            </p>
+          )}
+        </ItemDetails>
+      )}
     </>
   );
 }
@@ -893,6 +1128,7 @@ function ForgePanel() {
   const [tab, setTab] = useState('forge');
   const [slot, setSlot] = useState<Slot>('weapon');
   const [id, setId] = useState('');
+  const [reforgeIndex, setReforgeIndex] = useState<number | null>(null);
   const items = [...Object.values(save.equipment).filter((i): i is Item => !!i), ...save.inventory];
   const item = items.find((i) => i.id === id);
   return (
@@ -944,9 +1180,21 @@ function ForgePanel() {
                   className="gold-button"
                   data-sound="forge"
                   onClick={() => store.upgradeForge(s)}
-                  disabled={save.forge[s] >= 50}
+                  disabled={
+                    save.forge[s] >= 50 ||
+                    save.gold < 100 + save.forge[s] * 80 ||
+                    save.crystals < 5 + save.forge[s] * 2
+                  }
+                  title={
+                    save.forge[s] >= 50
+                      ? '该槽位已强化到上限'
+                      : save.gold < 100 + save.forge[s] * 80 ||
+                          save.crystals < 5 + save.forge[s] * 2
+                        ? '金币或奥术结晶不足'
+                        : '强化槽位，之后更换装备依然继承'
+                  }
                 >
-                  神铸
+                  {save.forge[s] >= 50 ? '已满级' : '神铸'}
                   <small>
                     {100 + save.forge[s] * 80} 金 / {5 + save.forge[s] * 2} 结晶
                   </small>
@@ -966,12 +1214,16 @@ function ForgePanel() {
               aria-label="选择要洗练的装备"
               className="system-select"
               value={id}
-              onChange={(e) => setId(e.target.value)}
+              onChange={(e) => {
+                setId(e.target.value);
+                setReforgeIndex(null);
+              }}
             >
               <option value="">选择一件装备</option>
               {items.map((i) => (
                 <option key={i.id} value={i.id}>
-                  {i.name}
+                  {save.equipment[i.slot]?.id === i.id ? '已穿戴' : '背包'} · {SLOT_NAMES[i.slot]} ·{' '}
+                  {i.name} Lv.{i.level}
                 </option>
               ))}
             </select>
@@ -989,15 +1241,52 @@ function ForgePanel() {
                     </span>
                     <button
                       className="ghost-button"
-                      disabled={item.reforged !== undefined && item.reforged !== index}
+                      disabled={
+                        (item.reforged !== undefined && item.reforged !== index) ||
+                        save.gold < 200 ||
+                        save.crystals < 8
+                      }
                       data-sound="forge"
-                      onClick={() => store.reforge(item.id, index)}
+                      onClick={() =>
+                        item.reforged === undefined
+                          ? setReforgeIndex(index)
+                          : store.reforge(item.id, index)
+                      }
                     >
                       <RotateCcw size={14} />
-                      重铸
+                      {item.reforged !== undefined && item.reforged !== index
+                        ? '位置已锁定'
+                        : save.gold < 200 || save.crystals < 8
+                          ? '材料不足'
+                          : '重铸'}
                     </button>
                   </div>
                 ))}
+                {reforgeIndex !== null && item.reforged === undefined && (
+                  <div className="operation-review">
+                    <p>
+                      首次洗练后，仅第 {reforgeIndex + 1}{' '}
+                      条词条可以反复重铸，无法改选其他位置。将随机替换「
+                      {affixLabel(item.affixes[reforgeIndex].id, item.affixes[reforgeIndex].value)}
+                      」。
+                    </p>
+                    <div className="button-row">
+                      <button
+                        className="gold-button"
+                        disabled={save.gold < 200 || save.crystals < 8}
+                        onClick={() => {
+                          store.reforge(item.id, reforgeIndex);
+                          setReforgeIndex(null);
+                        }}
+                      >
+                        锁定此位置并洗练 · 200 金 + 8 结晶
+                      </button>
+                      <button className="ghost-button" onClick={() => setReforgeIndex(null)}>
+                        重新选择
+                      </button>
+                    </div>
+                  </div>
+                )}
                 <p className="muted system-hint">
                   每次消耗 200 金币 + 8 奥术结晶。按词条权重随机重铸并立即应用。
                 </p>
@@ -1012,18 +1301,29 @@ function ForgePanel() {
         <>
           <div className="system-toolbar">
             <span className="muted">镶嵌宝石会无损返还。</span>
-            <button className="gold-button" onClick={store.salvageLow}>
-              一键分解史诗及以下
+            <button
+              className="gold-button"
+              disabled={
+                !save.inventory.some((item) =>
+                  ['common', 'uncommon', 'rare', 'epic'].includes(item.rarity),
+                )
+              }
+              onClick={store.salvageLow}
+            >
+              一键分解史诗及以下 ·{' '}
+              {
+                save.inventory.filter((item) =>
+                  ['common', 'uncommon', 'rare', 'epic'].includes(item.rarity),
+                ).length
+              }{' '}
+              件
             </button>
           </div>
           <div className="relic-grid">
             {save.inventory.map((i) => (
               <div key={i.id} className="salvage-card">
                 <ItemTile item={i} />
-                <button className="ghost-button wide" onClick={() => store.salvage(i.id)}>
-                  分解 ·{' '}
-                  {['legendary', 'set', 'primal'].includes(i.rarity) ? '12 结晶 / 2 魂' : '4 结晶'}
-                </button>
+                <SalvageButton item={i} />
               </div>
             ))}
           </div>
@@ -1058,6 +1358,12 @@ function ForgePanel() {
           <p className="muted system-hint">
             同色同阶宝石三合一。每件装备可镶嵌一颗，替换自动返还原宝石。
           </p>
+          <p className="positive system-hint">
+            {SLOT_NAMES[slot]}：{save.equipment[slot]?.name ?? '请先穿戴装备'} ·{' '}
+            {save.equipment[slot]?.gem
+              ? `已镶嵌 ${save.equipment[slot]!.gem!.level} 阶${GEMS.find((gem) => gem.id === save.equipment[slot]!.gem!.id)?.name}`
+              : '尚未镶嵌'}
+          </p>
           <div className="gem-grid">
             {GEMS.map((g) => (
               <article
@@ -1071,6 +1377,7 @@ function ForgePanel() {
                   <button
                     className="ghost-button"
                     data-sound="upgrade"
+                    disabled={!save.gems[g.id]?.slice(0, 9).some((count) => count >= 3)}
                     onClick={() => store.combineGems(g.id)}
                   >
                     一键合成
@@ -1100,7 +1407,353 @@ function ForgePanel() {
   );
 }
 
-function PetsPanel({ onClose }: { onClose: () => void }) {
+function recordSet(record: RunRecord) {
+  const counts = new Map<string, number>();
+  for (const item of Object.values(record.build.equipment))
+    if (item?.setId) counts.set(item.setId, (counts.get(item.setId) ?? 0) + 1);
+  const strongest = [...counts].filter(([, count]) => count >= 2).sort((a, b) => b[1] - a[1])[0];
+  return SETS.find((set) => set.id === strongest?.[0]);
+}
+function LeaderboardPanel({
+  onClose,
+  onNavigate,
+}: {
+  onClose: () => void;
+  onNavigate?: (panel: string) => void;
+}) {
+  const store = useGameStore();
+  const account = store.accounts.find((entry) => entry.id === store.activeAccountId)!;
+  const [source, setSource] = useState<'local' | 'cloud'>('local');
+  const [classId, setClassId] = useState<ClassId>((store.labBackup ?? store.save).classId);
+  const [buildId, setBuildId] = useState('all');
+  const [reload, setReload] = useState(0);
+  const [online, setOnline] = useState<{
+    data: LeaderboardResponse | null;
+    loading: boolean;
+    error: string;
+  }>({ data: null, loading: false, error: '' });
+  const hero = CLASSES.find((entry) => entry.id === classId)!;
+  useEffect(() => {
+    if (source !== 'cloud') return;
+    let active = true;
+    setOnline({ data: null, loading: true, error: '' });
+    void apiRequest<LeaderboardResponse>(`/leaderboard?classId=${classId}`)
+      .then((data) => {
+        if (data.classId !== classId || !Array.isArray(data.entries))
+          throw new Error('在线榜暂不可用，请稍后再试。');
+        if (active) setOnline({ data, loading: false, error: '' });
+      })
+      .catch((error: unknown) => {
+        if (active)
+          setOnline({
+            data: null,
+            loading: false,
+            error: error instanceof Error ? error.message : '在线榜暂不可用。',
+          });
+      });
+    return () => {
+      active = false;
+    };
+  }, [source, classId, reload]);
+  const localRecords = account.characters
+    .flatMap((character) => {
+      const save =
+        character.id === account.activeCharacterId
+          ? (store.labBackup ?? store.save)
+          : character.save;
+      return (save.runRecords ?? []).map((record) => ({ record, character }));
+    })
+    .filter(({ record }) => record.build.classId === classId)
+    .sort(
+      (a, b) =>
+        b.record.stage - a.record.stage ||
+        a.record.seconds - b.record.seconds ||
+        a.record.date - b.record.date,
+    )
+    .slice(0, 20)
+    .map((entry, index) => ({ ...entry, rank: index + 1 }));
+  const matchesBuild = (setId?: string) =>
+    buildId === 'all' || (buildId === 'custom' ? !setId : buildId === setId);
+  const visibleLocal = localRecords.filter(({ record }) => matchesBuild(recordSet(record)?.id));
+  const cloudData = online.data?.classId === classId ? online.data : null;
+  const visibleOnline = (cloudData?.entries ?? []).filter((entry) =>
+    matchesBuild(SETS.find((set) => set.name === entry.setName)?.id),
+  );
+  const buildLabel = (setId?: string) => {
+    const set = SETS.find((entry) => entry.id === setId);
+    if (!set) return '自定义配装 · 未形成两件套共鸣';
+    return `${BUILD_GUIDES[set.id]?.style ?? set.name} · 核心：${SKILLS.find((skill) => skill.id === set.skillId)?.name ?? '自定义'}`;
+  };
+  return (
+    <section className="class-leaderboard">
+      <div className="section-heading">
+        <h3 style={{ color: hero.color }}>
+          {hero.name} · {source === 'local' ? '本机职业榜' : '在线职业榜'}
+        </h3>
+        <span>按层数降序 · 同层按用时升序</span>
+      </div>
+      <div className="leaderboard-sources" role="group" aria-label="榜单来源">
+        <button
+          className={source === 'local' ? 'gold-button' : 'ghost-button'}
+          aria-pressed={source === 'local'}
+          onClick={() => setSource('local')}
+        >
+          本机战绩
+        </button>
+        <button
+          className={source === 'cloud' ? 'gold-button' : 'ghost-button'}
+          aria-pressed={source === 'cloud'}
+          onClick={() => setSource('cloud')}
+        >
+          在线职业榜
+        </button>
+        {source === 'cloud' && (
+          <button
+            className="ghost-button"
+            disabled={online.loading}
+            onClick={() => setReload((value) => value + 1)}
+          >
+            <RotateCcw size={14} />
+            {online.loading ? '正在读取…' : '刷新榜单'}
+          </button>
+        )}
+      </div>
+      <div className="panel-tabs leaderboard-classes" aria-label="职业独立榜单">
+        {CLASSES.map((entry) => (
+          <button
+            key={entry.id}
+            className={classId === entry.id ? 'active' : ''}
+            aria-pressed={classId === entry.id}
+            onClick={() => {
+              setClassId(entry.id);
+              setBuildId('all');
+            }}
+          >
+            {entry.name}
+          </button>
+        ))}
+      </div>
+      <label className="stash-filter">
+        流派筛选
+        <select
+          className="system-select"
+          value={buildId}
+          onChange={(event) => setBuildId(event.target.value)}
+        >
+          <option value="all">全部流派</option>
+          {SETS.filter((set) => set.classId === classId).map((set) => (
+            <option key={set.id} value={set.id}>
+              {set.name} · {BUILD_GUIDES[set.id]?.style}
+            </option>
+          ))}
+          <option value="custom">自定义配装</option>
+        </select>
+      </label>
+      <div className="leaderboard-meta">
+        <span>
+          {source === 'cloud' && cloudData
+            ? `共 ${cloudData.total} 位行者 · ${new Date(cloudData.updatedAt).toLocaleTimeString('zh-CN', { timeZone: 'Asia/Hong_Kong' })} 更新`
+            : '每职业前 20 条'}
+        </span>
+        <details>
+          <summary>排行规则</summary>
+          <p>
+            {source === 'local'
+              ? `汇总「${account.name}」各角色的正式通关战绩，保留历史配装体验。`
+              : '在线榜按已同步云档记录，每账号每职业保留最佳成绩；成绩由玩家同步。'}
+            层数较高者优先，同层用时较短者优先。流派筛选在该职业前 20 条内进行。
+          </p>
+        </details>
+      </div>
+      {source === 'cloud' ? (
+        <div className="run-leaderboard" aria-busy={online.loading}>
+          {online.loading && <Empty>正在读取{hero.name}职业榜…</Empty>}
+          {online.error && (
+            <div className="operation-review" role="alert">
+              <p>{online.error}</p>
+              <div className="button-row">
+                <button className="ghost-button" onClick={() => setReload((value) => value + 1)}>
+                  重新加载
+                </button>
+                <button className="gold-button" onClick={() => setSource('local')}>
+                  查看本机战绩
+                </button>
+              </div>
+            </div>
+          )}
+          {!online.loading && !online.error && cloudData && !visibleOnline.length && (
+            <Empty>
+              {buildId === 'all'
+                ? `尚无${hero.name}在线战绩，完成正式远征并同步云档后即可参与。`
+                : '当前职业前 20 名中暂无此流派战绩。'}
+            </Empty>
+          )}
+          {visibleOnline.map((entry) => (
+            <article className="run-record card" key={`${entry.rank}-${entry.name}`}>
+              <div className="run-record-heading">
+                <span className="run-rank">{String(entry.rank).padStart(2, '0')}</span>
+                <div>
+                  <h3>
+                    {entry.name}
+                    <small>
+                      {hero.name} Lv.{entry.level}
+                    </small>
+                  </h3>
+                  <p className="leaderboard-result">
+                    第 {entry.stage} 层 · {entry.seconds.toFixed(1)} 秒 · 击败 {entry.kills} 个敌人
+                  </p>
+                  <p className="muted">
+                    {entry.setName ?? '自定义配装'} ·{' '}
+                    {buildLabel(SETS.find((set) => set.name === entry.setName)?.id)}
+                  </p>
+                </div>
+              </div>
+            </article>
+          ))}
+        </div>
+      ) : (
+        <div className="run-leaderboard">
+          {visibleLocal.map(({ record, character, rank }) => {
+            const set = recordSet(record);
+            const switching = character.id !== account.activeCharacterId;
+            return (
+              <article className="run-record card" key={`${character.id}-${record.id}`}>
+                <div className="run-record-heading">
+                  <span className="run-rank">{String(rank).padStart(2, '0')}</span>
+                  <div>
+                    <h3>
+                      第 {record.stage} 层
+                      <small>
+                        {record.seconds.toFixed(1)} 秒 · {hero.name} Lv.{record.build.level}
+                      </small>
+                    </h3>
+                    <p className="muted">
+                      {character.name} · {set?.name ?? '自定义配装'} ·{' '}
+                      {new Date(record.date).toLocaleString('zh-CN', {
+                        timeZone: 'Asia/Hong_Kong',
+                        month: '2-digit',
+                        day: '2-digit',
+                        hour: '2-digit',
+                        minute: '2-digit',
+                        hour12: false,
+                      })}
+                    </p>
+                    <p className="leaderboard-build">{buildLabel(set?.id)}</p>
+                  </div>
+                  <button
+                    className="gold-button"
+                    data-sound="equip"
+                    disabled={
+                      store.cloudTransition || store.inCombat || (switching && !!store.labBackup)
+                    }
+                    onClick={() => {
+                      if (switching) store.switchCharacter(character.id);
+                      const current = useGameStore.getState();
+                      if (
+                        current.accounts.find((entry) => entry.id === current.activeAccountId)
+                          ?.activeCharacterId !== character.id
+                      )
+                        return;
+                      current.activateRecord(record.id);
+                      if (useGameStore.getState().labBackup) onClose();
+                    }}
+                  >
+                    {switching
+                      ? store.labBackup
+                        ? '结束演武后可体验'
+                        : '切换角色并体验'
+                      : '体验此配装'}
+                    <ChevronRight size={14} />
+                  </button>
+                </div>
+                <details>
+                  <summary>查看当时装备与共鸣</summary>
+                  <div className="item-grid">
+                    {Object.values(record.build.equipment)
+                      .filter((item): item is Item => !!item)
+                      .map((item) => (
+                        <ItemTile key={item.id} item={item} />
+                      ))}
+                  </div>
+                  <p className="muted system-hint">
+                    共鸣：
+                    {Object.values(record.build.cube)
+                      .map((id) => LEGENDARIES.find((legendary) => legendary.id === id)?.name)
+                      .filter(Boolean)
+                      .join(' · ') || '未装配'}{' '}
+                    · 伙伴：{PETS.find((pet) => pet.id === record.build.petId)?.name ?? '未出战'}
+                  </p>
+                </details>
+              </article>
+            );
+          })}
+          {!visibleLocal.length && (
+            <>
+              <Empty>
+                {buildId === 'all'
+                  ? `当前账号尚无${hero.name}正式通关记录。演武和训练不会计入。`
+                  : '当前职业前 20 次战绩中暂无此流派。'}
+              </Empty>
+              {onNavigate && (
+                <button className="ghost-button" onClick={() => onNavigate('accounts')}>
+                  管理角色，开始职业远征
+                  <ChevronRight size={14} />
+                </button>
+              )}
+            </>
+          )}
+        </div>
+      )}
+    </section>
+  );
+}
+
+function ServicesPanel({ onNavigate }: { onNavigate?: (panel: string) => void }) {
+  const descriptions: Record<string, string> = {
+    accounts: '创建角色、切换职业角色、管理云存档',
+    stash: '同账号角色之间存取备用装备',
+    character: '穿戴装备、整理背包、查看属性',
+    skills: '学习技能、推荐加点、切换自动施法',
+    journey: '追寻套装、查看掉落与首通奖励',
+    cube: '萃取传奇、装配三槽满值共鸣',
+    gamble: '指定装备部位，使用碎片寻宝',
+    forge: '槽位强化、词条洗练、分解与宝石',
+    pets: '契约伙伴、切换出战、查看赛季进度',
+    leaderboard: '查看五职业独立的在线与本机战绩',
+    settings: '调整音量、画面方向与存档备份',
+    lab: '免费体验十五套成型流派与操作循环',
+  };
+  return (
+    <div className="services-overview">
+      <p className="muted system-hint">选择需要的营地服务，也可以走到大厅对应的 NPC 身边互动。</p>
+      <div className="services-grid">
+        {Object.entries(TITLES)
+          .filter(([id]) => id !== 'services')
+          .map(([id, [label, , Icon]]) => (
+            <button
+              className="service-card"
+              key={id}
+              onClick={() => onNavigate?.(id)}
+              disabled={!onNavigate}
+            >
+              <Icon size={27} />
+              <strong>{label}</strong>
+              <span>{descriptions[id]}</span>
+              <ChevronRight size={16} />
+            </button>
+          ))}
+      </div>
+    </div>
+  );
+}
+
+function PetsPanel({
+  onClose,
+  onNavigate,
+}: {
+  onClose: () => void;
+  onNavigate?: (panel: string) => void;
+}) {
   const store = useGameStore();
   const { save } = store;
   const goals = [
@@ -1178,10 +1831,14 @@ function PetsPanel({ onClose }: { onClose: () => void }) {
                 <button
                   className="gold-button"
                   data-sound="upgrade"
-                  onClick={() => store.upgradePet(p.id)}
-                  disabled={lv >= 20}
+                  onClick={() => {
+                    store.upgradePet(p.id);
+                    if (!lv && (useGameStore.getState().save.petLevels[p.id] ?? 0) > 0)
+                      store.selectPet(p.id);
+                  }}
+                  disabled={lv >= 20 || save.gold < 300 + lv * 250}
                 >
-                  {lv ? '升级' : '契约'} · {300 + lv * 250} 金
+                  {lv >= 20 ? '已满级' : `${lv ? '升级' : '契约并出战'} · ${300 + lv * 250} 金`}
                 </button>
                 {lv > 0 && (
                   <button
@@ -1189,10 +1846,19 @@ function PetsPanel({ onClose }: { onClose: () => void }) {
                     disabled={save.petId === p.id}
                     onClick={() => store.selectPet(p.id)}
                   >
-                    {save.petId === p.id ? <Check size={15} /> : '出战'}
+                    {save.petId === p.id ? (
+                      <>
+                        <Check size={15} /> 已出战
+                      </>
+                    ) : (
+                      '出战'
+                    )}
                   </button>
                 )}
               </div>
+              {lv < 20 && save.gold < 300 + lv * 250 && (
+                <small className="negative">金币不足，还需 {300 + lv * 250 - save.gold} 金</small>
+              )}
             </article>
           );
         })}
@@ -1226,91 +1892,17 @@ function PetsPanel({ onClose }: { onClose: () => void }) {
       </div>
       <p className="muted system-hint">
         个人战绩：累计肃清 {save.clears} 层 · 击败 {save.kills} 个敌人 · 最佳通关{' '}
-        {save.bestTime ? `${Math.round(save.bestTime)} 秒` : '尚无记录'}。本作排行记录保存在本机。
+        {save.bestTime ? `${Math.round(save.bestTime)} 秒` : '尚无记录'}
+        。完整配装记录保留在当前账号，在线榜读取已同步战绩。
       </p>
-      <div className="section-heading">
-        <h3>远征荣誉榜</h3>
-        <span>本机前 20 次 · 按层数 / 用时排序</span>
-      </div>
-      <div className="run-leaderboard">
-        {[...((store.labBackup ?? save).runRecords ?? [])]
-          .sort((a, b) => b.stage - a.stage || a.seconds - b.seconds)
-          .map((record, index) => {
-            const hero = CLASSES.find((c) => c.id === record.build.classId)!;
-            const sets = [
-              ...new Set(
-                Object.values(record.build.equipment)
-                  .map((i) => i?.setId)
-                  .filter(Boolean),
-              ),
-            ]
-              .map((id) => SETS.find((s) => s.id === id)?.name)
-              .filter(Boolean);
-            return (
-              <article className="run-record card" key={record.id}>
-                <div className="run-record-heading">
-                  <span className="run-rank">{String(index + 1).padStart(2, '0')}</span>
-                  <div>
-                    <h3>
-                      第 {record.stage} 层{' '}
-                      <small>
-                        {record.seconds.toFixed(1)} 秒 · {hero.name} Lv.{record.build.level}
-                      </small>
-                    </h3>
-                    <p className="muted">
-                      {sets.join(' / ') || '自定义配装'} ·{' '}
-                      {new Date(record.date).toLocaleString('zh-CN', {
-                        timeZone: 'Asia/Hong_Kong',
-                        month: '2-digit',
-                        day: '2-digit',
-                        hour: '2-digit',
-                        minute: '2-digit',
-                        hour12: false,
-                      })}
-                    </p>
-                  </div>
-                  <button
-                    className="gold-button"
-                    data-sound="equip"
-                    onClick={() => {
-                      store.activateRecord(record.id);
-                      onClose();
-                    }}
-                  >
-                    体验此配装 <ChevronRight size={14} />
-                  </button>
-                </div>
-                <details>
-                  <summary>查看当时装备与共鸣</summary>
-                  <div className="item-grid">
-                    {Object.values(record.build.equipment)
-                      .filter((i): i is Item => !!i)
-                      .map((item) => (
-                        <ItemTile key={item.id} item={item} />
-                      ))}
-                  </div>
-                  <p className="muted system-hint">
-                    共鸣：
-                    {Object.values(record.build.cube)
-                      .map((id) => LEGENDARIES.find((l) => l.id === id)?.name)
-                      .filter(Boolean)
-                      .join(' · ') || '未装配'}{' '}
-                    · 伙伴：{PETS.find((p) => p.id === record.build.petId)?.name}
-                  </p>
-                </details>
-              </article>
-            );
-          })}
-        {!(store.labBackup ?? save).runRecords?.length && (
-          <Empty>完成一次正式秘境后，会在此保存当时的完整配装。演武和训练不会计入排行。</Empty>
-        )}
-      </div>
+      <LeaderboardPanel onClose={onClose} onNavigate={onNavigate} />
     </>
   );
 }
 
 function LabPanel({ onClose }: { onClose: () => void }) {
   const store = useGameStore();
+  const [classFilter, setClassFilter] = useState<string>(store.save.classId);
   return (
     <>
       <div className="lab-intro">
@@ -1333,7 +1925,26 @@ function LabPanel({ onClose }: { onClose: () => void }) {
           </button>
         )}
       </div>
-      {CLASSES.map((c) => (
+      <div className="panel-tabs" aria-label="按职业查看流派">
+        <button
+          className={classFilter === 'all' ? 'active' : ''}
+          aria-pressed={classFilter === 'all'}
+          onClick={() => setClassFilter('all')}
+        >
+          全部 15 套
+        </button>
+        {CLASSES.map((hero) => (
+          <button
+            key={hero.id}
+            className={classFilter === hero.id ? 'active' : ''}
+            aria-pressed={classFilter === hero.id}
+            onClick={() => setClassFilter(hero.id)}
+          >
+            {hero.name} · 3 套
+          </button>
+        ))}
+      </div>
+      {CLASSES.filter((hero) => classFilter === 'all' || hero.id === classFilter).map((c) => (
         <section className="lab-class" key={c.id}>
           <div className="section-heading">
             <h3 style={{ color: c.color }}>{c.name}</h3>
@@ -1355,8 +1966,19 @@ function LabPanel({ onClose }: { onClose: () => void }) {
                 <p>
                   <b>4 件</b> {t.four}
                 </p>
+                {BUILD_GUIDES[t.id] && (
+                  <dl className="build-guide">
+                    <dt>{BUILD_GUIDES[t.id].style} · 推荐站位</dt>
+                    <dd>{BUILD_GUIDES[t.id].range}</dd>
+                    <dt>操作循环</dt>
+                    <dd>{BUILD_GUIDES[t.id].rotation}</dd>
+                    <dt>流畅游玩提示</dt>
+                    <dd>{BUILD_GUIDES[t.id].tip}</dd>
+                  </dl>
+                )}
                 <button
                   className="gold-button wide"
+                  disabled={store.cloudTransition || store.inCombat}
                   onClick={() => {
                     store.activateBuild(t.id);
                     onClose();
@@ -1376,6 +1998,9 @@ function LabPanel({ onClose }: { onClose: () => void }) {
 function SettingsPanel() {
   const store = useGameStore();
   const [reset, setReset] = useState(false);
+  const [pendingImport, setPendingImport] = useState<File | null>(null);
+  const [importing, setImporting] = useState(false);
+  const locked = !!store.labBackup || store.inCombat || store.cloudTransition;
   const file = useRef<HTMLInputElement>(null);
   return (
     <div className="settings-panel">
@@ -1440,7 +2065,11 @@ function SettingsPanel() {
             <Download size={16} />
             导出存档
           </button>
-          <button className="ghost-button" onClick={() => file.current?.click()}>
+          <button
+            className="ghost-button"
+            disabled={locked || !!store.cloudUserId || importing}
+            onClick={() => file.current?.click()}
+          >
             <Upload size={16} />
             导入 JSON
           </button>
@@ -1451,16 +2080,57 @@ function SettingsPanel() {
             </button>
           )}
         </div>
+        {(locked || store.cloudUserId) && (
+          <p className="muted">
+            {store.cloudUserId
+              ? '导入存档需先退出云账号，回到访客档。'
+              : '请先返回开荒营地后导入存档。'}
+          </p>
+        )}
+        {pendingImport && (
+          <div className="operation-review">
+            <p>
+              已选择「{pendingImport.name}
+              」。导入账号档将替换本机全部账号与角色，旧版单角色档替换当前角色。请先导出当前存档。
+            </p>
+            <div className="button-row">
+              <button
+                className="gold-button"
+                disabled={locked || !!store.cloudUserId || importing}
+                onClick={async () => {
+                  setImporting(true);
+                  try {
+                    store.importSave(await pendingImport.text());
+                    setPendingImport(null);
+                  } catch {
+                    store.setNotice('无法读取存档文件，请重新选择。');
+                  } finally {
+                    setImporting(false);
+                  }
+                }}
+              >
+                {importing ? '正在读取…' : '确认导入并替换进度'}
+              </button>
+              <button
+                className="ghost-button"
+                disabled={importing}
+                onClick={() => setPendingImport(null)}
+              >
+                取消导入
+              </button>
+            </div>
+          </div>
+        )}
         <input
           ref={file}
           type="file"
           accept=".json,application/json"
           hidden
-          onChange={async (e) => {
+          onChange={(e) => {
             const f = e.target.files?.[0];
             if (f) {
               if (f.size > 20 * 1024 * 1024) store.setNotice('存档文件不能超过 20 MB。');
-              else store.importSave(await f.text());
+              else setPendingImport(f);
             }
             e.target.value = '';
           }}
@@ -1469,9 +2139,8 @@ function SettingsPanel() {
       <section className="card">
         <h3>操控指南</h3>
         <p>
-          WASD /
-          方向键移动；拖动战场或虚拟摇杆移动；空格释放位移；技能栏点击手动施放。每个技能可独立切换
-          AUTO / MANUAL。
+          WASD / 方向键移动；拖动战场或虚拟摇杆移动；1–6 或点击技能栏施法；空格释放位移；Esc
+          暂停。每个技能可独立切换 AUTO / MANUAL。
         </p>
         <p className="muted">
           秘境限时 5 分钟，收集进度球召唤守关魔王。低于 100 秒通关最高层可跳升 3 层。
@@ -1488,6 +2157,7 @@ function SettingsPanel() {
               </button>
               <button
                 className="danger-button"
+                disabled={locked}
                 onClick={() => {
                   store.resetProgress();
                   setReset(false);
@@ -1498,8 +2168,8 @@ function SettingsPanel() {
             </div>
           </>
         ) : (
-          <button className="ghost-button" onClick={() => setReset(true)}>
-            开始新的开荒旅程
+          <button className="ghost-button" disabled={locked} onClick={() => setReset(true)}>
+            {locked ? '返回开荒营地后可重置' : '开始新的开荒旅程'}
           </button>
         )}
       </section>
@@ -1507,44 +2177,18 @@ function SettingsPanel() {
   );
 }
 
-export function SystemsModal({ panel, onClose }: { panel: string | null; onClose: () => void }) {
-  const ref = useRef<HTMLDivElement>(null);
-  const closeRef = useRef(onClose);
-  closeRef.current = onClose;
+export function SystemsModal({
+  panel,
+  onClose,
+  onNavigate,
+}: {
+  panel: string | null;
+  onClose: () => void;
+  onNavigate?: (panel: string) => void;
+}) {
   const title = panel ? TITLES[panel] : undefined;
-  useEffect(() => {
-    if (!panel) return;
-    const previous = document.activeElement as HTMLElement | null;
-    ref.current?.focus();
-    const key = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        event.preventDefault();
-        closeRef.current();
-      }
-      if (event.key === 'Tab') {
-        const items = Array.from(
-          ref.current?.querySelectorAll<HTMLElement>(
-            'button:not(:disabled),input:not([hidden]),select,[tabindex="0"]',
-          ) ?? [],
-        ).filter((el) => el.offsetParent !== null);
-        if (!items.length) return;
-        const first = items[0],
-          last = items[items.length - 1];
-        if (event.shiftKey && document.activeElement === first) {
-          event.preventDefault();
-          last.focus();
-        } else if (!event.shiftKey && document.activeElement === last) {
-          event.preventDefault();
-          first.focus();
-        }
-      }
-    };
-    document.addEventListener('keydown', key);
-    return () => {
-      document.removeEventListener('keydown', key);
-      previous?.focus();
-    };
-  }, [panel]);
+  const ref = useDialog(!!panel && !!title, onClose);
+  const notice = useGameStore((state) => state.notice);
   if (!panel || !title) return null;
   const Icon = title[2];
   return (
@@ -1578,15 +2222,37 @@ export function SystemsModal({ panel, onClose }: { panel: string | null; onClose
             <X size={21} />
           </button>
         </header>
-        <div className="modal-body">
-          {panel === 'accounts' ? (
+        {onNavigate && (
+          <nav className="system-navigation" aria-label="营地系统快捷切换">
+            {Object.entries(TITLES).map(([id, entry]) => {
+              const NavIcon = entry[2];
+              return (
+                <button
+                  key={id}
+                  aria-current={panel === id ? 'page' : undefined}
+                  onClick={() => onNavigate(id)}
+                >
+                  <NavIcon size={15} />
+                  {entry[0]}
+                </button>
+              );
+            })}
+          </nav>
+        )}
+        <div className="system-feedback" role="status" aria-live="polite">
+          {notice || '选择目标进行操作 · Esc 返回营地'}
+        </div>
+        <div className="modal-body" key={panel}>
+          {panel === 'services' ? (
+            <ServicesPanel onNavigate={onNavigate} />
+          ) : panel === 'accounts' ? (
             <AccountPanel />
           ) : panel === 'stash' ? (
             <StashPanel />
           ) : panel === 'character' ? (
             <CharacterPanel />
           ) : panel === 'journey' ? (
-            <JourneyPanel />
+            <JourneyPanel onNavigate={onNavigate} />
           ) : panel === 'skills' ? (
             <SkillsPanel />
           ) : panel === 'cube' ? (
@@ -1596,7 +2262,9 @@ export function SystemsModal({ panel, onClose }: { panel: string | null; onClose
           ) : panel === 'forge' ? (
             <ForgePanel />
           ) : panel === 'pets' ? (
-            <PetsPanel onClose={onClose} />
+            <PetsPanel onClose={onClose} onNavigate={onNavigate} />
+          ) : panel === 'leaderboard' ? (
+            <LeaderboardPanel onClose={onClose} onNavigate={onNavigate} />
           ) : panel === 'lab' ? (
             <LabPanel onClose={onClose} />
           ) : (

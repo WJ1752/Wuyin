@@ -1,0 +1,919 @@
+{
+  "date": "2026-11-01",
+  "stage": 100,
+  "rows": [
+    {
+      "id": "stormcaller",
+      "name": "风暴召唤者",
+      "className": "游侠",
+      "mainSkill": "arrow_rain",
+      "won": true,
+      "seconds": 20.400000000000173,
+      "kills": 57,
+      "hp": 1,
+      "normalCasts": 19,
+      "castCounts": {
+        "vengeance": 2,
+        "arrow_rain": 5,
+        "raven": 2,
+        "rapid_fire": 9,
+        "hunting_arrow": 1
+      },
+      "maxActiveGap": 0.3,
+      "minimumHp": 0.9973240825258552,
+      "coreAuto": true,
+      "coreName": "连弩射击",
+      "readyCoreSeconds": 4.133333333333328,
+      "blockedCoreSeconds": 0,
+      "blockedCoreRatio": 0,
+      "skills": [
+        {
+          "id": "hunting_arrow",
+          "name": "追猎箭",
+          "auto": true
+        },
+        {
+          "id": "rapid_fire",
+          "name": "连弩射击",
+          "auto": true
+        },
+        {
+          "id": "tumble",
+          "name": "蓄势待发",
+          "auto": false
+        },
+        {
+          "id": "arrow_rain",
+          "name": "多重箭雨",
+          "auto": true
+        },
+        {
+          "id": "raven",
+          "name": "渡鸦伙伴",
+          "auto": true
+        },
+        {
+          "id": "vengeance",
+          "name": "复仇风暴",
+          "auto": true
+        }
+      ],
+      "worn": ["黎明手弩", "亡者遗物箭袋", "奥尔达之裤", "元素嘉年华之戒"],
+      "cube": ["沃杨强弓", "天鹰胸甲", "斯奎特的项链"],
+      "play": "箭雨保持 AUTO，引怪进入落区；精英出现时开启复仇。",
+      "risk": "箭雨命中才能回能，怪群离开落区时及时调整路线。"
+    },
+    {
+      "id": "marauder",
+      "name": "掠夺者战甲",
+      "className": "游侠",
+      "mainSkill": "rapid_fire",
+      "won": true,
+      "seconds": 22.166666666666927,
+      "kills": 57,
+      "hp": 1,
+      "normalCasts": 74,
+      "castCounts": {
+        "vengeance": 4,
+        "arrow_rain": 6,
+        "raven": 5,
+        "rapid_fire": 44,
+        "hunting_arrow": 15
+      },
+      "maxActiveGap": 0.3,
+      "minimumHp": 0.9946481650517106,
+      "coreAuto": true,
+      "coreName": "连弩射击",
+      "readyCoreSeconds": 8.833333333333313,
+      "blockedCoreSeconds": 0.9666666666666666,
+      "blockedCoreRatio": 0.10943396226415118,
+      "skills": [
+        {
+          "id": "hunting_arrow",
+          "name": "追猎箭",
+          "auto": true
+        },
+        {
+          "id": "rapid_fire",
+          "name": "连弩射击",
+          "auto": true
+        },
+        {
+          "id": "tumble",
+          "name": "蓄势待发",
+          "auto": false
+        },
+        {
+          "id": "arrow_rain",
+          "name": "多重箭雨",
+          "auto": true
+        },
+        {
+          "id": "raven",
+          "name": "渡鸦伙伴",
+          "auto": true
+        },
+        {
+          "id": "vengeance",
+          "name": "复仇风暴",
+          "auto": true
+        }
+      ],
+      "worn": ["沃杨强弓", "第九哨站箭匣", "奥尔达之裤", "元素嘉年华之戒"],
+      "cube": ["黎明手弩", "天鹰胸甲", "斯奎特的项链"],
+      "play": "连弩保持 AUTO 连续叠弹幕，翻滚手动补能或避险。",
+      "risk": "保留基础回能箭；额外开启其他核心会争用集中与施法时间。"
+    },
+    {
+      "id": "frost_hunter",
+      "name": "极寒猎手",
+      "className": "游侠",
+      "mainSkill": "elemental_arrow",
+      "won": true,
+      "seconds": 22.766666666666957,
+      "kills": 58,
+      "hp": 1,
+      "normalCasts": 43,
+      "castCounts": {
+        "vengeance": 1,
+        "arrow_rain": 3,
+        "raven": 3,
+        "elemental_arrow": 23,
+        "hunting_arrow": 13
+      },
+      "maxActiveGap": 0.49999999999999994,
+      "minimumHp": 1,
+      "coreAuto": true,
+      "coreName": "元素箭",
+      "readyCoreSeconds": 5.2333333333333245,
+      "blockedCoreSeconds": 0.5333333333333333,
+      "blockedCoreRatio": 0.10191082802547788,
+      "skills": [
+        {
+          "id": "hunting_arrow",
+          "name": "追猎箭",
+          "auto": true
+        },
+        {
+          "id": "elemental_arrow",
+          "name": "元素箭",
+          "auto": true
+        },
+        {
+          "id": "tumble",
+          "name": "蓄势待发",
+          "auto": false
+        },
+        {
+          "id": "arrow_rain",
+          "name": "多重箭雨",
+          "auto": true
+        },
+        {
+          "id": "raven",
+          "name": "渡鸦伙伴",
+          "auto": true
+        },
+        {
+          "id": "vengeance",
+          "name": "复仇风暴",
+          "auto": true
+        }
+      ],
+      "worn": ["霜语长弓", "亡者遗物箭袋", "神圣行者战靴", "元素嘉年华之戒"],
+      "cube": ["风之力", "天鹰胸甲", "斯奎特的项链"],
+      "play": "元素箭 AUTO，追猎箭的寒冰分支先减速，再用冰矢穿群。",
+      "risk": "四件增伤依赖减速或冻结，目标分散与控制空窗会降低收益。"
+    },
+    {
+      "id": "wasteland",
+      "name": "荒原狂风",
+      "className": "野蛮人",
+      "mainSkill": "whirlwind",
+      "won": true,
+      "seconds": 26.40000000000047,
+      "kills": 59,
+      "hp": 1,
+      "normalCasts": 103,
+      "castCounts": {
+        "berserker": 1,
+        "iron_hook": 3,
+        "war_cry": 2,
+        "whirlwind": 52,
+        "frenzy": 45
+      },
+      "maxActiveGap": 0.3,
+      "minimumHp": 0.9975822651419605,
+      "coreAuto": true,
+      "coreName": "旋风斩",
+      "readyCoreSeconds": 4.266666666666661,
+      "blockedCoreSeconds": 0,
+      "blockedCoreRatio": 0,
+      "skills": [
+        {
+          "id": "frenzy",
+          "name": "狂乱劈砍",
+          "auto": true
+        },
+        {
+          "id": "whirlwind",
+          "name": "旋风斩",
+          "auto": true
+        },
+        {
+          "id": "iron_hook",
+          "name": "钢铁钩爪",
+          "auto": true
+        },
+        {
+          "id": "war_cry",
+          "name": "战吼",
+          "auto": true
+        },
+        {
+          "id": "charge",
+          "name": "狂暴冲锋",
+          "auto": false
+        },
+        {
+          "id": "berserker",
+          "name": "狂暴之怒",
+          "auto": true
+        }
+      ],
+      "worn": ["布尔凯索双刀", "卡修斯之傲", "奥尔达之裤", "元素嘉年华之戒"],
+      "cube": ["哀恸之刃", "不灭战铠", "斯奎特的项链"],
+      "play": "旋风 AUTO，持续移动覆盖怪群，位移留给脱困。",
+      "risk": "成型续能依赖布尔凯索；未取得该传奇时仍需基础攻击回怒。"
+    },
+    {
+      "id": "earthbreaker",
+      "name": "大地裂变",
+      "className": "野蛮人",
+      "mainSkill": "ancestor_hammer",
+      "won": true,
+      "seconds": 22.733333333333622,
+      "kills": 60,
+      "hp": 1,
+      "normalCasts": 49,
+      "castCounts": {
+        "berserker": 1,
+        "iron_hook": 5,
+        "war_cry": 3,
+        "ancestor_hammer": 27,
+        "frenzy": 13
+      },
+      "maxActiveGap": 0.3,
+      "minimumHp": 1,
+      "coreAuto": true,
+      "coreName": "先祖之锤",
+      "readyCoreSeconds": 5.666666666666656,
+      "blockedCoreSeconds": 0,
+      "blockedCoreRatio": 0,
+      "skills": [
+        {
+          "id": "frenzy",
+          "name": "狂乱劈砍",
+          "auto": true
+        },
+        {
+          "id": "ancestor_hammer",
+          "name": "先祖之锤",
+          "auto": true
+        },
+        {
+          "id": "iron_hook",
+          "name": "钢铁钩爪",
+          "auto": true
+        },
+        {
+          "id": "war_cry",
+          "name": "战吼",
+          "auto": true
+        },
+        {
+          "id": "charge",
+          "name": "狂暴冲锋",
+          "auto": false
+        },
+        {
+          "id": "berserker",
+          "name": "狂暴之怒",
+          "auto": true
+        }
+      ],
+      "worn": ["审判之锤", "毁灭木槌", "奥尔达之裤", "元素嘉年华之戒"],
+      "cube": ["守誓者", "天鹰胸甲", "黄道黑曜石之戒"],
+      "play": "先祖之锤 AUTO，边打边捡生命血球叠裂变，再集中打精英。",
+      "risk": "不拾取血球就没有四件叠层；远距离空挥也无法维持怒气循环。"
+    },
+    {
+      "id": "immortal_thorns",
+      "name": "不朽荆棘",
+      "className": "野蛮人",
+      "mainSkill": "war_cry",
+      "won": true,
+      "seconds": 22.100000000000257,
+      "kills": 61,
+      "hp": 1,
+      "normalCasts": 57,
+      "castCounts": {
+        "berserker": 1,
+        "war_cry": 2,
+        "iron_hook": 3,
+        "whirlwind": 28,
+        "frenzy": 23
+      },
+      "maxActiveGap": 0.26666666666666666,
+      "minimumHp": 1,
+      "coreAuto": true,
+      "coreName": "旋风斩",
+      "readyCoreSeconds": 1.8666666666666691,
+      "blockedCoreSeconds": 0,
+      "blockedCoreRatio": 0,
+      "skills": [
+        {
+          "id": "frenzy",
+          "name": "狂乱劈砍",
+          "auto": true
+        },
+        {
+          "id": "whirlwind",
+          "name": "旋风斩",
+          "auto": true
+        },
+        {
+          "id": "iron_hook",
+          "name": "钢铁钩爪",
+          "auto": true
+        },
+        {
+          "id": "war_cry",
+          "name": "战吼",
+          "auto": true
+        },
+        {
+          "id": "charge",
+          "name": "狂暴冲锋",
+          "auto": false
+        },
+        {
+          "id": "berserker",
+          "name": "狂暴之怒",
+          "auto": true
+        }
+      ],
+      "worn": ["守誓者", "先祖壁垒", "不灭战铠", "狂暴者护符"],
+      "cube": ["审判之锤", "奥拉维尔之手", "斯奎特的项链"],
+      "play": "战吼 AUTO 引爆荆棘，基础攻击维持命中附带荆棘。",
+      "risk": "护甲也是伤害来源；战吼改手动后需要主动引爆。"
+    },
+    {
+      "id": "tal_rasha",
+      "name": "塔拉夏元素",
+      "className": "魔法师",
+      "mainSkill": "meteor",
+      "won": true,
+      "seconds": 20.700000000000188,
+      "kills": 59,
+      "hp": 1,
+      "normalCasts": 30,
+      "castCounts": {
+        "archon": 1,
+        "black_hole": 2,
+        "meteor": 9,
+        "electrocute": 17,
+        "frost_nova": 1
+      },
+      "maxActiveGap": 0.4333333333333333,
+      "minimumHp": 1,
+      "coreAuto": true,
+      "coreName": "陨石术",
+      "readyCoreSeconds": 1.3333333333333341,
+      "blockedCoreSeconds": 0,
+      "blockedCoreRatio": 0,
+      "skills": [
+        {
+          "id": "electrocute",
+          "name": "电刑",
+          "auto": true
+        },
+        {
+          "id": "meteor",
+          "name": "陨石术",
+          "auto": true
+        },
+        {
+          "id": "teleport",
+          "name": "以太传送",
+          "auto": false
+        },
+        {
+          "id": "black_hole",
+          "name": "奥术黑洞",
+          "auto": true
+        },
+        {
+          "id": "frost_nova",
+          "name": "寒冰新星",
+          "auto": true
+        },
+        {
+          "id": "archon",
+          "name": "执政官形态",
+          "auto": true
+        }
+      ],
+      "worn": ["大维兹尔之杖", "无尽深渊法珠", "天鹰胸甲", "元素嘉年华之戒"],
+      "cube": ["绝命法杖", "奥尔达之裤", "斯奎特的项链"],
+      "play": "陨石 AUTO，移动聚怪让连环落点重叠，传送留给避险。",
+      "risk": "散怪会削弱重叠命中；免费陨石补充主动施法空窗。"
+    },
+    {
+      "id": "delsere",
+      "name": "德尔西尼冰霜",
+      "className": "魔法师",
+      "mainSkill": "frozen_orb",
+      "won": true,
+      "seconds": 25.300000000000416,
+      "kills": 58,
+      "hp": 1,
+      "normalCasts": 66,
+      "castCounts": {
+        "archon": 1,
+        "black_hole": 4,
+        "frozen_orb": 24,
+        "frost_nova": 3,
+        "electrocute": 34
+      },
+      "maxActiveGap": 0.4333333333333333,
+      "minimumHp": 0.9972566639350763,
+      "coreAuto": true,
+      "coreName": "冰封球",
+      "readyCoreSeconds": 2.6000000000000005,
+      "blockedCoreSeconds": 0,
+      "blockedCoreRatio": 0,
+      "skills": [
+        {
+          "id": "electrocute",
+          "name": "电刑",
+          "auto": true
+        },
+        {
+          "id": "frozen_orb",
+          "name": "冰封球",
+          "auto": true
+        },
+        {
+          "id": "teleport",
+          "name": "以太传送",
+          "auto": false
+        },
+        {
+          "id": "black_hole",
+          "name": "奥术黑洞",
+          "auto": true
+        },
+        {
+          "id": "frost_nova",
+          "name": "寒冰新星",
+          "auto": true
+        },
+        {
+          "id": "archon",
+          "name": "执政官形态",
+          "auto": true
+        }
+      ],
+      "worn": ["大维兹尔之杖", "凛冬之镜", "神圣行者战靴", "元素嘉年华之戒"],
+      "cube": ["无尽深渊法珠", "天鹰胸甲", "黄道黑曜石之戒"],
+      "play": "冰封球 AUTO，寒冰新星冻结后利用传送刷新调整射线。",
+      "risk": "慢速冰球依赖路径与目标位置，刷新的传送仍需手动施放。"
+    },
+    {
+      "id": "vyr",
+      "name": "维尔御法者",
+      "className": "魔法师",
+      "mainSkill": "archon",
+      "won": true,
+      "seconds": 22.000000000000252,
+      "kills": 64,
+      "hp": 1,
+      "normalCasts": 43,
+      "castCounts": {
+        "archon": 2,
+        "electrocute": 27,
+        "black_hole": 2,
+        "meteor": 10,
+        "frost_nova": 2
+      },
+      "maxActiveGap": 0.4333333333333333,
+      "minimumHp": 0.9915348487139499,
+      "coreAuto": true,
+      "coreName": "陨石术",
+      "readyCoreSeconds": 3.0333333333333323,
+      "blockedCoreSeconds": 0,
+      "blockedCoreRatio": 0,
+      "skills": [
+        {
+          "id": "electrocute",
+          "name": "电刑",
+          "auto": true
+        },
+        {
+          "id": "meteor",
+          "name": "陨石术",
+          "auto": true
+        },
+        {
+          "id": "teleport",
+          "name": "以太传送",
+          "auto": false
+        },
+        {
+          "id": "black_hole",
+          "name": "奥术黑洞",
+          "auto": true
+        },
+        {
+          "id": "frost_nova",
+          "name": "寒冰新星",
+          "auto": true
+        },
+        {
+          "id": "archon",
+          "name": "执政官形态",
+          "auto": true
+        }
+      ],
+      "worn": ["绝命法杖", "蚀刻符印", "天鹰胸甲", "斯奎特的项链"],
+      "cube": ["星界之丝", "奥尔达之裤", "元素嘉年华之戒"],
+      "play": "执政官与电刑保持 AUTO，变身后连续死光叠层。",
+      "risk": "每次变身重置激光层数；基础技能改手动会中断自动死光。"
+    },
+    {
+      "id": "rathma",
+      "name": "拉斯玛骨爆",
+      "className": "魂灵师",
+      "mainSkill": "command_skeletons",
+      "won": true,
+      "seconds": 20.700000000000188,
+      "kills": 69,
+      "hp": 1,
+      "normalCasts": 10,
+      "castCounts": {
+        "army_of_dead": 1,
+        "command_skeletons": 5,
+        "decrepify": 2,
+        "death_scythe": 2
+      },
+      "maxActiveGap": 0.3,
+      "minimumHp": 1,
+      "coreAuto": true,
+      "coreName": "死亡镰刀",
+      "readyCoreSeconds": 1.466666666666668,
+      "blockedCoreSeconds": 0,
+      "blockedCoreRatio": 0,
+      "skills": [
+        {
+          "id": "bone_spike",
+          "name": "骨刺",
+          "auto": true
+        },
+        {
+          "id": "death_scythe",
+          "name": "死亡镰刀",
+          "auto": true
+        },
+        {
+          "id": "command_skeletons",
+          "name": "号令骸骨",
+          "auto": true
+        },
+        {
+          "id": "decrepify",
+          "name": "衰老诅咒",
+          "auto": true
+        },
+        {
+          "id": "blood_step",
+          "name": "血步",
+          "auto": false
+        },
+        {
+          "id": "army_of_dead",
+          "name": "亡者大军",
+          "auto": true
+        }
+      ],
+      "worn": ["杰瑟斯骨镰", "血潮之灯", "奥尔达之裤", "元素嘉年华之戒"],
+      "cube": ["莱莲娜影镰", "天鹰胸甲", "斯奎特的项链"],
+      "play": "号令骸骨 AUTO，等召唤物跟进后循环自爆，血步手动追敌。",
+      "risk": "自爆从召唤物当前位置结算，刚转火时需要留出跟随时间。"
+    },
+    {
+      "id": "trang_oul",
+      "name": "塔格奥毒镰",
+      "className": "魂灵师",
+      "mainSkill": "death_scythe",
+      "won": true,
+      "seconds": 21.900000000000247,
+      "kills": 62,
+      "hp": 1,
+      "normalCasts": 42,
+      "castCounts": {
+        "army_of_dead": 1,
+        "command_skeletons": 5,
+        "decrepify": 4,
+        "death_scythe": 24,
+        "bone_spike": 8
+      },
+      "maxActiveGap": 0.3,
+      "minimumHp": 1,
+      "coreAuto": true,
+      "coreName": "死亡镰刀",
+      "readyCoreSeconds": 5.366666666666657,
+      "blockedCoreSeconds": 0,
+      "blockedCoreRatio": 0,
+      "skills": [
+        {
+          "id": "bone_spike",
+          "name": "骨刺",
+          "auto": true
+        },
+        {
+          "id": "death_scythe",
+          "name": "死亡镰刀",
+          "auto": true
+        },
+        {
+          "id": "command_skeletons",
+          "name": "号令骸骨",
+          "auto": true
+        },
+        {
+          "id": "decrepify",
+          "name": "衰老诅咒",
+          "auto": true
+        },
+        {
+          "id": "blood_step",
+          "name": "血步",
+          "auto": false
+        },
+        {
+          "id": "army_of_dead",
+          "name": "亡者大军",
+          "auto": true
+        }
+      ],
+      "worn": ["腐蚀之牙", "血潮之灯", "奥尔达之裤", "元素嘉年华之戒"],
+      "cube": ["奈尔的黑镰", "天鹰胸甲", "黄道黑曜石之戒"],
+      "play": "死亡镰刀 AUTO，连续叠毒触发五层新星，再借传染清群。",
+      "risk": "强项是群体叠毒；保留骨刺回能，目标分散与单体战需要持续叠层。"
+    },
+    {
+      "id": "inarius",
+      "name": "伊纳瑞斯圣骨",
+      "className": "魂灵师",
+      "mainSkill": "bone_spear",
+      "won": true,
+      "seconds": 22.766666666666957,
+      "kills": 62,
+      "hp": 1,
+      "normalCasts": 51,
+      "castCounts": {
+        "army_of_dead": 1,
+        "command_skeletons": 2,
+        "decrepify": 3,
+        "bone_spear": 23,
+        "bone_spike": 22
+      },
+      "maxActiveGap": 0.36666666666666664,
+      "minimumHp": 0.9969566348132419,
+      "coreAuto": true,
+      "coreName": "骨矛",
+      "readyCoreSeconds": 1.8333333333333357,
+      "blockedCoreSeconds": 0,
+      "blockedCoreRatio": 0,
+      "skills": [
+        {
+          "id": "bone_spike",
+          "name": "骨刺",
+          "auto": true
+        },
+        {
+          "id": "bone_spear",
+          "name": "骨矛",
+          "auto": true
+        },
+        {
+          "id": "command_skeletons",
+          "name": "号令骸骨",
+          "auto": true
+        },
+        {
+          "id": "decrepify",
+          "name": "衰老诅咒",
+          "auto": true
+        },
+        {
+          "id": "blood_step",
+          "name": "血步",
+          "auto": false
+        },
+        {
+          "id": "army_of_dead",
+          "name": "亡者大军",
+          "auto": true
+        }
+      ],
+      "worn": ["莱莲娜影镰", "碎骨圣匣", "不灭战铠", "元素嘉年华之戒"],
+      "cube": ["杰瑟斯骨镰", "奥尔达之裤", "斯奎特的项链"],
+      "play": "骨矛 AUTO，带骷髅军团近身推进，让敌人留在骨风暴内。",
+      "risk": "骨矛能射到远处，但风暴圈外无法获得四件核心增伤。"
+    },
+    {
+      "id": "shadow_blades",
+      "name": "暗影利刃",
+      "className": "德鲁伊",
+      "mainSkill": "fan_of_knives",
+      "won": true,
+      "seconds": 22.533333333333612,
+      "kills": 58,
+      "hp": 1,
+      "normalCasts": 58,
+      "castCounts": {
+        "thunder_wolf": 1,
+        "hurricane_break": 3,
+        "earthen_bulwark": 2,
+        "fan_of_knives": 27,
+        "storm_claw": 25
+      },
+      "maxActiveGap": 0.3333333333333333,
+      "minimumHp": 1,
+      "coreAuto": true,
+      "coreName": "刀扇风暴",
+      "readyCoreSeconds": 1.2666666666666673,
+      "blockedCoreSeconds": 0,
+      "blockedCoreRatio": 0,
+      "skills": [
+        {
+          "id": "storm_claw",
+          "name": "风暴爪击",
+          "auto": true
+        },
+        {
+          "id": "fan_of_knives",
+          "name": "刀扇风暴",
+          "auto": true
+        },
+        {
+          "id": "shadow_step",
+          "name": "暗影步",
+          "auto": false
+        },
+        {
+          "id": "hurricane_break",
+          "name": "飓风破",
+          "auto": true
+        },
+        {
+          "id": "earthen_bulwark",
+          "name": "大地壁垒",
+          "auto": true
+        },
+        {
+          "id": "thunder_wolf",
+          "name": "雷霆狼人真身",
+          "auto": true
+        }
+      ],
+      "worn": ["格林斯通刀扇匕首", "地脉守卫", "神圣行者战靴", "元素嘉年华之戒"],
+      "cube": ["暗影之牙", "天鹰胸甲", "斯奎特的项链"],
+      "play": "移动触发免费刀扇，利用飞刀往返穿刺；暗影步手动强化后续攻击。",
+      "risk": "停步会失去每0.8秒的免费刀扇；暗影步强化需玩家主动触发。"
+    },
+    {
+      "id": "wild_vines",
+      "name": "荒野毒藤",
+      "className": "德鲁伊",
+      "mainSkill": "poison_vine",
+      "won": true,
+      "seconds": 22.866666666666962,
+      "kills": 68,
+      "hp": 1,
+      "normalCasts": 27,
+      "castCounts": {
+        "thunder_wolf": 1,
+        "hurricane_break": 2,
+        "earthen_bulwark": 2,
+        "poison_vine": 6,
+        "storm_claw": 16
+      },
+      "maxActiveGap": 0.36666666666666664,
+      "minimumHp": 1,
+      "coreAuto": true,
+      "coreName": "剧毒藤蔓",
+      "readyCoreSeconds": 0.9666666666666666,
+      "blockedCoreSeconds": 0,
+      "blockedCoreRatio": 0,
+      "skills": [
+        {
+          "id": "storm_claw",
+          "name": "风暴爪击",
+          "auto": true
+        },
+        {
+          "id": "poison_vine",
+          "name": "剧毒藤蔓",
+          "auto": true
+        },
+        {
+          "id": "shadow_step",
+          "name": "暗影步",
+          "auto": false
+        },
+        {
+          "id": "hurricane_break",
+          "name": "飓风破",
+          "auto": true
+        },
+        {
+          "id": "earthen_bulwark",
+          "name": "大地壁垒",
+          "auto": true
+        },
+        {
+          "id": "thunder_wolf",
+          "name": "雷霆狼人真身",
+          "auto": true
+        }
+      ],
+      "worn": ["格林斯通刀扇匕首", "剧毒之源图腾", "天鹰胸甲", "元素嘉年华之戒"],
+      "cube": ["瘟疫枝杈", "奥尔达之裤", "斯奎特的项链"],
+      "play": "毒藤 AUTO，上毒后击杀传播，持续移动等待孢子与毒伤生效。",
+      "risk": "四件增伤先要中毒；单体首领没有小怪击杀带来的传播加速。"
+    },
+    {
+      "id": "storm_wolf",
+      "name": "风暴狼神",
+      "className": "德鲁伊",
+      "mainSkill": "storm_claw",
+      "won": true,
+      "seconds": 20.900000000000198,
+      "kills": 65,
+      "hp": 1,
+      "normalCasts": 27,
+      "castCounts": {
+        "thunder_wolf": 1,
+        "hurricane_break": 2,
+        "earthen_bulwark": 2,
+        "storm_claw": 22
+      },
+      "maxActiveGap": 0.16666666666666666,
+      "minimumHp": 1,
+      "coreAuto": false,
+      "coreName": "刀扇风暴",
+      "readyCoreSeconds": 0,
+      "blockedCoreSeconds": 0,
+      "blockedCoreRatio": 0,
+      "skills": [
+        {
+          "id": "storm_claw",
+          "name": "风暴爪击",
+          "auto": true
+        },
+        {
+          "id": "fan_of_knives",
+          "name": "刀扇风暴",
+          "auto": false
+        },
+        {
+          "id": "shadow_step",
+          "name": "暗影步",
+          "auto": false
+        },
+        {
+          "id": "hurricane_break",
+          "name": "飓风破",
+          "auto": true
+        },
+        {
+          "id": "earthen_bulwark",
+          "name": "大地壁垒",
+          "auto": true
+        },
+        {
+          "id": "thunder_wolf",
+          "name": "雷霆狼人真身",
+          "auto": true
+        }
+      ],
+      "worn": ["月之獠牙", "风暴之心", "神圣行者战靴", "狂暴者护符"],
+      "cube": ["暗影之牙", "天鹰胸甲", "元素嘉年华之戒"],
+      "play": "风暴爪击 AUTO，常驻狼形态中连续攻击，暗影步手动避险或强化。",
+      "risk": "核心槽默认手动以保证爪击频率；额外核心会争用攻击节奏。"
+    }
+  ]
+}

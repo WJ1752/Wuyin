@@ -8,6 +8,7 @@ import type { FastifyInstance } from 'fastify';
 import { createApp, type AppOptions } from '../server/app';
 import { newAccountSave, newSave } from '../src/state/saveData';
 import { generateLoot } from '../src/engine/LootGenerator';
+import type { RunRecord, SaveData } from '../src/core/types';
 
 const origin = 'http://localhost:5173';
 const password = 'a-valid-test-password-42';
@@ -296,4 +297,192 @@ test('login rate and request body limits are enforced before expensive authentic
   assert.equal(blocked.statusCode, 429);
   assert.equal(blocked.json().code, 'RATE_LIMITED');
   assert.ok(blocked.headers['retry-after']);
+});
+
+test('online lobby derives public profiles from cloud saves and removes logged-out or expired presences', async (t) => {
+  const f = await fixture(t);
+  const first = client(() => f.app);
+  const second = client(() => f.app);
+  const guest = client(() => f.app);
+  await guest.request('GET', '/api/session');
+  assert.equal(
+    (await guest.request('POST', '/api/lobby/heartbeat', { x: 0.5, y: 0.5 })).statusCode,
+    401,
+  );
+  const firstUser = await register(first, 'lobby_first');
+  assert.equal(
+    (await first.request('POST', '/api/lobby/heartbeat', { x: 0.5, y: 0.5 })).statusCode,
+    409,
+  );
+  const secondUser = await register(second, 'lobby_second');
+  for (const [browser, user, classId, name] of [
+    [first, firstUser, 'ranger', '弓手甲'],
+    [second, secondUser, 'druid', '狼行者乙'],
+  ] as const) {
+    const account = newAccountSave().accounts[0];
+    account.id = user.id;
+    account.characters[0].name = name;
+    account.characters[0].save = newSave(classId);
+    account.characters[0].save.equipment.weapon = generateLoot(classId, 1, {
+      rarity: 'common',
+      slot: 'weapon',
+    });
+    assert.equal(
+      (await browser.request('PUT', '/api/save', { account, revision: 0 })).statusCode,
+      200,
+    );
+    assert.equal(
+      (await browser.request('POST', '/api/lobby/heartbeat', { x: 0.4, y: 0.6, activity: 'forge' }))
+        .statusCode,
+      200,
+    );
+  }
+  assert.equal(
+    (await first.request('POST', '/api/lobby/heartbeat', { x: 2, y: 0.5 })).statusCode,
+    400,
+  );
+  assert.equal(
+    (await first.request('POST', '/api/lobby/heartbeat', { x: 0.5, y: 0.5, name: '伪造身份' }))
+      .statusCode,
+    400,
+  );
+  assert.equal(
+    (await first.request('POST', '/api/lobby/heartbeat', { x: 0.5, y: 0.5, activity: 'unknown' }))
+      .statusCode,
+    400,
+  );
+  const publicLobby = await guest.request('GET', '/api/lobby');
+  assert.equal(publicLobby.json().onlineCount, 2);
+  assert.deepEqual(
+    publicLobby
+      .json()
+      .players.map((entry: { name: string }) => entry.name)
+      .sort(),
+    ['弓手甲', '狼行者乙'],
+  );
+  assert.ok(
+    publicLobby
+      .json()
+      .players.every(
+        (entry: { isSelf: boolean; id: string }) => !entry.isSelf && entry.id.length === 20,
+      ),
+  );
+  for (const secret of [
+    firstUser.id,
+    secondUser.id,
+    firstUser.username,
+    secondUser.username,
+    'password',
+    'account_json',
+  ])
+    assert.ok(!publicLobby.body.includes(secret));
+  assert.equal(
+    (await first.request('GET', '/api/lobby'))
+      .json()
+      .players.filter((entry: { isSelf: boolean }) => entry.isSelf).length,
+    1,
+  );
+  // Distinct authenticated players behind the same NAT keep separate heartbeat budgets.
+  for (let pulse = 0; pulse < 20; pulse++)
+    for (const browser of [first, second])
+      assert.equal(
+        (await browser.request('POST', '/api/lobby/heartbeat', { x: 0.4, y: 0.6 })).statusCode,
+        200,
+      );
+  assert.equal((await first.request('POST', '/api/lobby/leave')).statusCode, 200);
+  assert.equal((await guest.request('GET', '/api/lobby')).json().onlineCount, 1);
+  await second.request('POST', '/api/auth/logout');
+  assert.equal((await guest.request('GET', '/api/lobby')).json().onlineCount, 0);
+  await first.request('POST', '/api/lobby/heartbeat', { x: 0.3, y: 0.7 });
+  const inspection = new DatabaseSync(f.dbPath);
+  inspection.prepare('UPDATE lobby_presence SET updated_at = ?').run(Date.now() - 45001);
+  inspection.close();
+  assert.equal((await guest.request('GET', '/api/lobby')).json().onlineCount, 0);
+});
+
+function publicRun(save: SaveData, id: string, stage: number, seconds: number): RunRecord {
+  const { classId, level, equipment, cube, skills, autoSkills, petId, petLevels, forge } = save;
+  return {
+    id,
+    stage,
+    seconds,
+    kills: 50,
+    date: 1700000000000,
+    build: { classId, level, equipment, cube, skills, autoSkills, petId, petLevels, forge },
+  };
+}
+
+test('public profession boards rank the best cloud record per account and omit private identities', async (t) => {
+  const f = await fixture(t);
+  const first = client(() => f.app);
+  const second = client(() => f.app);
+  const firstUser = await register(first, 'rank_first');
+  const secondUser = await register(second, 'rank_second');
+  const account = newAccountSave().accounts[0];
+  account.id = firstUser.id;
+  const basic = newSave();
+  basic.level = 100;
+  basic.runRecords = [
+    publicRun(basic, 'old-ranger', 40, 20),
+    publicRun(basic, 'invalid-zero', 150, 0),
+  ];
+  account.characters[0].name = '初代弓手';
+  account.characters[0].save = basic;
+  const better = newSave();
+  better.level = 100;
+  for (const slot of ['head', 'chest', 'hands', 'legs'] as const)
+    better.equipment[slot] = generateLoot('ranger', 50, { slot, setId: 'stormcaller' });
+  better.runRecords = [publicRun(better, 'best-ranger', 50, 40)];
+  account.characters.push({ id: 'second-ranger', name: '成型弓手', save: better });
+  const wolf = newSave('druid');
+  wolf.runRecords = [publicRun(wolf, 'wolf-run', 60, 50)];
+  account.characters.push({ id: 'wolf-character', name: '风暴之狼', save: wolf });
+  assert.equal((await first.request('PUT', '/api/save', { account, revision: 0 })).statusCode, 200);
+  const other = newAccountSave().accounts[0];
+  other.id = secondUser.id;
+  other.characters[0].name = '疾风弓手';
+  other.characters[0].save.runRecords = [
+    publicRun(other.characters[0].save, 'fast-ranger', 50, 35),
+  ];
+  assert.equal(
+    (await second.request('PUT', '/api/save', { account: other, revision: 0 })).statusCode,
+    200,
+  );
+  const response = await f.app.inject({ method: 'GET', url: '/api/leaderboard?classId=ranger' });
+  assert.equal(response.statusCode, 200, response.body);
+  assert.equal(response.json().source, 'cloud');
+  assert.equal(response.json().total, 2);
+  assert.deepEqual(
+    response.json().entries.map((entry: { name: string }) => entry.name),
+    ['疾风弓手', '成型弓手'],
+  );
+  assert.deepEqual(
+    response.json().entries.map((entry: { rank: number }) => entry.rank),
+    [1, 2],
+  );
+  assert.equal(response.json().entries[1].setName, '风暴召唤者');
+  assert.equal(response.json().entries[0].setName, null);
+  for (const secret of [
+    firstUser.id,
+    secondUser.id,
+    firstUser.username,
+    secondUser.username,
+    'equipment',
+    'password',
+  ])
+    assert.ok(!response.body.includes(secret));
+  assert.equal(
+    (await f.app.inject({ method: 'GET', url: '/api/leaderboard?classId=druid' })).json().entries[0]
+      .name,
+    '风暴之狼',
+  );
+  assert.equal(
+    (await f.app.inject({ method: 'GET', url: '/api/leaderboard?classId=barbarian' })).json().total,
+    0,
+  );
+  assert.equal(
+    (await f.app.inject({ method: 'GET', url: '/api/leaderboard?classId=invalid' })).statusCode,
+    400,
+  );
+  assert.equal((await f.app.inject({ method: 'GET', url: '/api/leaderboard' })).statusCode, 400);
 });

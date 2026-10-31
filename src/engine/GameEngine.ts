@@ -165,8 +165,9 @@ export class GameEngine {
   private x = 0;
   private y = 0;
   private movement = { x: 0, y: 0 };
+  private dragMovement = { x: 0, y: 0 };
   private keys = new Set<string>();
-  private drag?: { x: number; y: number };
+  private drag?: { x: number; y: number; pointerId: number };
   private hp = 1;
   private resource = 100;
   private shield = 0;
@@ -229,6 +230,7 @@ export class GameEngine {
   private minimap = new Graphics();
   private mapClock = 0;
   private gamepadHeld = new Set<number>();
+  private gamepadBlocked = false;
   async init(host: HTMLElement, config: CombatConfig, callbacks: GameCallbacks): Promise<void> {
     this.host = host;
     this.config = {
@@ -359,16 +361,54 @@ export class GameEngine {
   setAuto(id: string, enabled: boolean) {
     this.config.autoSkills[id] = enabled;
   }
-  togglePause() {
-    if (this.finished) return;
-    this.paused = !this.paused;
+  getSkillCost(id: string) {
+    const skill = this.skill(id);
+    if (!skill || this.buffs.has('channeling')) return 0;
+    const resolved = this.resolveSkill(skill);
+    return resolved.cost * (this.power('grand_vizier') && resolved.effect === 'meteor' ? 0.5 : 1);
+  }
+  private clearInput() {
     this.keys.clear();
     this.setMovement(0, 0);
+    this.drag = undefined;
+    this.dragMovement = { x: 0, y: 0 };
+    this.movementDirection = { x: 0, y: 0 };
+    this.moving = false;
+    this.gamepadHeld.clear();
+    this.gamepadBlocked = true;
+  }
+  setPaused(paused: boolean) {
+    if (this.finished) return;
+    this.paused = paused;
+    this.clearInput();
     this.emit();
   }
+  togglePause() {
+    this.setPaused(!this.paused);
+  }
+  private hasInputDialog() {
+    return (
+      typeof document !== 'undefined' &&
+      !!document.querySelector('[role="dialog"][aria-modal="true"]')
+    );
+  }
   private onKeyDown = (e: KeyboardEvent) => {
-    if ((e.target as HTMLElement)?.matches('input,select,textarea')) return;
+    const target = e.target as HTMLElement | null;
+    if (
+      e.defaultPrevented ||
+      e.isComposing ||
+      e.ctrlKey ||
+      e.metaKey ||
+      e.altKey ||
+      target?.closest?.(
+        'input,select,textarea,[contenteditable]:not([contenteditable="false"]),[role="dialog"]',
+      ) ||
+      this.hasInputDialog()
+    )
+      return;
     const key = e.key.toLowerCase();
+    if (this.paused && key !== 'escape') return;
+    if (key === ' ' && target?.closest?.('button,a[href],[role="button"]')) return;
     if (
       ['w', 'a', 's', 'd', 'arrowup', 'arrowleft', 'arrowdown', 'arrowright', ' '].includes(key)
     ) {
@@ -389,27 +429,34 @@ export class GameEngine {
     this.keys.delete(e.key.toLowerCase());
   };
   private onBlur = () => {
-    this.keys.clear();
-    this.setMovement(0, 0);
-    this.drag = undefined;
-    if (!this.finished) {
-      this.paused = true;
-      this.emit();
-    }
+    this.setPaused(true);
   };
   private onVisibility = () => {
     if (document.hidden) this.onBlur();
   };
   private onPointerDown = (e: PointerEvent) => {
-    if (e.button !== 0) return;
-    this.drag = { x: e.clientX, y: e.clientY };
+    if (
+      e.button !== 0 ||
+      !e.isPrimary ||
+      this.paused ||
+      this.finished ||
+      this.hasInputDialog() ||
+      this.drag
+    )
+      return;
+    this.drag = { x: e.clientX, y: e.clientY, pointerId: e.pointerId };
   };
   private onPointerMove = (e: PointerEvent) => {
-    if (this.drag) this.setMovement((e.clientX - this.drag.x) / 65, (e.clientY - this.drag.y) / 65);
+    if (!this.drag || e.pointerId !== this.drag.pointerId) return;
+    const x = (e.clientX - this.drag.x) / 65;
+    const y = (e.clientY - this.drag.y) / 65;
+    const len = Math.max(1, Math.hypot(x, y));
+    this.dragMovement = { x: x / len, y: y / len };
   };
-  private onPointerUp = () => {
+  private onPointerUp = (e: PointerEvent) => {
+    if (!this.drag || e.pointerId !== this.drag.pointerId) return;
     this.drag = undefined;
-    this.setMovement(0, 0);
+    this.dragMovement = { x: 0, y: 0 };
   };
   private tick = () => {
     if (!this.app || this.disposed) return;
@@ -428,25 +475,35 @@ export class GameEngine {
       this.cooldowns[id] = Math.max(0, this.cooldowns[id] - dt);
       if (!this.cooldowns[id]) delete this.cooldowns[id];
     }
-    let mx = this.movement.x,
-      my = this.movement.y;
+    let mx = this.movement.x + this.dragMovement.x,
+      my = this.movement.y + this.dragMovement.y;
     mx +=
       (this.keys.has('d') || this.keys.has('arrowright') ? 1 : 0) -
       (this.keys.has('a') || this.keys.has('arrowleft') ? 1 : 0);
     my +=
       (this.keys.has('s') || this.keys.has('arrowdown') ? 1 : 0) -
       (this.keys.has('w') || this.keys.has('arrowup') ? 1 : 0);
+    const gamepadSkills: SkillDef[] = [];
     const pad = navigator.getGamepads?.()?.find((p) => p?.connected);
-    if (pad) {
+    if (pad && !this.hasInputDialog() && this.gamepadBlocked) {
+      // Require neutral input after a pause or reconnect before accepting a held action.
+      this.gamepadBlocked =
+        pad.buttons.slice(0, 6).some((button) => button.pressed) ||
+        Math.abs(pad.axes[0] ?? 0) > 0.18 ||
+        Math.abs(pad.axes[1] ?? 0) > 0.18;
+    } else if (pad && !this.hasInputDialog()) {
       if (Math.abs(pad.axes[0] ?? 0) > 0.18) mx += pad.axes[0];
       if (Math.abs(pad.axes[1] ?? 0) > 0.18) my += pad.axes[1];
       for (let i = 0; i < 6; i++) {
         if (pad.buttons[i]?.pressed && !this.gamepadHeld.has(i)) {
           this.gamepadHeld.add(i);
           const skill = this.skills[i];
-          if (skill) this.cast(skill.id);
+          if (skill) gamepadSkills.push(skill);
         } else if (!pad.buttons[i]?.pressed) this.gamepadHeld.delete(i);
       }
+    } else {
+      this.gamepadHeld.clear();
+      this.gamepadBlocked = true;
     }
     const len = Math.max(1, Math.hypot(mx, my));
     mx /= len;
@@ -454,6 +511,7 @@ export class GameEngine {
     this.moving = Math.hypot(mx, my) > 0.1;
     this.movementDirection = { x: mx, y: my };
     if (mx) this.facing = mx;
+    for (const skill of gamepadSkills) this.cast(skill.id);
     const speed =
       this.config.stats.moveSpeed *
       (this.elapsed < this.slowUntil && !this.buffs.has('ultimate') ? 1 - this.slowRatio : 1) *
@@ -501,6 +559,9 @@ export class GameEngine {
         enemies: targets.length,
         elite: targets.some((e) => e.elite || e.boss),
         resource: this.resource,
+        costs: Object.fromEntries(
+          this.skills.map((skill) => [skill.id, this.getSkillCost(skill.id)]),
+        ),
         free: this.buffs.has('channeling'),
         cooldowns: this.cooldowns,
         auto: this.config.autoSkills,
@@ -1133,9 +1194,8 @@ export class GameEngine {
   private perform(skill: SkillDef, free: boolean, multiplier = 1) {
     skill = this.resolveSkill(skill);
     const cast: CastContext = { resourceGranted: false };
-    let cost = skill.cost;
-    if (this.power('grand_vizier') && skill.effect === 'meteor') cost *= 0.5;
-    const zero = free || this.buffs.has('channeling');
+    const cost = this.getSkillCost(skill.id);
+    const zero = free || cost === 0;
     if (!zero && this.resource < cost) return;
     if (!free && this.shadowCharges > 0 && ['basic', 'core', 'control'].includes(skill.kind)) {
       multiplier *= 1 + this.power('shadowfang');
@@ -1242,10 +1302,12 @@ export class GameEngine {
       const start = { x: this.x, y: this.y };
       const mx =
         this.movement.x +
+        (this.dragMovement?.x ?? 0) +
         (this.keys.has('d') || this.keys.has('arrowright') ? 1 : 0) -
         (this.keys.has('a') || this.keys.has('arrowleft') ? 1 : 0);
       const my =
         this.movement.y +
+        (this.dragMovement?.y ?? 0) +
         (this.keys.has('s') || this.keys.has('arrowdown') ? 1 : 0) -
         (this.keys.has('w') || this.keys.has('arrowup') ? 1 : 0);
       const movement =

@@ -6,6 +6,7 @@ import serveStatic from '@fastify/static';
 import { createHash, randomBytes, randomUUID, scrypt, timingSafeEqual } from 'node:crypto';
 import { resolve } from 'node:path';
 import { openDatabase } from './database';
+import { registerCommunity } from './community';
 import { MAX_IMPORT_BYTES, validateAccountSave } from '../src/state/saveData';
 import type { AccountData } from '../src/core/types';
 
@@ -286,6 +287,11 @@ export async function createApp(options: AppOptions = {}) {
       });
     }
     return getSave(user);
+  });
+  registerCommunity(app, db, {
+    getUser,
+    sessionHash: (request) => tokenHash(request.cookies[sessionCookie] ?? ''),
+    publicIdKey: cookieSecret,
   });
   if (options.staticDir) await app.register(serveStatic, { root: resolve(options.staticDir) });
   app.setNotFoundHandler((request, reply) => {

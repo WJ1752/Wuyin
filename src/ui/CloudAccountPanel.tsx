@@ -45,7 +45,7 @@ export function CloudAccountPanel() {
           onSubmit={async (event) => {
             event.preventDefault();
             await cloud.authenticate(mode, username, password);
-            setPassword('');
+            if (!useCloudStore.getState().error) setPassword('');
           }}
         >
           <div className="cloud-actions" role="group" aria-label="登录或注册">
@@ -53,6 +53,7 @@ export function CloudAccountPanel() {
               type="button"
               className="ghost-button"
               aria-pressed={mode === 'login'}
+              disabled={locked}
               onClick={() => setMode('login')}
             >
               登录
@@ -61,6 +62,7 @@ export function CloudAccountPanel() {
               type="button"
               className="ghost-button"
               aria-pressed={mode === 'register'}
+              disabled={locked}
               onClick={() => setMode('register')}
             >
               注册新账号
@@ -112,7 +114,7 @@ export function CloudAccountPanel() {
           <p>
             账号：{cloud.localUser?.username ?? cloud.user?.username}
             {cloud.updatedAt
-              ? ` · 最近云存档 ${new Date(cloud.updatedAt).toLocaleString('zh-CN')}`
+              ? ` · 最近云存档 ${new Date(cloud.updatedAt).toLocaleString('zh-CN', { timeZone: 'Asia/Hong_Kong' })}`
               : ''}
           </p>
           {cloud.status === 'choosing' && authenticated && (

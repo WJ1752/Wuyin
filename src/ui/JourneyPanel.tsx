@@ -34,7 +34,7 @@ export function LootChances({ stage, source = 'world' }: { stage: number; source
   );
 }
 
-export function JourneyPanel() {
+export function JourneyPanel({ onNavigate }: { onNavigate?: (panel: string) => void }) {
   const { save, selectProgressionSet, accounts, activeAccountId, labBackup } = useGameStore();
   const stash = labBackup
     ? []
@@ -70,6 +70,7 @@ export function JourneyPanel() {
             <button
               key={set.id}
               className={target.id === set.id ? 'active' : ''}
+              aria-pressed={target.id === set.id}
               onClick={() => selectProgressionSet(set.id)}
             >
               <ItemIcon item={{ slot: 'head', setId: set.id }} size={40} />
@@ -93,6 +94,19 @@ export function JourneyPanel() {
           31 / 35 / 40 / 45
           层首通奖励优先补齐所选套装缺失部件。更换目标只影响尚未领取的奖励；集齐后记得穿戴。
         </small>
+        {onNavigate && (
+          <div className="button-row">
+            <button className="gold-button" onClick={() => onNavigate('skills')}>
+              学习核心技能
+            </button>
+            <button className="ghost-button" onClick={() => onNavigate('character')}>
+              查看并穿戴套装
+            </button>
+            <button className="ghost-button" onClick={() => onNavigate('stash')}>
+              查看共享仓库
+            </button>
+          </div>
+        )}
       </section>
       <div className="journey-milestones">
         {getProgressionMilestones(save).map((milestone) => (
@@ -102,10 +116,20 @@ export function JourneyPanel() {
             </div>
             <div>
               <span className="eyebrow">
-                第 {milestone.stage} 层 · {milestone.claimed ? '已领取' : '首通奖励'}
+                第 {milestone.stage} 层 ·{' '}
+                {milestone.claimed
+                  ? '已领取'
+                  : (save.progression?.clearedStage ?? 0) >= milestone.stage
+                    ? '已达成 · 等待补发'
+                    : '首通奖励'}
               </span>
               <h3>{milestone.title}</h3>
               <p className="muted">{milestone.detail}</p>
+              {!milestone.claimed && (save.progression?.clearedStage ?? 0) >= milestone.stage && (
+                <p className="positive">
+                  腾出背包空间，再通关第 {milestone.stage} 层或更高层即可自动补发。
+                </p>
+              )}
             </div>
           </article>
         ))}

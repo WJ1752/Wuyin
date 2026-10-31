@@ -20,7 +20,7 @@ export function HeroArt({
   );
 }
 
-function Pine({
+export function Pine({
   x,
   y,
   size = 1,
@@ -54,7 +54,7 @@ function Pine({
   );
 }
 
-function Torch({ x, y }: { x: number; y: number }) {
+export function Torch({ x, y }: { x: number; y: number }) {
   return (
     <g transform={`translate(${x} ${y})`}>
       <path d="M-3 1H4V16H-3ZM-5-2H6V3H-5Z" fill="#1b252d" />

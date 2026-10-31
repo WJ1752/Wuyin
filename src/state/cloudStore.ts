@@ -75,7 +75,7 @@ class RequestError extends Error {
     super(message);
   }
 }
-async function request<T>(path: string, method = 'GET', body?: unknown): Promise<T> {
+export async function apiRequest<T>(path: string, method = 'GET', body?: unknown): Promise<T> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 15000);
   try {
@@ -102,7 +102,7 @@ async function request<T>(path: string, method = 'GET', body?: unknown): Promise
   }
 }
 async function session() {
-  const result = await request<{ user: CloudUser | null; csrfToken: string }>('/session');
+  const result = await apiRequest<{ user: CloudUser | null; csrfToken: string }>('/session');
   if (
     typeof result.csrfToken !== 'string' ||
     !result.csrfToken ||
@@ -114,7 +114,7 @@ async function session() {
   return result;
 }
 async function remoteSave(user: CloudUser) {
-  const remote = await request<CloudSave>('/save');
+  const remote = await apiRequest<CloudSave>('/save');
   if (
     !Number.isSafeInteger(remote.revision) ||
     remote.revision < 0 ||
@@ -411,10 +411,14 @@ export const useCloudStore = create<CloudState>((set, get) => ({
       if (get().localUser && get().localUser!.username.toLowerCase() !== username.toLowerCase())
         throw new Error('请先退出当前云账号，再登录其他账号；本机未同步进度会保留。');
       await session();
-      const auth = await request<{ user: CloudUser; csrfToken: string }>(`/auth/${mode}`, 'POST', {
-        username,
-        password,
-      });
+      const auth = await apiRequest<{ user: CloudUser; csrfToken: string }>(
+        `/auth/${mode}`,
+        'POST',
+        {
+          username,
+          password,
+        },
+      );
       csrfToken = auth.csrfToken;
       set({ user: auth.user });
       const remote = await remoteSave(auth.user);
@@ -509,7 +513,7 @@ export const useCloudStore = create<CloudState>((set, get) => ({
           if (!data) break;
           await persistLocal();
           const sent = fingerprint(data.account);
-          const result = await request<CloudSave>('/save', 'PUT', {
+          const result = await apiRequest<CloudSave>('/save', 'PUT', {
             account: data.account,
             revision: data.revision,
           });
@@ -540,7 +544,7 @@ export const useCloudStore = create<CloudState>((set, get) => ({
       await replacementBackup(remote);
       const account = accountData(currentAccount(), user);
       const sent = fingerprint(account);
-      const result = await request<CloudSave>('/save', 'PUT', {
+      const result = await apiRequest<CloudSave>('/save', 'PUT', {
         account,
         revision: remote.revision,
       });
@@ -571,7 +575,7 @@ export const useCloudStore = create<CloudState>((set, get) => ({
         throw new Error('访客备份无法读取，当前云进度仍保留，请导出后再处理。');
       // A failed logout keeps the session visible; it must not appear signed out while the cookie remains valid.
       await session();
-      await request('/auth/logout', 'POST');
+      await apiRequest('/auth/logout', 'POST');
       await storeLocal(ACTIVE_KEY, null);
       suppressChanges = true;
       if (useGameStore.getState().cloudUserId) {

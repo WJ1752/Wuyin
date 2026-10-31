@@ -180,12 +180,17 @@ export function measureBuild(setId: string, pieces: number, targets: number, sec
   return { dps: damage() / seconds, resource: engine.resource, casts: engine.attackCount };
 }
 
-export function runRift(setId: string, stage = 71) {
+export function runRift(
+  setId: string,
+  stage = 71,
+  observe?: { setup?: (engine: any) => void; frame?: (engine: any, dt: number) => void },
+) {
   const { engine } = buildHarness(setId, 4, stage, false);
   let won = false;
   engine.callbacks.onFinish = (result: any) => {
     won = result.won;
   };
+  observe?.setup?.(engine);
   while (!engine.finished && engine.elapsed < 300) {
     const target = engine.enemies
       .filter((e: any) => e.hp > 0)
@@ -200,6 +205,7 @@ export function runRift(setId: string, stage = 71) {
       );
     }
     engine.update(1 / 30);
+    observe?.frame?.(engine, 1 / 30);
   }
   return {
     won,
