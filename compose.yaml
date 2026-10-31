@@ -1,0 +1,67 @@
+services:
+  app:
+    build:
+      context: .
+      target: app
+    restart: unless-stopped
+    init: true
+    environment:
+      NODE_ENV: production
+      HOST: 0.0.0.0
+      PORT: 3001
+      DATABASE_PATH: /app/data/wuyin.sqlite
+      APP_ORIGINS: https://${PUBLIC_DOMAIN:?Set PUBLIC_DOMAIN in .env}
+      TRUST_PROXY: 1
+    volumes:
+      - game_data:/app/data
+      - game_backups:/app/backups
+    read_only: true
+    tmpfs:
+      - /tmp:rw,nosuid,noexec,size=64m
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    stop_grace_period: 30s
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+
+  proxy:
+    build:
+      context: .
+      target: proxy
+    restart: unless-stopped
+    environment:
+      PUBLIC_DOMAIN: ${PUBLIC_DOMAIN:?Set PUBLIC_DOMAIN in .env}
+      ACME_EMAIL: ${ACME_EMAIL:?Set ACME_EMAIL in .env}
+    ports:
+      - '80:8080'
+      - '443:8443'
+      - '443:8443/udp'
+    volumes:
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      app:
+        condition: service_healthy
+    read_only: true
+    tmpfs:
+      - /tmp:rw,nosuid,noexec,size=16m
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+
+volumes:
+  game_data:
+  game_backups:
+  caddy_data:
+  caddy_config:

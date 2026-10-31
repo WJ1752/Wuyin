@@ -8,6 +8,9 @@ export default defineConfig({
   plugins: [react(), tailwindcss()],
   base: './',
   cacheDir: '.cache/vite',
+  server: {
+    proxy: { '/api': process.env.DEV_API_TARGET ?? 'http://127.0.0.1:3001' },
+  },
   optimizeDeps: {
     esbuildOptions: {
       // Let the Node host write cache files: native esbuild writes can be denied

@@ -4,6 +4,7 @@ import { CLASSES } from '../data/classes';
 import { MAX_CHARACTERS, useGameStore } from '../state/gameStore';
 import { HeroArt } from './SceneArt';
 import { Check, Lock } from './PixelIcons';
+import { CloudAccountPanel } from './CloudAccountPanel';
 
 export function AccountPanel() {
   const store = useGameStore();
@@ -11,62 +12,67 @@ export function AccountPanel() {
   const [accountName, setAccountName] = useState('');
   const [characterName, setCharacterName] = useState('');
   const [classId, setClassId] = useState<ClassId>('ranger');
-  const locked = !!store.labBackup || store.inCombat;
+  const locked = !!store.labBackup || store.inCombat || store.cloudTransition;
   return (
     <div className="account-panel">
+      <CloudAccountPanel />
       <section className="card">
         <div className="section-heading">
           <h3>当前账号 · {account.name}</h3>
-          <span>本地账号</span>
+          <span>{store.cloudUserId ? '云账号' : '访客本地账号'}</span>
         </div>
         <p className="muted">
           每个账号最多创建 6 个角色。角色独立成长、独立背包，装备可经共享仓库交给同账号其他角色。
-          账号保存在当前浏览器，可在设置中导出备份。
+          {store.cloudUserId
+            ? '进度保存在此云账号，断线时保留本机副本。'
+            : '访客账号保存在当前浏览器，可在设置中导出备份。'}
         </p>
         {locked && (
           <p className="positive">
             <Lock size={14} /> 请先结束演武或远征，再管理账号与仓库。
           </p>
         )}
-        <div className="account-forms">
-          <label>
-            切换账号
-            <select
-              className="system-select"
-              value={account.id}
-              disabled={locked}
-              onChange={(event) => store.switchAccount(event.target.value)}
-            >
-              {store.accounts.map((entry) => (
-                <option key={entry.id} value={entry.id}>
-                  {entry.name}
-                </option>
-              ))}
-            </select>
-          </label>
-          <form
-            onSubmit={(event) => {
-              event.preventDefault();
-              store.createAccount(accountName);
-              setAccountName('');
-            }}
-          >
+        {!store.cloudUserId && (
+          <div className="account-forms">
             <label>
-              新账号名称
-              <input
-                value={accountName}
-                maxLength={24}
-                required
+              切换账号
+              <select
+                className="system-select"
+                value={account.id}
                 disabled={locked}
-                onChange={(event) => setAccountName(event.target.value)}
-                placeholder="输入账号名称"
-              />
+                onChange={(event) => store.switchAccount(event.target.value)}
+              >
+                {store.accounts.map((entry) => (
+                  <option key={entry.id} value={entry.id}>
+                    {entry.name}
+                  </option>
+                ))}
+              </select>
             </label>
-            <button className="ghost-button" disabled={locked || !accountName.trim()}>
-              创建账号
-            </button>
-          </form>
-        </div>
+            <form
+              onSubmit={(event) => {
+                event.preventDefault();
+                store.createAccount(accountName);
+                setAccountName('');
+              }}
+            >
+              <label>
+                新账号名称
+                <input
+                  value={accountName}
+                  maxLength={24}
+                  required
+                  disabled={locked}
+                  onChange={(event) => setAccountName(event.target.value)}
+                  placeholder="输入账号名称"
+                />
+              </label>
+              <button className="ghost-button" disabled={locked || !accountName.trim()}>
+                创建账号
+              </button>
+            </form>
+          </div>
+        )}
       </section>
       <section>
         <div className="section-heading">

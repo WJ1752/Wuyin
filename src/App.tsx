@@ -40,6 +40,7 @@ import { getLootProfile, getProgressionMilestones } from './data/progression';
 import { RARITY_COLORS, RARITY_NAMES } from './core/types';
 import type { Rarity } from './core/types';
 import { useGameStore, createCombatConfig } from './state/gameStore';
+import { useCloudStore } from './state/cloudStore';
 import { SystemsModal } from './ui/SystemsModal';
 import { HeroArt, TownScene } from './ui/SceneArt';
 import { VirtualJoystick } from './ui/VirtualJoystick';
@@ -67,7 +68,18 @@ function App() {
   const [result, setResult] = useState<RunResult | null>(null);
   const [runSummary, setRunSummary] = useState('');
   const [showGuide, setShowGuide] = useState(false);
+  const [bootReady, setBootReady] = useState(false);
   const labBackup = useGameStore((s) => s.labBackup);
+  const cloudStatus = useCloudStore((s) => s.status);
+  const cloudDirty = useCloudStore((s) => s.dirty);
+  const cloudLabel = {
+    guest: '访客冒险 · 本机自动保存',
+    choosing: '已登录 · 请选择云端档案',
+    online: cloudDirty ? '云端冒险 · 等待同步' : '云端冒险 · 已同步',
+    offline: '云端暂不可用 · 进度保留本机',
+    expired: '登录已过期 · 请重新登录同步',
+    conflict: '存档存在冲突 · 点击选择保留版本',
+  }[cloudStatus];
   const account = useGameStore((s) => s.accounts.find((entry) => entry.id === s.activeAccountId));
   const character = account?.characters.find((entry) => entry.id === account.activeCharacterId);
   const classDef = CLASSES.find((c) => c.id === save.classId) ?? CLASSES[0];
@@ -75,7 +87,9 @@ function App() {
   const lootProfile = getLootProfile(save.selectedStage);
   const nextMilestone = getProgressionMilestones(save).find((milestone) => !milestone.claimed);
   useEffect(() => {
-    void hydrate();
+    void hydrate()
+      .then(() => useCloudStore.getState().initialize())
+      .finally(() => setBootReady(true));
   }, [hydrate]);
   useEffect(() => {
     audio.settings(save.volume, save.muted);
@@ -111,6 +125,10 @@ function App() {
     setPanel(id);
   };
   const enter = (training = false) => {
+    if (useGameStore.getState().cloudTransition) {
+      setNotice('正在切换云端档案，请稍候再开始远征。');
+      return;
+    }
     useGameStore.getState().setInCombat(true);
     setNotice('');
     audio.play('pylon');
@@ -129,7 +147,7 @@ function App() {
     setResult(r);
     audio.play(r.won ? 'victory' : 'death');
   };
-  if (!ready)
+  if (!ready || !bootReady)
     return (
       <div className="loading-screen">
         <div className="brand-sigil">◇</div>
@@ -421,9 +439,9 @@ function App() {
             ))}
           </nav>
           <footer className="town-footer">
-            <span>
-              <span className="status-dot" /> 本地冒险 · 每 3 秒自动保存
-            </span>
+            <button className="text-button" onClick={() => open('accounts')}>
+              <span className="status-dot" /> {cloudLabel}
+            </button>
             <span>
               WASD 移动 <i /> 1–6 施放技能 <i /> 空格 闪避
             </span>

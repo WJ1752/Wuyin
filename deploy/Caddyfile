@@ -1,0 +1,11 @@
+{
+    email {$ACME_EMAIL}
+    admin off
+    http_port 8080
+    https_port 8443
+}
+
+{$PUBLIC_DOMAIN} {
+    encode zstd gzip
+    reverse_proxy app:3001
+}

@@ -1458,3 +1458,54 @@
     display: none;
   }
 }
+
+.cloud-account-panel {
+  display: grid;
+  gap: 12px;
+}
+.cloud-account-panel p {
+  margin: 0;
+  line-height: 1.7;
+}
+.cloud-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.cloud-actions button[aria-pressed='true'] {
+  border-color: #d6b67b;
+  color: #ead6a6;
+}
+.cloud-login-form,
+.cloud-choice {
+  display: grid;
+  gap: 12px;
+}
+.cloud-choice,
+.cloud-confirm {
+  padding: 14px;
+  border: 1px solid #56605c;
+  background: #0b1820;
+}
+.cloud-confirm {
+  margin-top: 12px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.cloud-confirm p {
+  flex-basis: 100%;
+}
+.cloud-error {
+  color: #e9a0a3;
+  padding: 10px;
+  border-left: 3px solid #b9767b;
+  background: #2c2027;
+}
+@media (max-width: 600px) {
+  .cloud-account-panel .section-heading {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 8px;
+  }
+}
