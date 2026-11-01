@@ -1,7 +1,7 @@
 .npc-hall {
   min-width: 0;
-  height: 100%;
-  min-height: 620px;
+  height: auto;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -91,8 +91,9 @@
 }
 .hall-map {
   position: relative;
-  flex: 1 1 auto;
-  min-height: 370px;
+  flex: 0 0 auto;
+  min-height: 0;
+  aspect-ratio: 1296 / 1216;
   overflow: hidden;
   isolation: isolate;
   user-select: none;
@@ -118,40 +119,31 @@
     linear-gradient(180deg, #24433500, #84947812 35%, #172c3e88);
   pointer-events: none;
 }
-.hall-portal-caption {
+.hall-portal {
   position: absolute;
-  top: 7%;
-  left: 50%;
-  transform: translateX(-50%);
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  padding: 7px 10px;
-  border: 1px solid #bca46f99;
-  background: #0c2028eb;
-  color: #e1d7b2;
-  box-shadow:
-    inset 0 0 0 2px #142932,
-    2px 2px #08141caa;
-  font-size: 13px;
-  text-align: center;
-  white-space: nowrap;
-  pointer-events: none;
+  width: 25%;
+  height: 28%;
+  transform: translate(-50%, -80%);
+  border: 2px solid transparent;
+  border-radius: 40%;
+  background: transparent;
+  cursor: pointer;
+  z-index: 1;
 }
-.hall-portal-caption small {
-  display: block;
-  margin-top: 3px;
-  font-size: 8px;
-  color: #9db9a0;
+.hall-portal:hover:not(:disabled),
+.hall-portal:focus-visible {
+  border-color: #96e4cb88;
+  box-shadow: 0 0 18px #70dbc83d;
+  background: #8ffbe10a;
 }
 .hall-actor {
   --sprite-width: 54px;
   --sprite-height: 66px;
   position: absolute;
   width: 64px;
-  height: 0;
+  height: var(--sprite-height);
   padding: 0;
-  transform: translateX(-50%);
+  transform: translate(-50%, -100%);
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -222,7 +214,9 @@
   --sprite-width: calc(68px * var(--npc-scale, 1));
   --sprite-height: calc(68px * var(--npc-scale, 1));
 }
-.hall-npc .hall-sprite { overflow: hidden; }
+.hall-npc .hall-sprite {
+  overflow: hidden;
+}
 .hall-npc .hall-sprite .npc-atlas-art {
   position: absolute;
   width: 400%;
@@ -268,7 +262,7 @@
 .hall-actor-name {
   position: absolute;
   left: 50%;
-  top: 5px;
+  top: calc(100% + 5px);
   transform: translateX(-50%);
   font-size: 8px;
   color: #d9d4b2;
@@ -349,20 +343,20 @@
   opacity: 0.8;
 }
 .hall-touch-controls {
-  position: absolute;
-  inset: auto 0 0;
-  height: 108px;
+  position: relative;
+  flex: 0 0 88px;
+  min-height: 88px;
   pointer-events: none;
-  z-index: 150;
-  background: linear-gradient(0deg, #0c202b88, transparent);
+  border-top: 1px solid #536851;
+  background: #12232a;
 }
 .hall-touch-controls .virtual-joystick {
   display: grid;
   position: absolute;
-  width: 75px;
-  height: 75px;
+  width: 64px;
+  height: 64px;
   left: 13px;
-  bottom: 14px;
+  bottom: 11px;
   opacity: 0.88;
   pointer-events: auto;
   background: #1e3b43b8;
@@ -566,14 +560,6 @@
   .hall-actor-name {
     font-size: 7px;
     padding: 1px 3px;
-  }
-  .hall-portal-caption {
-    top: 4%;
-    font-size: 11px;
-    padding: 5px 7px;
-  }
-  .hall-portal-caption small {
-    font-size: 7px;
   }
   .hall-dialogue {
     min-height: 33px;

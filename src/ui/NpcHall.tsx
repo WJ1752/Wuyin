@@ -3,7 +3,7 @@ import type { CSSProperties, PointerEvent } from 'react';
 import type { LobbyActivity, LobbyPlayer, LobbyResponse } from '../core/types';
 import { RARITY_COLORS, RARITY_NAMES, SLOT_NAMES } from '../core/types';
 import { CLASSES } from '../data/classes';
-import { clampHallPosition, HALL_NPCS } from '../data/npcHall';
+import { clampHallPosition, HALL_LAYOUT, HALL_NPCS } from '../data/npcHall';
 import type { HallNpc } from '../data/npcHall';
 import { NPC_ART } from '../data/npcVisuals';
 import { CHARACTER_ART } from '../render/CharacterTextures';
@@ -47,7 +47,7 @@ const ACTIVITIES: Record<string, string> = {
   gamble: '挑选秘藏',
   rift: '准备远征',
 };
-const START = { x: 0.5, y: 0.73 };
+const START: { x: number; y: number } = HALL_LAYOUT.spawn;
 const INTERACTION_DISTANCE = 82;
 // CSS and Pixi use the same image origin: the actor's coordinate is its ground contact.
 const characterOrigin = (classId: keyof typeof CHARACTER_ART): CSSProperties =>
@@ -312,7 +312,7 @@ export function NpcHall({
       return;
     }
     setSelectedNpcId(npc.id);
-    setTarget(clampHallPosition(npc.x, npc.y + 0.09));
+    setTarget(clampHallPosition(npc.approach.x, npc.approach.y));
   };
   const stopPointer = (event: PointerEvent<HTMLDivElement>, cancelled = false) => {
     const held = drag.current;
@@ -409,12 +409,14 @@ export function NpcHall({
       >
         <HallScene />
         <div className="hall-ground-light" />
-        <div className="hall-portal-caption">
-          <Compass size={20} />
-          <span>
-            暮林驿站<small>每一次远征，都从相遇开始</small>
-          </span>
-        </div>
+        <button
+          className="hall-portal"
+          style={{ left: `${HALL_LAYOUT.portal.x * 100}%`, top: `${HALL_LAYOUT.portal.y * 100}%` }}
+          aria-label="中央传送门，选择单人或组队远征"
+          title="中央传送门 · 选择单人或组队远征"
+          disabled={!movingEnabled}
+          onClick={() => onNavigate('expedition')}
+        />
         {HALL_NPCS.map((npc) => {
           const Icon = NPC_ICONS[npc.panel];
           const near = distanceTo(npc) <= INTERACTION_DISTANCE;
@@ -509,44 +511,44 @@ export function NpcHall({
           </span>
           <span className="hall-self-ring" />
         </div>
-        <div className="hall-touch-controls">
-          <VirtualJoystick
-            disabled={!movingEnabled}
-            onMove={(x, y) => {
-              joystick.current = { x, y };
-              if (Math.hypot(x, y) > 0.05) {
-                setTarget(null);
-                setSelectedNpcId(null);
-              }
-            }}
-          />
-          <button
-            className="hall-interact gold-button"
-            disabled={!movingEnabled || !inReach}
-            onClick={() => interaction.current()}
-          >
-            <span>
-              <small>
-                {inReach
-                  ? interactionNpc.name
-                  : selectedNpc
-                    ? `走近${selectedNpc.name}`
-                    : '靠近居民后互动'}
-              </small>
-              {inReach ? interactionNpc.service : '正在探索营地'}
-            </span>
-            <kbd>E</kbd>
-            <ChevronRight size={17} />
-          </button>
-        </div>
+      </div>
+      <div className="hall-touch-controls">
+        <VirtualJoystick
+          disabled={!movingEnabled}
+          onMove={(x, y) => {
+            joystick.current = { x, y };
+            if (Math.hypot(x, y) > 0.05) {
+              setTarget(null);
+              setSelectedNpcId(null);
+            }
+          }}
+        />
+        <button
+          className="hall-interact gold-button"
+          disabled={!movingEnabled || !inReach}
+          onClick={() => interaction.current()}
+        >
+          <span>
+            <small>
+              {inReach
+                ? interactionNpc.name
+                : selectedNpc
+                  ? `走近${selectedNpc.name}`
+                  : '靠近居民后互动'}
+            </small>
+            {inReach ? interactionNpc.service : '正在探索营地'}
+          </span>
+          <kbd>E</kbd>
+          <ChevronRight size={17} />
+        </button>
       </div>
       <div className="hall-dialogue" aria-live="polite">
         <span>
           {inReach
             ? `「${interactionNpc.greeting}」`
             : selectedNpc
-              ? `正在前往${selectedNpc.name}，靠近后点击右下角交互。`
-              : '点击地面前往 · 拖动 / 摇杆 / WASD 移动 · E 与附近居民互动'}
+              ? `正在前往${selectedNpc.name}，靠近后点击地图下方交互。`
+              : '点击传送门出征 · 点击居民走近 · WASD / 摇杆移动 · E 交互'}
         </span>
       </div>
       <footer className="hall-footer">

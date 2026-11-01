@@ -2900,7 +2900,8 @@ kbd {
 }
 
 .hall-panel {
-  min-height: 620px;
+  min-height: 0;
+  align-self: start;
 }
 .bottom-nav {
   grid-template-columns: repeat(8, minmax(0, 1fr));
@@ -2992,8 +2993,8 @@ kbd {
     padding-top: 12px;
   }
   .hall-panel {
-    min-height: 440px;
-    height: calc(100dvh - 164px);
+    min-height: 0;
+    height: auto;
     grid-column: 1 / -1;
   }
   .adventure-sidebar {

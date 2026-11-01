@@ -1,5 +1,29 @@
 # 暮林营地地图重绘
 
+## 第三版：中央传送门与外围服务
+
+当前主城使用 `public/assets/maps/watchers-camp-v3.png`，1296×1216、不透明 PNG；使用内置 imagegen 编辑第二版，沿用同一精细像素风。传送门、符文广场与南北道路留空，移除中央篝火，七处服务建筑沿外围排布。`HALL_LAYOUT` 统一传送门、出生点、留白区、道路与行走边界；七名NPC脚点和朝广场侧的接近点由 `npcHall.ts` 定义。
+
+| 服务 | 门前脚点 (x,y) | 接近点 (x,y) |
+| --- | --- | --- |
+| 技能 | .20,.35 | .28,.38 |
+| 魔盒 | .80,.35 | .72,.38 |
+| 铁匠 | .15,.58 | .25,.58 |
+| 榜单 | .85,.60 | .75,.60 |
+| 仓库 | .22,.82 | .30,.82 |
+| 秘藏 | .84,.80 | .75,.80 |
+| 伙伴 | .74,.91 | .66,.92 |
+
+传送门落点为 (.50,.28)，玩家从 (.50,.85) 出生。中央留白区 x=.34–.66、y=.18–.76，主路 x=.41–.59。主城舞台固定1296:1216比例，角色与背景共用坐标；摇杆和交互按钮位于地图外独立操作带。传送门没有悬浮标题遮挡，可点击打开既有单人/组队远征选择。NPC保留完整人物点击框，脚底保持在脚点，标签不参与坐标高度。
+
+本版完整生成提示词（参考图为第二版营地）：
+
+> Use case: precise-object-edit. Edit the supplied existing detailed pixel-art fantasy camp background into a deliberately PLANNED PLAYABLE TOWN LAYOUT, preserving the original exact sophisticated pixel-art rendering, fine texture, teal forest at night, warm brass lanterns, aged masonry and cozy dark fantasy timber architecture. Output a full game map background only, landscape nearly square 1296x1216. No UI, no writing, no people, no creatures. The most important change: keep the CENTER clearly EMPTY OF SERVICE BUILDINGS and props, reserve an obvious broad open PORTAL PLAZA, with a turquoise glowing stone arch portal occupying centered x50%, footpoint y43%, top around y20%, and its unobstructed circular rune landing platform centered at x50% y48%. No campfire in the center. The entire rectangle x34%-66%, y29%-66% is the open portal plaza; no market stands, characters, lantern posts or foreground roofs can overlap the portal/approach. A straight wide empty stone avenue x41%-59% runs from the bottom entrance to the portal landing platform, fully walkable, with side branches to service entrances. Service buildings must all be placed ALONG THE OUTER EDGES, oriented toward the open center, exactly SEVEN distinct service nooks, with empty ground reserved immediately in front of each where separate NPC sprites will later stand. Precise normalized NPC footpoint marks (DO NOT draw marks): upper left wizard/book cottage entrance at (19%,30%); upper right teal relic-workshop altar entrance at (80%,30%); middle left blacksmith forge entrance at (15%,53%); middle right chronicler map desk/canopy entrance at (85%,53%); lower left warehouse and crates entrance at (18%,80%); lower right burgundy treasure merchant stall entrance at (84%,76%); bottom right of avenue animal-tamer small leafy stable entrance at (69%,90%). Buildings should sit immediately BEHIND these footpoints and must not cover the empty ground there. Keep all seven entrances recognizable and separated from each other, not merged. Place the stable small and along bottom-right perimeter, entirely right of x61%. Around the outermost edge keep dense detailed pine forest, crumbling walls and subtle lanterns. Broad quiet gray-green paving in central open areas provides excellent contrast for later player sprites. Coherent elevated 3/4 game map view. NO central campfire, NO NPC baked into image, NO labels, NO text, NO UI, NO border. Match all existing asset fidelity, don't simplify into flat vector or coarse pixel blocks.
+
+最终定位按生成图的实际建筑门前地面校准，以上表格与 `npcHall.ts` 为准。
+
+## 第二版素材记录
+
 2026-11-01 使用内置 `image_gen` 重绘营地环境，参考原职业 ranger.png 的高精度 Q 版暗黑幻想像素画风，并保留原大厅功能区布局。正式素材为 `public/assets/maps/watchers-camp-v2.png`，1296×1216、不透明 PNG；项目已保存本地副本，不依赖生成工具路径。
 
 `HallScene.tsx` 直接展示该地图，复用原有 CSS 场景层。图片完整填充原有地面坐标系，不使用 cover 裁切；NPC、点击移动与交互位置继续使用 `src/data/npcHall.ts` 的归一坐标。建筑面向各自的 NPC 站位，中央石路保留通行区域。地图不烘焙人物、名字、交互按钮或伙伴，不会与运行时贴图重叠。
