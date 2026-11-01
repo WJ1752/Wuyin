@@ -6,7 +6,7 @@ import { HeroArt } from './SceneArt';
 import { Check, Lock } from './PixelIcons';
 import { CloudAccountPanel } from './CloudAccountPanel';
 
-export function AccountPanel() {
+export function AccountPanel({ onEnterHall }: { onEnterHall?: () => void }) {
   const store = useGameStore();
   const account = store.accounts.find((entry) => entry.id === store.activeAccountId)!;
   const [accountName, setAccountName] = useState('');
@@ -17,7 +17,7 @@ export function AccountPanel() {
   const locked = !!store.labBackup || store.inCombat || store.cloudTransition;
   return (
     <div className="account-panel">
-      <CloudAccountPanel />
+      <CloudAccountPanel onEnterHall={onEnterHall} />
       <section className="card">
         <div className="section-heading">
           <h3>当前账号 · {account.name}</h3>

@@ -86,7 +86,7 @@ export function AdventureGuide({
             <>
               <div className="guide-callout">
                 在大厅用摇杆或 WASD 走动，点击 NPC 会走近，靠近后点「交互」或按
-                E。手机底部可随时打开装备、技能、职业榜和全部服务。
+                E。侧边功能栏可随时打开装备、技能、职业榜和其他服务；点击传送门选择远征。
               </div>
               <p>
                 你已掌握{basic?.name ?? '基础技能'}
@@ -118,7 +118,7 @@ export function AdventureGuide({
             <>
               <p>
                 每升一级获得 2
-                点技能点。到营地「技能之书」学习后，主动技能才会加入战斗栏，被动分支强化其前置技能。
+                点技能点。从侧边打开「技能之书」学习后，主动技能才会加入战斗栏，被动分支强化其前置技能。
               </p>
               <ol className="guide-milestones">
                 <li>

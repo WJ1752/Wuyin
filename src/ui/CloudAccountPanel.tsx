@@ -11,7 +11,7 @@ const labels = {
   conflict: '检测到跨设备进度冲突',
 };
 
-export function CloudAccountPanel() {
+export function CloudAccountPanel({ onEnterHall }: { onEnterHall?: () => void }) {
   const cloud = useCloudStore();
   const game = useGameStore();
   const [mode, setMode] = useState<'login' | 'register'>('login');
@@ -20,6 +20,20 @@ export function CloudAccountPanel() {
   const [confirmOverwrite, setConfirmOverwrite] = useState(false);
   const locked = game.inCombat || !!game.labBackup || game.cloudTransition || cloud.busy;
   const authenticated = !!cloud.user && cloud.status !== 'expired';
+  const enterHallWhenReady = () => {
+    const current = useCloudStore.getState();
+    if (
+      current.status === 'online' &&
+      !current.error &&
+      !current.busy &&
+      !useGameStore.getState().cloudTransition
+    )
+      onEnterHall?.();
+  };
+  const chooseProgress = async (choice: 'download' | 'migrate' | 'new' | 'resume') => {
+    await cloud.choose(choice);
+    enterHallWhenReady();
+  };
   return (
     <section className="card cloud-account-panel">
       <div className="section-heading">
@@ -31,7 +45,7 @@ export function CloudAccountPanel() {
       </div>
       <p className="muted">
         一个云账号最多创建 6
-        个角色，角色背包独立，仓库账号内共享。登录后选择进度，云端不会自动覆盖本机开荒档。
+        个角色，角色背包独立，仓库账号内共享。已有云档且本机无该账号缓存时，登录后备份当前进度并进入大厅；有缓存或空账号时先选择进度。
       </p>
       {cloud.error && (
         <p className="cloud-error" role="alert">
@@ -45,7 +59,17 @@ export function CloudAccountPanel() {
           onSubmit={async (event) => {
             event.preventDefault();
             await cloud.authenticate(mode, username, password);
-            if (!useCloudStore.getState().error) setPassword('');
+            const current = useCloudStore.getState();
+            if (current.error) return;
+            setPassword('');
+            if (
+              current.status === 'choosing' &&
+              current.pending?.account &&
+              !current.hasLocalCopy &&
+              !current.localUser
+            )
+              await chooseProgress('download');
+            else enterHallWhenReady();
           }}
         >
           <div className="cloud-actions" role="group" aria-label="登录或注册">
@@ -128,7 +152,7 @@ export function CloudAccountPanel() {
                   <button
                     className="gold-button"
                     disabled={locked}
-                    onClick={() => void cloud.choose('download')}
+                    onClick={() => void chooseProgress('download')}
                   >
                     备份本机并载入云端
                   </button>
@@ -140,14 +164,14 @@ export function CloudAccountPanel() {
                     <button
                       className="gold-button"
                       disabled={locked}
-                      onClick={() => void cloud.choose('migrate')}
+                      onClick={() => void chooseProgress('migrate')}
                     >
                       迁移当前本地账号
                     </button>
                     <button
                       className="ghost-button"
                       disabled={locked}
-                      onClick={() => void cloud.choose('new')}
+                      onClick={() => void chooseProgress('new')}
                     >
                       云账号从零开始
                     </button>
@@ -158,7 +182,7 @@ export function CloudAccountPanel() {
                 <button
                   className="ghost-button"
                   disabled={locked}
-                  onClick={() => void cloud.choose('resume')}
+                  onClick={() => void chooseProgress('resume')}
                 >
                   继续此云账号的本机缓存
                 </button>
@@ -174,7 +198,7 @@ export function CloudAccountPanel() {
                 <button
                   className="gold-button"
                   disabled={locked || !authenticated}
-                  onClick={() => void cloud.choose('download')}
+                  onClick={() => void chooseProgress('download')}
                 >
                   备份本机并加载云端
                 </button>
@@ -195,6 +219,7 @@ export function CloudAccountPanel() {
                     onClick={async () => {
                       await cloud.overwriteCloud();
                       setConfirmOverwrite(false);
+                      enterHallWhenReady();
                     }}
                   >
                     确认使用本机进度

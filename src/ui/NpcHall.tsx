@@ -13,14 +13,12 @@ import { formatBigNumber } from '../core/format';
 import {
   BookOpen,
   ChevronRight,
-  Compass,
   Crown,
   Diamond,
   Hammer,
   Hexagon,
   Package,
   PawPrint,
-  Swords,
   X,
 } from './PixelIcons';
 import { HallScene } from './HallScene';
@@ -49,6 +47,7 @@ const ACTIVITIES: Record<string, string> = {
 };
 const START: { x: number; y: number } = HALL_LAYOUT.spawn;
 const INTERACTION_DISTANCE = 82;
+const HALL_ASPECT = 1296 / 1216;
 // CSS and Pixi use the same image origin: the actor's coordinate is its ground contact.
 const characterOrigin = (classId: keyof typeof CHARACTER_ART): CSSProperties =>
   ({
@@ -59,11 +58,9 @@ const characterOrigin = (classId: keyof typeof CHARACTER_ART): CSSProperties =>
 
 export function NpcHall({
   onNavigate,
-  onTrain,
   active,
 }: {
   onNavigate: (panel: string) => void;
-  onTrain: () => void;
   active: boolean;
 }) {
   const save = useGameStore((state) => state.save);
@@ -74,8 +71,9 @@ export function NpcHall({
   const cloudStatus = useCloudStore((state) => state.status);
   const account = accounts.find((entry) => entry.id === activeAccountId);
   const character = account?.characters.find((entry) => entry.id === account.activeCharacterId);
+  const viewport = useRef<HTMLElement>(null);
+  const [viewSize, setViewSize] = useState({ width: 720, height: 680 });
   const board = useRef<HTMLDivElement>(null);
-  const [size, setSize] = useState({ width: 500, height: 460 });
   const [position, setPosition] = useState(START);
   const positionRef = useRef(START);
   const [walking, setWalking] = useState(false);
@@ -100,8 +98,20 @@ export function NpcHall({
   targetRef.current = target;
   const canPublish = cloudStatus === 'online' && !!userId && !labBackup;
   const movingEnabled = active && !inspectedPlayer;
+  // Move the entire shared ground plane so artwork, actors and pointer coordinates stay aligned.
+  const worldWidth = Math.max(viewSize.width, viewSize.height * HALL_ASPECT, 720);
+  const worldHeight = worldWidth / HALL_ASPECT;
+  const cameraX = Math.min(
+    0,
+    Math.max(viewSize.width - worldWidth, viewSize.width / 2 - position.x * worldWidth),
+  );
+  const cameraY = Math.min(
+    0,
+    Math.max(viewSize.height - worldHeight, viewSize.height * 0.6 - position.y * worldHeight),
+  );
+  // Keep service reach consistent as the hall expands from a panel to the full viewport.
   const distanceTo = (point: { x: number; y: number }) =>
-    Math.hypot((point.x - position.x) * size.width, (point.y - position.y) * size.height);
+    Math.hypot((point.x - position.x) * 500, (point.y - position.y) * 460);
   const nearest = [...HALL_NPCS].sort((a, b) => distanceTo(a) - distanceTo(b))[0];
   const selectedNpc = HALL_NPCS.find((entry) => entry.id === selectedNpcId);
   const interactionNpc =
@@ -123,15 +133,14 @@ export function NpcHall({
     if (active) activity.current = 'town';
   }, [active]);
   useEffect(() => {
-    const element = board.current;
+    const element = viewport.current;
     if (!element) return;
-    const resize = new ResizeObserver(() =>
-      setSize({ width: element.clientWidth, height: element.clientHeight }),
-    );
+    const measure = () => setViewSize({ width: element.clientWidth, height: element.clientHeight });
+    measure();
+    const resize = new ResizeObserver(measure);
     resize.observe(element);
     return () => resize.disconnect();
   }, []);
-
   useEffect(() => {
     let stopped = false;
     setPublishError('');
@@ -279,9 +288,10 @@ export function NpcHall({
         const length = Math.max(1, Math.hypot(x, y));
         const isWalking = Math.hypot(x, y) > 0.05;
         if (isWalking) {
+          const speed = Math.max(125, Math.min(width, height) * 0.28);
           const next = clampHallPosition(
-            positionRef.current.x + ((x / length) * 125 * dt) / width,
-            positionRef.current.y + ((y / length) * 125 * dt) / height,
+            positionRef.current.x + ((x / length) * speed * dt) / width,
+            positionRef.current.y + ((y / length) * speed * dt) / height,
           );
           positionRef.current = next;
           setPosition(next);
@@ -334,25 +344,34 @@ export function NpcHall({
   };
   const status =
     network === 'offline'
-      ? '大厅暂未连接'
+      ? '离线营地'
       : network === 'connecting'
-        ? '连接旅人大厅…'
-        : `大厅 ${onlineCount} 位在线旅人`;
+        ? '寻觅同行旅人…'
+        : `${onlineCount} 位同行旅人`;
   return (
-    <section className="npc-hall" aria-label="守望者营地，可走动与NPC交互">
+    <section ref={viewport} className="npc-hall" aria-label="守望者营地，可走动与NPC交互">
       <header className="hall-header">
         <div>
-          <span className="eyebrow">THE WATCHER'S HALL</span>
           <h2>守望者营地</h2>
         </div>
-        <span className={`hall-connection ${network}`} role="status">
+        <span
+          className={`hall-connection ${network}`}
+          role="status"
+          title={
+            labBackup
+              ? '流派演武为独立体验，不会向大厅发布虚拟配装。'
+              : !canPublish
+                ? '访客可浏览大厅；登录云账号后，其他旅人才能看见你。'
+                : '点击在线旅人查看配装与成就。'
+          }
+        >
           <i />
           {status}
         </span>
       </header>
-      <div className="hall-visitors" aria-label="大厅里的真实旅人">
-        {otherPlayers.length ? (
-          otherPlayers.map((player) => (
+      {otherPlayers.length > 0 && (
+        <div className="hall-visitors" aria-label="大厅里的真实旅人">
+          {otherPlayers.map((player) => (
             <button
               key={player.id}
               onClick={() => setInspectedPlayer(player)}
@@ -362,20 +381,20 @@ export function NpcHall({
               <span>{player.name}</span>
               <small>Lv.{player.level}</small>
             </button>
-          ))
-        ) : (
-          <span>
-            {network === 'offline'
-              ? '可继续走动与使用营地服务；连接恢复后显示其他旅人。'
-              : '暂时没有其他旅人，可以先去拜访营地居民。'}
-          </span>
-        )}
-      </div>
+          ))}
+        </div>
+      )}
       <div
         ref={board}
         className={`hall-map ${walking ? 'is-walking' : ''}`}
+        style={{
+          width: worldWidth,
+          height: worldHeight,
+          transform: `translate3d(${cameraX}px, ${cameraY}px, 0)`,
+        }}
         role="group"
         aria-label="营地地图，WASD或方向键移动，点击地面前往，靠近居民后按E交互"
+        aria-describedby="hall-controls-help"
         tabIndex={0}
         onPointerDown={(event) => {
           if (
@@ -523,56 +542,39 @@ export function NpcHall({
             }
           }}
         />
-        <button
-          className="hall-interact gold-button"
-          disabled={!movingEnabled || !inReach}
-          onClick={() => interaction.current()}
-        >
-          <span>
-            <small>
-              {inReach
-                ? interactionNpc.name
-                : selectedNpc
-                  ? `走近${selectedNpc.name}`
-                  : '靠近居民后互动'}
-            </small>
-            {inReach ? interactionNpc.service : '正在探索营地'}
-          </span>
-          <kbd>E</kbd>
-          <ChevronRight size={17} />
-        </button>
+        {(inReach || selectedNpc) && (
+          <button
+            className="hall-interact"
+            disabled={!movingEnabled || !inReach}
+            onClick={() => interaction.current()}
+          >
+            <kbd>E</kbd>
+            <span>
+              <small>{inReach ? interactionNpc.name : selectedNpc?.name}</small>
+              {inReach ? interactionNpc.service : '正在前往'}
+            </span>
+            <ChevronRight size={15} />
+          </button>
+        )}
       </div>
-      <div className="hall-dialogue" aria-live="polite">
+      <div
+        id="hall-controls-help"
+        className={`hall-dialogue ${inReach || selectedNpc ? 'has-interaction' : 'is-idle'}`}
+        aria-live="polite"
+      >
         <span>
           {inReach
             ? `「${interactionNpc.greeting}」`
             : selectedNpc
-              ? `正在前往${selectedNpc.name}，靠近后点击地图下方交互。`
-              : '点击传送门出征 · 点击居民走近 · WASD / 摇杆移动 · E 交互'}
+              ? `正在前往${selectedNpc.name}，靠近后点击交互或按 E。`
+              : 'WASD / 摇杆移动　·　点击居民交互'}
         </span>
       </div>
-      <footer className="hall-footer">
-        <button onClick={() => onNavigate('lab')}>
-          <Swords size={15} />
-          流派实验室
-        </button>
-        <button onClick={onTrain}>
-          <Compass size={15} />
-          训练走位
-        </button>
-        <button onClick={() => onNavigate('services')}>
-          <Package size={15} />
-          全部服务
-        </button>
-      </footer>
-      <p className="hall-network-note">
-        {publishError ||
-          (labBackup
-            ? '流派演武为独立体验，不会向大厅发布虚拟配装。'
-            : !canPublish
-              ? '访客可浏览大厅；登录云账号后，其他旅人才能看见你。'
-              : '同屏展示真实旅人；位置约每3秒同步，点击旅人查看配装与成就。')}
-      </p>
+      {publishError && (
+        <p className="hall-network-note" role="status">
+          {publishError}
+        </p>
+      )}
       {inspectedPlayer && (
         <div className="modal-backdrop">
           <div

@@ -4,50 +4,25 @@ import {
   ArrowRight,
   BookOpen,
   Check,
-  ChevronLeft,
-  ChevronRight,
-  Coins,
-  Compass,
   Crown,
-  Diamond,
-  FlaskConical,
-  Gem,
-  Hammer,
   Heart,
-  Hexagon,
   Maximize,
   Minimize,
   Moon,
   Pause,
-  PawPrint,
-  Package,
   Play,
-  Settings,
-  Shield,
   Skull,
   Sparkles,
   Swords,
-  Volume2,
-  VolumeX,
-  Wind,
   X,
   Zap,
 } from './ui/PixelIcons';
 import { CLASSES } from './data/classes';
 import { SKILLS } from './data/skillTrees';
-import { STAGES } from './data/stages';
-import {
-  availableSkillPoints,
-  getLootProfile,
-  getProgressionMilestones,
-  skillLearningStatus,
-} from './data/progression';
-import { RARITY_COLORS, RARITY_NAMES } from './core/types';
-import type { Rarity } from './core/types';
 import { useGameStore, createCombatConfig } from './state/gameStore';
 import { useCloudStore } from './state/cloudStore';
 import { SystemsModal } from './ui/SystemsModal';
-import { HeroArt } from './ui/SceneArt';
+import { TownHud } from './ui/TownHud';
 import { NpcHall } from './ui/NpcHall';
 import { VirtualJoystick } from './ui/VirtualJoystick';
 import { SkillIcon } from './ui/AssetIcon';
@@ -64,18 +39,9 @@ import type { CombatConfig, CombatSnapshot, RunResult } from './core/types';
 import { formatBigNumber, formatTime } from './core/format';
 import { audio } from './audio/SynthAudio';
 import './styles.css';
+import './ui/town-hud.css';
+import './ui/game-theme.css';
 
-const NAV = [
-  { id: 'coop', label: '组队远征', sub: 'PARTY · 1–4', icon: Swords },
-  { id: 'character', label: '角色装备', sub: 'CHARACTER', icon: Shield },
-  { id: 'stash', label: '共享仓库', sub: 'ACCOUNT STASH', icon: Package },
-  { id: 'skills', label: '技能之书', sub: 'SKILLS', icon: BookOpen },
-  { id: 'cube', label: '魔盒共鸣', sub: 'RESONANCE', icon: Hexagon },
-  { id: 'forge', label: '余烬铁匠', sub: 'BLACKSMITH', icon: Hammer },
-  { id: 'gamble', label: '米娅秘藏', sub: 'MYSTERIES', icon: Diamond },
-  { id: 'pets', label: '契约伙伴', sub: 'COMPANIONS', icon: PawPrint },
-  { id: 'leaderboard', label: '职业榜单', sub: 'CLASS RANKINGS', icon: Crown },
-];
 function App() {
   const { save, ready, notice, hydrate, setNotice, selectStage, updateSettings, completeRun } =
     useGameStore();
@@ -86,39 +52,6 @@ function App() {
   const [runSummary, setRunSummary] = useState('');
   const [showGuide, setShowGuide] = useState(false);
   const [bootReady, setBootReady] = useState(false);
-  const labBackup = useGameStore((s) => s.labBackup);
-  const cloudStatus = useCloudStore((s) => s.status);
-  const cloudDirty = useCloudStore((s) => s.dirty);
-  const cloudLabel = {
-    guest: '访客冒险 · 本机自动保存',
-    choosing: '已登录 · 请选择云端档案',
-    online: cloudDirty ? '云端冒险 · 等待同步' : '云端冒险 · 已同步',
-    offline: '云端暂不可用 · 进度保留本机',
-    expired: '登录已过期 · 请重新登录同步',
-    conflict: '存档存在冲突 · 点击选择保留版本',
-  }[cloudStatus];
-  const account = useGameStore((s) => s.accounts.find((entry) => entry.id === s.activeAccountId));
-  const character = account?.characters.find((entry) => entry.id === account.activeCharacterId);
-  const classDef = CLASSES.find((c) => c.id === save.classId) ?? CLASSES[0];
-  const stats = useGameStore.getState().getStats();
-  const lootProfile = getLootProfile(save.selectedStage);
-  const nextMilestone = getProgressionMilestones(save).find((milestone) => !milestone.claimed);
-  const rewardReady =
-    !!nextMilestone && (save.progression?.clearedStage ?? 0) >= nextMilestone.stage;
-  const activeSet = SETS.filter((set) => set.classId === save.classId)
-    .map((set) => ({
-      ...set,
-      count: Object.values(save.equipment).filter((item) => item?.setId === set.id).length,
-    }))
-    .sort((a, b) => b.count - a.count)[0];
-  const buildGuide = activeSet?.count >= 2 ? BUILD_GUIDES[activeSet.id] : undefined;
-  const points = availableSkillPoints(save);
-  const canLearn = SKILLS.some(
-    (skill) => skill.classId === save.classId && skillLearningStatus(save, skill).canLearn,
-  );
-  const movementLearned = SKILLS.some(
-    (skill) => skill.classId === save.classId && skill.kind === 'movement' && save.skills[skill.id],
-  );
   const closeGuide = () => {
     updateSettings({ tutorialSeen: true });
     setShowGuide(false);
@@ -152,10 +85,6 @@ function App() {
       document.removeEventListener('keydown', unlock);
     };
   }, []);
-  useEffect(() => {
-    if (ready && bootReady && !save.tutorialSeen && !labBackup && !config && !panel)
-      setShowGuide(true);
-  }, [ready, bootReady, save.tutorialSeen, labBackup, config, panel]);
   const open = (id: string) => {
     audio.play('click');
     setPanel(id);
@@ -210,362 +139,16 @@ function App() {
       </div>
     );
   return (
-    <div className={`app ${config ? 'in-combat' : ''} orientation-${save.orientation}`}>
+    <div className={`app ${config ? 'in-combat' : 'in-town'} orientation-${save.orientation}`}>
       {!config && (
-        <>
-          {labBackup && (
-            <div className="lab-banner">
-              <FlaskConical size={15} />
-              <span>流派演武中 · 体验进度独立保存</span>
-              <button onClick={() => useGameStore.getState().leaveLab()}>
-                结束体验，返回开荒 <ArrowRight size={13} />
-              </button>
-            </div>
-          )}
-          <header className="topbar">
-            <a className="brand" href="#" aria-label="雾隐首页" onClick={(e) => e.preventDefault()}>
-              <span className="brand-sigil">♜</span>
-              <span>
-                <strong>雾 隐</strong>
-                <small>MIST CONTINENT</small>
-              </span>
-            </a>
-            <div className="season-badge">
-              <span className="status-dot" /> 第一赛季 <span className="separator">/</span> 永夜将至
-            </div>
-            <div className="currencies">
-              <span title="金币">
-                <Coins />
-                <b>{formatBigNumber(save.gold)}</b>
-              </span>
-              <span title="神秘碎片">
-                <Diamond />
-                <b>{formatBigNumber(save.shards)}</b>
-              </span>
-              <span title="奥术结晶">
-                <Gem />
-                <b>{formatBigNumber(save.crystals)}</b>
-              </span>
-            </div>
-            <div className="top-actions">
-              <button
-                className="icon-button guide-shortcut"
-                aria-label="新手教程与冒险指南"
-                onClick={() => setShowGuide(true)}
-              >
-                <BookOpen />
-              </button>
-              <button className="text-button account-shortcut" onClick={() => open('accounts')}>
-                <span className="account-full-label">{account?.name ?? '本地账号'} · 角色</span>
-                <span className="account-compact-label">角色</span>
-              </button>
-              <button
-                className="icon-button mute-shortcut"
-                aria-label={save.muted ? '开启音效' : '静音'}
-                onClick={() => updateSettings({ muted: !save.muted })}
-              >
-                {save.muted ? <VolumeX /> : <Volume2 />}
-              </button>
-              <button
-                className="icon-button"
-                aria-label="游戏设置"
-                onClick={() => open('settings')}
-              >
-                <Settings />
-              </button>
-            </div>
-          </header>
-          <main className="town-layout">
-            <aside className="character-sidebar">
-              <div className="sidebar-caption">
-                <span className="eyebrow">THE WATCHER</span>
-                <button className="text-button" onClick={() => setShowGuide(true)}>
-                  冒险指南 <BookOpen size={13} />
-                </button>
-              </div>
-              <div className="hero-heading">
-                <div>
-                  <h2>{labBackup ? classDef.name : (character?.name ?? classDef.name)}</h2>
-                  <p>
-                    {classDef.name} · {classDef.title}
-                  </p>
-                </div>
-                <span className="level-medallion">
-                  <small>等级</small>
-                  {save.level}
-                </span>
-              </div>
-              <div className="hero-portrait">
-                <div className="portrait-runes">ᛟ　ᚷ　ᛉ　ᚹ　ᛟ</div>
-                <HeroArt classId={save.classId} />
-                <div className="hero-floor" />
-                <span className="portrait-caption">
-                  {classDef.weapon} · {classDef.mainStat}
-                </span>
-              </div>
-              <button className="outline-button full-width" onClick={() => open('accounts')}>
-                选择角色 · 每账号 6 个角色位 <ChevronRight size={15} />
-              </button>
-              <div className="hero-stats">
-                <div>
-                  <Swords size={15} />
-                  <span>攻击力</span>
-                  <b>{formatBigNumber(stats.attack)}</b>
-                </div>
-                <div>
-                  <Heart size={15} />
-                  <span>生命值</span>
-                  <b>{formatBigNumber(stats.hp)}</b>
-                </div>
-                <div>
-                  <Shield size={15} />
-                  <span>护甲值</span>
-                  <b>{formatBigNumber(stats.armor)}</b>
-                </div>
-              </div>
-              <button className="outline-button full-width" onClick={() => open('character')}>
-                角色与装备 <ArrowRight size={15} />
-              </button>
-              <div className="sidebar-divider" />
-              <button className="small-feature" onClick={() => open('pets')}>
-                <PawPrint />
-                <div>
-                  <strong>契约之灵</strong>
-                  <small>旅途漫长，幸有同伴</small>
-                </div>
-                <ChevronRight size={15} />
-              </button>
-            </aside>
-            <section className="camp-panel hall-panel">
-              <NpcHall
-                onNavigate={open}
-                onTrain={() => enter(true)}
-                active={!panel && !showGuide}
-              />
-            </section>
-            <aside className="adventure-sidebar">
-              <div className="eyebrow">YOUR NEXT CHAPTER</div>
-              <h2>深入迷雾</h2>
-              <p className="muted intro-copy">
-                光明止步之处，
-                <br />
-                是你的征途。
-              </p>
-              <div className="rift-card">
-                <div className="rift-crest">
-                  <Compass size={60} strokeWidth={0.8} />
-                  <span>Ⅰ</span>
-                </div>
-                <div className="rift-tier">源 初 秘 境</div>
-                <div className="stage-picker">
-                  <button
-                    aria-label="降低秘境层数"
-                    disabled={save.selectedStage <= 1}
-                    onClick={() => selectStage(save.selectedStage - 1)}
-                  >
-                    <ChevronLeft />
-                  </button>
-                  <span>
-                    <small>第</small> {save.selectedStage.toString().padStart(2, '0')}{' '}
-                    <small>层</small>
-                  </span>
-                  <button
-                    aria-label="提高秘境层数"
-                    disabled={save.selectedStage >= save.highestStage}
-                    onClick={() => selectStage(save.selectedStage + 1)}
-                  >
-                    <ChevronRight />
-                  </button>
-                </div>
-                <select
-                  className="stage-select"
-                  aria-label="选择已解锁秘境"
-                  value={save.selectedStage}
-                  onChange={(e) => selectStage(Number(e.target.value))}
-                >
-                  {STAGES.filter((s) => s.level <= save.highestStage).map((s) => (
-                    <option key={s.level} value={s.level}>
-                      第 {s.level} 层 · {s.difficulty}
-                    </option>
-                  ))}
-                </select>
-                <div className="rift-details">
-                  <span>
-                    <Wind size={13} /> {STAGES[save.selectedStage - 1]?.name}
-                  </span>
-                  <span>限时 05:00</span>
-                </div>
-                <div className="rift-rewards">
-                  <span>{lootProfile.label}</span>
-                  <div>
-                    {Object.entries(lootProfile.chances)
-                      .filter(([, chance]) => chance > 0)
-                      .map(([rarity, chance]) => (
-                        <span
-                          key={rarity}
-                          className="reward-icon"
-                          style={{ color: RARITY_COLORS[rarity as Rarity] }}
-                          title={`${RARITY_NAMES[rarity as Rarity]} ${(chance * 100).toFixed(1)}%`}
-                        >
-                          <Gem size={19} />
-                        </span>
-                      ))}
-                  </div>
-                  <small>
-                    {nextMilestone
-                      ? `下个首通目标 · ${nextMilestone.stage} 层 ${nextMilestone.title}`
-                      : '旅程奖励已集齐 · 继续追寻太古'}
-                  </small>
-                </div>
-                <button className="text-button full-width" onClick={() => open('journey')}>
-                  查看掉落与套装旅程 <ArrowRight size={14} />
-                </button>
-                <button className="enter-button" onClick={() => enter()}>
-                  <span>踏入秘境</span>
-                  <ArrowRight size={19} />
-                </button>
-                <button
-                  className="outline-button full-width coop-entry"
-                  onClick={() => open('coop')}
-                >
-                  <Swords size={17} />
-                  组队爬塔 · 1–4 人
-                </button>
-              </div>
-              <button className="journal-card" onClick={() => open('pets')}>
-                <span className="journal-icon">
-                  <Crown size={20} />
-                </span>
-                <div>
-                  <span className="eyebrow">SEASON JOURNEY</span>
-                  <strong>永夜行者</strong>
-                  <small>已征服 {save.clears} 座秘境</small>
-                </div>
-                <ChevronRight size={14} />
-              </button>
-              <div className="camp-tip">
-                <Sparkles size={15} />
-                <p>
-                  移动即输出。
-                  <br />
-                  把专注留给每一次走位。
-                </p>
-              </div>
-            </aside>
-          </main>
-          {buildGuide && (
-            <section className="current-build" aria-label="当前流派">
-              <div>
-                <span className="eyebrow">
-                  YOUR BUILD · {activeSet.count >= 4 ? '四件成型' : '二件共鸣'}
-                </span>
-                <strong>
-                  {activeSet.name} · {buildGuide.style}
-                </strong>
-              </div>
-              <p>
-                {buildGuide.range} · {activeSet.count >= 4 ? buildGuide.rotation : activeSet.two}
-              </p>
-              <button className="text-button" onClick={() => open('lab')}>
-                查看流派打法 <ArrowRight size={14} />
-              </button>
-            </section>
-          )}
-          <section className="camp-next-step" aria-label="冒险待办">
-            <div className="next-step-intro">
-              <Compass size={22} />
-              <div>
-                <span className="eyebrow">NEXT STEP</span>
-                <strong>
-                  {canLearn
-                    ? `有 ${points} 点可分配，先学习技能`
-                    : rewardReady
-                      ? '首通奖励已就绪'
-                      : save.inventory.length
-                        ? '整理战利品，再次出发'
-                        : '从第一场远征开始'}
-                </strong>
-              </div>
-            </div>
-            <div className="camp-tasks">
-              <button onClick={() => open('skills')}>
-                <BookOpen size={16} />
-                <span>
-                  技能之书<small>{points > 0 ? `${points} 点待分配` : '升级获得技能点'}</small>
-                </span>
-                {canLearn && <i className="status-dot" />}
-              </button>
-              <button onClick={() => open('character')}>
-                <Shield size={16} />
-                <span>
-                  角色装备<small>背包 {save.inventory.length} / 240</small>
-                </span>
-              </button>
-              <button onClick={() => open('journey')}>
-                <Compass size={16} />
-                <span>
-                  套装旅程
-                  <small>
-                    {rewardReady
-                      ? '可以领取奖励'
-                      : nextMilestone
-                        ? `下一目标 ${nextMilestone.stage} 层`
-                        : '查看掉落与共鸣'}
-                  </small>
-                </span>
-              </button>
-            </div>
-          </section>
-          <nav className="bottom-nav" aria-label="营地功能">
-            {NAV.map((n) => (
-              <button key={n.id} onClick={() => open(n.id)}>
-                <n.icon size={22} strokeWidth={1.3} />
-                <span>
-                  {n.label}
-                  <small>{n.sub}</small>
-                </span>
-                <ChevronRight className="nav-chevron" size={13} />
-              </button>
-            ))}
-          </nav>
-          <nav className="mobile-dock" aria-label="手机快捷操作">
-            <button onClick={() => open('character')}>
-              <Shield size={21} />
-              <span>装备</span>
-            </button>
-            <button onClick={() => open('skills')}>
-              <BookOpen size={21} />
-              <span>技能{canLearn && <i className="status-dot" />}</span>
-            </button>
-            <button
-              className="dock-expedition"
-              onClick={() => open('expedition')}
-              disabled={useGameStore.getState().cloudTransition}
-            >
-              <Compass size={24} />
-              <span>出征 · {save.selectedStage} 层</span>
-            </button>
-            <button onClick={() => open('leaderboard')}>
-              <Crown size={21} />
-              <span>职业榜</span>
-            </button>
-            <button onClick={() => open('services')}>
-              <Package size={21} />
-              <span>更多</span>
-            </button>
-          </nav>
-          <footer className="town-footer">
-            <button className="text-button" onClick={() => open('accounts')}>
-              <span className="status-dot" /> {cloudLabel}
-            </button>
-            <span>
-              WASD 移动 <i /> 1–6 施放技能 <i /> {movementLearned ? '空格 位移' : 'Lv.3 学习位移'}
-            </span>
-            <span>
-              雾隐编年史 <span className="gold">v1.0</span>
-            </span>
-          </footer>
-        </>
+        <main className="game-hall" aria-label="游戏大厅">
+          <NpcHall onNavigate={open} active={!panel && !showGuide} />
+          <TownHud
+            onNavigate={open}
+            onGuide={() => setShowGuide(true)}
+            onTrain={() => enter(true)}
+          />
+        </main>
       )}
       {config && <CombatView config={config} coop={coop} onLeave={leave} onFinish={finish} />}
       {['coop', 'expedition'].includes(panel ?? '') && (
@@ -584,8 +167,9 @@ function App() {
         panel={['coop', 'expedition'].includes(panel ?? '') ? null : panel}
         onClose={() => setPanel(null)}
         onNavigate={setPanel}
+        onEnterHall={() => setPanel(null)}
       />
-      {notice && (
+      {notice && (!panel || ['coop', 'expedition'].includes(panel)) && (
         <div className="toast" role={panel ? undefined : 'status'}>
           <Sparkles size={17} />
           <span>{notice}</span>

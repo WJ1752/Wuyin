@@ -83,6 +83,37 @@ const TITLES: Record<string, [string, string, typeof Sword]> = {
   settings: ['远征设置', 'SETTINGS & CHRONICLE', Settings],
   lab: ['秘境演武场', 'THE BUILD LABORATORY', FlaskConical],
 };
+const SYSTEM_GROUPS = [
+  {
+    label: '行者',
+    numeral: 'Ⅰ',
+    icon: Sword,
+    panels: ['character', 'skills', 'stash', 'accounts'],
+  },
+  { label: '秘器', numeral: 'Ⅱ', icon: WandSparkles, panels: ['forge', 'cube', 'gamble'] },
+  {
+    label: '征途',
+    numeral: 'Ⅲ',
+    icon: Compass,
+    panels: ['journey', 'pets', 'leaderboard', 'lab'],
+  },
+  { label: '营地', numeral: 'Ⅳ', icon: Settings, panels: ['services', 'settings'] },
+];
+const SYSTEM_LINKS: Record<string, string> = {
+  character: '角色装备',
+  skills: '技能之书',
+  stash: '共享仓库',
+  accounts: '账号角色',
+  forge: '铁匠工坊',
+  cube: '魔盒共鸣',
+  gamble: '米娅秘藏',
+  journey: '行者旅程',
+  pets: '契约伙伴',
+  leaderboard: '职业榜单',
+  lab: '流派演武',
+  services: '营地服务',
+  settings: '游戏设置',
+};
 export function EquipmentIcon({ slot, size = 24 }: { slot: Slot; size?: number }) {
   const Icon = icons[slot];
   return <Icon size={size} strokeWidth={1.5} />;
@@ -796,9 +827,7 @@ function SkillsPanel() {
           </button>
         ))}
       </div>
-      <p className="muted system-hint">
-        推荐加点会免费重新分配当前等级可用点数，并设置流派的自动施法顺序；可随时手动调整。
-      </p>
+      <p className="muted system-hint">选择流派可推荐加点，仍可手动调整。</p>
       {node && (
         <div ref={description} className="card skill-description">
           <div>
@@ -846,13 +875,18 @@ function SkillsPanel() {
         </div>
       )}
       <div className="skill-tree">
-        <p className="muted system-hint">
-          初始掌握 1 个基础技能；每升一级获得 2 点。位移 Lv.3 → 核心 Lv.5 → 掌控 Lv.8 → 防御 Lv.10 →
-          终极 Lv.15。分支需前置 2 级，每个技能每隔 3 级可再提升一阶。
-          <br />
-          技能说明以 1 级为基准。每提升 1 级，主动伤害与护盾强度、被动数值收益提高 10%，最高 5
-          级（+40%）；穿透、分裂等结构性效果保持，衍生伤害随节点等级提高。
-        </p>
+        <details className="skill-learning-rules">
+          <summary>技能学习规则</summary>
+          <p className="muted system-hint">
+            初始掌握 1 个基础技能；每升一级获得 2 点。位移 Lv.3 → 核心 Lv.5 → 掌控 Lv.8 → 防御 Lv.10
+            → 终极 Lv.15。分支需前置 2 级，每个技能每隔 3 级可再提升一阶。
+            <br />
+            技能说明以 1 级为基准。每提升 1 级，主动伤害与护盾强度、被动数值收益提高 10%，最高 5
+            级（+40%）；穿透、分裂等结构性效果保持，衍生伤害随节点等级提高。
+            <br />
+            推荐加点会免费重新分配当前等级可用点数，并设置流派的自动施法顺序；可随时手动调整。
+          </p>
+        </details>
         {[1, 2, 3, 4, 5].map((tier) => (
           <section className="skill-tier" key={tier}>
             <div className="skill-tier-label">
@@ -2159,19 +2193,22 @@ export function SystemsModal({
   panel,
   onClose,
   onNavigate,
+  onEnterHall,
 }: {
   panel: string | null;
   onClose: () => void;
   onNavigate?: (panel: string) => void;
+  onEnterHall?: () => void;
 }) {
   const title = panel ? TITLES[panel] : undefined;
   const ref = useDialog(!!panel && !!title, onClose);
   const notice = useGameStore((state) => state.notice);
   if (!panel || !title) return null;
   const Icon = title[2];
+  const group = SYSTEM_GROUPS.find((entry) => entry.panels.includes(panel)) ?? SYSTEM_GROUPS[0];
   return (
     <div
-      className="modal-backdrop"
+      className="modal-backdrop system-backdrop"
       onMouseDown={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
@@ -2182,7 +2219,7 @@ export function SystemsModal({
           const button = (event.target as Element).closest('button');
           if (button && !button.disabled) audio.play(button.dataset.sound ?? 'click');
         }}
-        className={`modal systems-modal panel-${panel}`}
+        className={`modal systems-modal system-screen panel-${panel}`}
         role="dialog"
         aria-modal="true"
         aria-labelledby="system-modal-title"
@@ -2193,7 +2230,9 @@ export function SystemsModal({
             <Icon size={25} />
           </span>
           <div>
-            <span className="eyebrow">{title[1]}</span>
+            <span className="eyebrow">
+              {group.label} · {title[1]}
+            </span>
             <h2 id="system-modal-title">{title[0]}</h2>
           </div>
           <button className="modal-close ghost-button" aria-label="关闭面板" onClick={onClose}>
@@ -2201,58 +2240,83 @@ export function SystemsModal({
           </button>
         </header>
         {onNavigate && (
-          <nav className="system-navigation" aria-label="营地系统快捷切换">
-            {Object.entries(TITLES).map(([id, entry]) => {
-              const NavIcon = entry[2];
-              return (
+          <>
+            <nav className="system-groups" aria-label="营地系统分类">
+              {SYSTEM_GROUPS.map((entry) => {
+                const GroupIcon = entry.icon;
+                const selected = entry === group;
+                return (
+                  <button
+                    key={entry.label}
+                    aria-current={selected ? 'true' : undefined}
+                    onClick={() => onNavigate(selected ? panel : entry.panels[0])}
+                  >
+                    <small aria-hidden="true">{entry.numeral}</small>
+                    <GroupIcon size={19} />
+                    <span>{entry.label}</span>
+                  </button>
+                );
+              })}
+            </nav>
+            <nav
+              className="system-navigation"
+              aria-label={`${group.label}系统快捷切换`}
+              style={{ gridTemplateColumns: `repeat(${group.panels.length}, minmax(0, 140px))` }}
+            >
+              {group.panels.map((id) => (
                 <button
                   key={id}
                   aria-current={panel === id ? 'page' : undefined}
                   onClick={() => onNavigate(id)}
                 >
-                  <NavIcon size={15} />
-                  {entry[0]}
+                  {SYSTEM_LINKS[id]}
                 </button>
-              );
-            })}
-          </nav>
+              ))}
+            </nav>
+          </>
         )}
-        <div className="system-feedback" role="status" aria-live="polite">
-          {notice || '选择目标进行操作 · Esc 返回营地'}
-        </div>
+        {notice && (
+          <div className="system-feedback" role="status" aria-live="polite">
+            {notice}
+          </div>
+        )}
         <div className="modal-body" key={panel}>
-          {panel === 'services' ? (
-            <ServicesPanel onNavigate={onNavigate} />
-          ) : panel === 'accounts' ? (
-            <AccountPanel />
-          ) : panel === 'stash' ? (
-            <StashPanel />
-          ) : panel === 'character' ? (
-            <CharacterPanel />
-          ) : panel === 'journey' ? (
-            <JourneyPanel onNavigate={onNavigate} />
-          ) : panel === 'skills' ? (
-            <SkillsPanel />
-          ) : panel === 'cube' ? (
-            <CubePanel />
-          ) : panel === 'gamble' ? (
-            <GamblePanel />
-          ) : panel === 'forge' ? (
-            <ForgePanel />
-          ) : panel === 'pets' ? (
-            <PetsPanel onClose={onClose} onNavigate={onNavigate} />
-          ) : panel === 'leaderboard' ? (
-            <LeaderboardPanel onClose={onClose} onNavigate={onNavigate} />
-          ) : panel === 'lab' ? (
-            <LabPanel onClose={onClose} />
-          ) : (
-            <SettingsPanel />
-          )}
+          <div className="system-content">
+            {panel === 'services' ? (
+              <ServicesPanel onNavigate={onNavigate} />
+            ) : panel === 'accounts' ? (
+              <AccountPanel onEnterHall={onEnterHall} />
+            ) : panel === 'stash' ? (
+              <StashPanel />
+            ) : panel === 'character' ? (
+              <CharacterPanel />
+            ) : panel === 'journey' ? (
+              <JourneyPanel onNavigate={onNavigate} />
+            ) : panel === 'skills' ? (
+              <SkillsPanel />
+            ) : panel === 'cube' ? (
+              <CubePanel />
+            ) : panel === 'gamble' ? (
+              <GamblePanel />
+            ) : panel === 'forge' ? (
+              <ForgePanel />
+            ) : panel === 'pets' ? (
+              <PetsPanel onClose={onClose} onNavigate={onNavigate} />
+            ) : panel === 'leaderboard' ? (
+              <LeaderboardPanel onClose={onClose} onNavigate={onNavigate} />
+            ) : panel === 'lab' ? (
+              <LabPanel onClose={onClose} />
+            ) : (
+              <SettingsPanel />
+            )}
+          </div>
         </div>
         <footer className="modal-footer">
-          <span>雾隐营地 · 远征者的避风港</span>
+          <span>
+            守望者营地 <i aria-hidden="true">◆</i> Esc 返回大厅
+          </span>
           <button className="ghost-button" onClick={onClose}>
-            返回营地 <ChevronRight size={14} />
+            返回大厅 <ChevronRight size={14} />
           </button>
         </footer>
       </div>

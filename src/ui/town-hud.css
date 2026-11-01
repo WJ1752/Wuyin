@@ -1,0 +1,796 @@
+/* A borderless world with forged-metal controls anchored to its edges. */
+.app.in-town:not(.in-combat) {
+  position: relative;
+  width: 100%;
+  max-width: none;
+  height: 100dvh;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  background: #101719;
+}
+.game-hall {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  --hud-edge: max(22px, env(safe-area-inset-right, 0px));
+  --rail-width: 124px;
+}
+.game-hall::after {
+  content: '';
+  position: absolute;
+  z-index: 100;
+  inset: 0;
+  pointer-events: none;
+  background:
+    linear-gradient(180deg, #070e15a6, transparent 23%, transparent 72%, #070e1599),
+    linear-gradient(90deg, #070e1559, transparent 24% 78%, #070e1566);
+  box-shadow: inset 0 0 110px #050a1259;
+}
+.hall-hud {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.hall-hud > * {
+  position: absolute;
+  z-index: 110;
+  pointer-events: auto;
+}
+.traveler-hud {
+  top: max(24px, env(safe-area-inset-top, 0px));
+  left: max(24px, env(safe-area-inset-left, 0px));
+  width: 254px;
+  filter: drop-shadow(0 3px 6px #020607);
+}
+.traveler-profile {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  text-align: left;
+  background: linear-gradient(90deg, transparent 24px, #111a20c7 72px, #111a2040 82%, transparent);
+}
+.traveler-avatar {
+  position: relative;
+  flex-shrink: 0;
+  width: 68px;
+  height: 78px;
+  display: grid;
+  place-items: center;
+  border: 1px solid #cfac6e;
+  border-radius: 35% 35% 48% 48%;
+  background: radial-gradient(ellipse at 50% 70%, #45524c, #152127 65%);
+  box-shadow:
+    0 0 0 3px #0d1318,
+    0 0 0 4px #7c6948,
+    inset 0 0 0 4px #b99c5340,
+    0 7px 18px #0009;
+  overflow: hidden;
+}
+.traveler-avatar::after {
+  content: '◆';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -6px;
+  text-align: center;
+  font-size: 18px;
+  color: #cbb380;
+}
+.traveler-avatar img {
+  width: 85%;
+  height: 85%;
+  object-fit: contain;
+  image-rendering: pixelated;
+}
+.traveler-identity {
+  display: grid;
+  gap: 5px;
+  flex: 1;
+  min-width: 0;
+  padding: 5px 0;
+}
+.traveler-identity > small {
+  color: #bcae90;
+  font: 9px var(--serif);
+  letter-spacing: 3px;
+}
+.traveler-identity > small i {
+  display: inline-block;
+  height: 6px;
+  border-left: 1px solid #98815a;
+  margin: 0 4px;
+}
+.traveler-identity strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font: 20px var(--serif);
+  letter-spacing: 3px;
+  color: #eee0c0;
+  text-shadow: 0 2px 4px #000;
+}
+.traveler-level {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: #d6bd87;
+  font:
+    11px Georgia,
+    serif;
+}
+.traveler-level > span {
+  color: #a8ad9e;
+  font: 8px var(--ui-mono);
+}
+.traveler-xp {
+  position: relative;
+  height: 4px;
+  background: #090f15;
+  border-block: 1px solid #a9966259;
+}
+.traveler-xp i {
+  display: block;
+  height: 100%;
+  background: linear-gradient(90deg, #5f7162, #bad0a1);
+  box-shadow: 0 0 5px #b1cd8b40;
+}
+.traveler-sync {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 12px 0 0 81px;
+  padding: 0;
+  color: #b3b6a6;
+  font-size: 9px;
+  letter-spacing: 1px;
+}
+.traveler-sync > i {
+  height: 4px;
+  width: 4px;
+  border-radius: 50%;
+  background: #98b398;
+  box-shadow: 0 0 5px #a7ca9766;
+}
+.traveler-sync.sync-conflict > i,
+.traveler-sync.sync-expired > i,
+.traveler-sync.sync-offline > i {
+  background: #dcb678;
+}
+.hall-wallet {
+  top: max(28px, env(safe-area-inset-top, 0px));
+  right: var(--hud-edge);
+  display: flex;
+  align-items: center;
+  gap: 0;
+  padding: 0 0 12px 16px;
+  border-bottom: 1px solid #bb9f6259;
+  background: linear-gradient(90deg, transparent, #0d171c80);
+}
+.hall-wallet > span {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 100px;
+  padding: 0 14px;
+}
+.hall-wallet > span + span {
+  border-left: 1px solid #bdab753b;
+}
+.hall-wallet b {
+  color: #ebdfc5;
+  font:
+    14px Georgia,
+    serif;
+  letter-spacing: 1px;
+}
+.hall-wallet small {
+  font-size: 8px;
+  color: #aaa58d;
+}
+.hall-wallet svg {
+  color: #d5b87b;
+  filter: drop-shadow(0 0 4px #c8a66b40);
+}
+.hall-wallet > span:nth-child(2) svg {
+  color: #b4a2ca;
+}
+.hall-wallet > span:nth-child(3) svg {
+  color: #8ebbb5;
+}
+.hall-service-rail {
+  right: var(--hud-edge);
+  top: 126px;
+  width: var(--rail-width);
+  display: flex;
+  flex-direction: column;
+  filter: drop-shadow(0 4px 8px #03070bd9);
+}
+.rail-caption {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  margin-bottom: 12px;
+  color: #b69b6a;
+  font: 9px var(--serif);
+  letter-spacing: 3px;
+  text-shadow: 0 2px 3px #000;
+}
+.rail-caption::before,
+.rail-caption::after {
+  content: '';
+  width: 18px;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, #b3975a);
+}
+.rail-caption::after {
+  transform: rotate(180deg);
+}
+.rail-services {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px 9px;
+}
+.rail-services > button {
+  position: relative;
+  display: flex;
+  min-width: 0;
+  min-height: 61px;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 5px;
+  padding: 0;
+  color: #d0c2a1;
+  text-shadow: 0 2px 4px #000;
+}
+.service-seal {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 43px;
+  height: 43px;
+  color: #c2ac7b;
+  background: linear-gradient(135deg, #a58d58, #3d3a2c 40%, #171f23 50%, #9a8556);
+  clip-path: polygon(50% 0, 94% 23%, 94% 77%, 50% 100%, 6% 77%, 6% 23%);
+  transition: filter 0.2s;
+}
+.service-seal::before {
+  content: '';
+  position: absolute;
+  inset: 2px;
+  background: radial-gradient(ellipse at 30% 15%, #4a4b3d, #141d23 60%);
+  clip-path: inherit;
+}
+.service-seal::after {
+  content: '';
+  position: absolute;
+  inset: 5px;
+  border-block: 1px solid #c2a36126;
+  clip-path: inherit;
+}
+.service-seal svg {
+  position: relative;
+  z-index: 1;
+  width: 20px;
+  height: 20px;
+  stroke-width: 1.3;
+}
+.service-label {
+  font: 10px var(--serif);
+  letter-spacing: 3px;
+}
+.rail-services > button:hover,
+.rail-services > button:focus-visible {
+  color: #f3d79f;
+}
+.rail-services > button:hover .service-seal {
+  filter: brightness(1.4);
+}
+.rail-services > button:last-child {
+  grid-column: 1 / -1;
+  flex-direction: row;
+  gap: 9px;
+  min-height: 34px;
+  margin-top: 1px;
+  border-block: 1px solid #b79d6233;
+  background: linear-gradient(90deg, transparent, #111a20b3, transparent);
+}
+.rail-services > button:last-child .service-seal {
+  width: 25px;
+  height: 28px;
+  background: none;
+  clip-path: none;
+}
+.rail-services > button:last-child .service-seal::before,
+.rail-services > button:last-child .service-seal::after {
+  display: none;
+}
+.rail-services > button:last-child .service-seal svg {
+  width: 16px;
+  height: 16px;
+}
+.rail-alert {
+  position: absolute;
+  right: 1px;
+  top: 0;
+  z-index: 2;
+  display: grid;
+  place-items: center;
+  min-width: 17px;
+  height: 17px;
+  border: 1px solid #bfa06a;
+  border-radius: 50%;
+  background: #75502d;
+  color: #fff0c8;
+  font:
+    9px Georgia,
+    serif;
+  font-style: normal;
+  text-shadow: none;
+}
+.hall-utility-rail {
+  top: 173px;
+  left: max(24px, env(safe-area-inset-left, 0px));
+  width: 108px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 15px 3px;
+}
+.hall-utility-rail > button {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 52px;
+  padding: 0;
+  color: #b7b29e;
+  text-shadow: 0 2px 3px #000;
+}
+.hall-utility-rail > button > svg {
+  width: 30px;
+  height: 30px;
+  padding: 6px;
+  border: 1px solid #a3905a66;
+  border-radius: 3px;
+  background: radial-gradient(circle at top, #384038d9, #11181ee6);
+  box-shadow:
+    inset 0 0 8px #0006,
+    0 2px 5px #0009;
+  stroke-width: 1.4;
+}
+.hall-utility-rail > button > span {
+  font: 9px var(--serif);
+  letter-spacing: 2px;
+}
+.hall-utility-rail > button:hover,
+.hall-utility-rail .has-reward,
+.hall-utility-rail .unread-guide {
+  color: #dec48c;
+}
+.hall-utility-rail .has-reward > i {
+  position: absolute;
+  top: 0;
+  right: 4px;
+  width: 4px;
+  height: 4px;
+  background: #dfc38a;
+  transform: rotate(45deg);
+}
+.hall-expedition {
+  right: var(--hud-edge);
+  bottom: max(24px, env(safe-area-inset-bottom, 0px));
+  width: 232px;
+  padding: 9px 0 0;
+  border-top: 1px solid #b99d626e;
+  background: linear-gradient(90deg, transparent, #0e171ecc 35%);
+  filter: drop-shadow(0 3px 5px #0009);
+}
+.hall-expedition::before {
+  content: '◆';
+  position: absolute;
+  right: -4px;
+  top: -6px;
+  font-size: 9px;
+  color: #c6ac73;
+}
+.expedition-destination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 0 4px 8px 12px;
+}
+.expedition-destination > span {
+  font: 11px var(--serif);
+  letter-spacing: 2px;
+  color: #d5c19a;
+}
+.expedition-destination small {
+  display: block;
+  margin-top: 4px;
+  color: #a0a693;
+  font: 8px var(--serif);
+  letter-spacing: 1px;
+}
+.expedition-tier {
+  display: flex;
+  align-items: center;
+  gap: 1px;
+}
+.expedition-tier > button {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  min-height: 36px;
+  color: #c5aa76;
+}
+.expedition-tier > button:disabled {
+  opacity: 0.25;
+}
+.expedition-tier label {
+  display: flex;
+  align-items: center;
+  color: #ab9b7a;
+  font: 9px var(--serif);
+}
+.app .expedition-tier input {
+  width: 29px;
+  padding: 3px 0;
+  text-align: center;
+  border: 0;
+  border-bottom: 1px solid #b6995f73;
+  background: transparent;
+  box-shadow: none;
+  color: #ecdbb7;
+  font:
+    18px Georgia,
+    serif;
+  appearance: textfield;
+}
+.expedition-tier input::-webkit-inner-spin-button,
+.expedition-tier input::-webkit-outer-spin-button {
+  appearance: none;
+  margin: 0;
+}
+.hall-depart {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  min-height: 62px;
+  padding: 10px 14px 10px 8px;
+  color: #e1c28a;
+  background: linear-gradient(110deg, #30413ee8, #1b292ff5 60%, #57482e99);
+  border-block: 1px solid #b69b6580;
+  box-shadow:
+    inset 0 1px #f1d7a31a,
+    inset 0 -1px #03090e;
+  clip-path: polygon(
+    12px 0,
+    100% 0,
+    100% calc(100% - 10px),
+    calc(100% - 10px) 100%,
+    0 100%,
+    0 12px
+  );
+}
+.hall-depart > svg:first-child {
+  width: 41px;
+  height: 41px;
+  padding: 8px;
+  border: 1px solid #d1b274a6;
+  border-radius: 50%;
+  box-shadow:
+    0 0 0 3px #c9a9631a,
+    inset 0 0 8px #0009;
+  stroke-width: 1.2;
+}
+.hall-depart > span {
+  flex: 1;
+  text-align: left;
+  font: 21px var(--serif);
+  letter-spacing: 4px;
+  text-shadow: 0 2px 3px #000;
+}
+.hall-depart small {
+  display: block;
+  margin-top: 4px;
+  font: 8px var(--serif);
+  letter-spacing: 1px;
+  color: #b5b39b;
+}
+.hall-depart:hover:not(:disabled) {
+  color: #f2ddad;
+  background: linear-gradient(110deg, #40534ae8, #27383ef5 60%, #796039b3);
+}
+.hall-lab-status {
+  left: 50%;
+  top: 92px;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 16px;
+  background: linear-gradient(90deg, transparent, #152126e6 15% 85%, transparent);
+  border-block: 1px solid #ad99564d;
+  font: 11px var(--serif);
+  white-space: nowrap;
+}
+.hall-lab-status > button {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: #dcc08c;
+}
+.in-town .modal-backdrop {
+  z-index: 150;
+}
+.in-town .toast {
+  bottom: 24px;
+  max-width: min(60vw, 600px);
+}
+@media (max-width: 760px) {
+  .game-hall {
+    --hud-edge: max(10px, env(safe-area-inset-right, 0px));
+    --rail-width: 94px;
+  }
+  .traveler-hud {
+    top: max(17px, env(safe-area-inset-top, 0px));
+    left: max(14px, env(safe-area-inset-left, 0px));
+    width: 200px;
+  }
+  .traveler-profile {
+    gap: 10px;
+  }
+  .traveler-avatar {
+    width: 49px;
+    height: 58px;
+  }
+  .traveler-identity {
+    gap: 4px;
+  }
+  .traveler-identity > small {
+    font-size: 8px;
+    letter-spacing: 2px;
+  }
+  .traveler-identity strong {
+    font-size: 16px;
+    letter-spacing: 2px;
+  }
+  .traveler-level {
+    font-size: 10px;
+    gap: 6px;
+  }
+  .traveler-level > span {
+    font-size: 8px;
+  }
+  .traveler-sync {
+    margin: 11px 0 0 60px;
+    font-size: 8px;
+    letter-spacing: 0;
+  }
+  .hall-wallet {
+    top: max(20px, env(safe-area-inset-top, 0px));
+    flex-direction: column;
+    gap: 9px;
+    padding: 0 0 10px;
+    min-width: 64px;
+  }
+  .hall-wallet > span {
+    min-width: 0;
+    width: 100%;
+    gap: 7px;
+    padding: 0 2px;
+    border: 0;
+  }
+  .hall-wallet > span + span {
+    border: 0;
+  }
+  .hall-wallet b {
+    font-size: 11px;
+  }
+  .hall-wallet svg {
+    width: 13px;
+    height: 13px;
+  }
+  .hall-wallet small {
+    display: none;
+  }
+  .hall-service-rail {
+    top: 165px;
+  }
+  .rail-caption {
+    font-size: 8px;
+    letter-spacing: 2px;
+    margin-bottom: 9px;
+  }
+  .rail-services {
+    gap: 10px 4px;
+  }
+  .rail-services > button {
+    min-height: 54px;
+    gap: 3px;
+  }
+  .service-seal {
+    width: 36px;
+    height: 38px;
+  }
+  .service-seal svg {
+    width: 17px;
+    height: 17px;
+  }
+  .service-label {
+    font-size: 9px;
+    letter-spacing: 2px;
+  }
+  .rail-services > button:last-child {
+    min-height: 32px;
+  }
+  .rail-services > button:last-child .service-label {
+    font-size: 8px;
+  }
+  .rail-alert {
+    right: 0;
+    min-width: 15px;
+    height: 15px;
+    font-size: 8px;
+  }
+  .hall-utility-rail {
+    top: 175px;
+    left: max(10px, env(safe-area-inset-left, 0px));
+    width: 78px;
+    gap: 13px 2px;
+  }
+  .hall-utility-rail > button {
+    min-height: 45px;
+    gap: 5px;
+  }
+  .hall-utility-rail > button > svg {
+    width: 27px;
+    height: 27px;
+  }
+  .hall-utility-rail > button > span {
+    font-size: 8px;
+    letter-spacing: 1px;
+  }
+  .hall-expedition {
+    bottom: max(16px, env(safe-area-inset-bottom, 0px));
+    width: 182px;
+  }
+  .expedition-destination {
+    padding: 0 0 7px 8px;
+    gap: 4px;
+  }
+  .expedition-destination > span {
+    font-size: 10px;
+    letter-spacing: 1px;
+  }
+  .expedition-destination small {
+    font-size: 8px;
+    letter-spacing: 0;
+  }
+  .expedition-tier > button {
+    width: 19px;
+  }
+  .app .expedition-tier input {
+    width: 25px;
+    font-size: 16px;
+  }
+  .hall-depart {
+    min-height: 57px;
+    gap: 7px;
+    padding: 8px;
+  }
+  .hall-depart > svg:first-child {
+    width: 33px;
+    height: 33px;
+    padding: 6px;
+  }
+  .hall-depart > svg:last-child {
+    width: 14px;
+  }
+  .hall-depart > span {
+    font-size: 17px;
+    letter-spacing: 2px;
+  }
+  .hall-depart small {
+    font-size: 7px;
+    letter-spacing: 0;
+  }
+  .hall-lab-status {
+    top: auto;
+    bottom: 123px;
+    left: 64px;
+    transform: none;
+    width: calc(100% - 128px);
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 5px;
+    padding: 6px;
+    font-size: 9px;
+    white-space: normal;
+  }
+  .in-town .toast {
+    bottom: 125px;
+    max-width: calc(100vw - 100px);
+    padding: 10px;
+    font-size: 10px;
+  }
+}
+@media (max-height: 540px) and (orientation: landscape) {
+  .hall-service-rail {
+    top: 98px;
+    width: 176px;
+  }
+  .rail-services {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 7px 3px;
+  }
+  .rail-services > button {
+    min-height: 52px;
+    gap: 2px;
+  }
+  .service-seal {
+    width: 34px;
+    height: 35px;
+  }
+  .service-label {
+    font-size: 9px;
+  }
+  .rail-services > button:last-child {
+    grid-column: auto;
+    flex-direction: column;
+    border: 0;
+    background: none;
+    gap: 2px;
+  }
+  .rail-services > button:last-child .service-seal {
+    width: 34px;
+    height: 35px;
+    background: linear-gradient(135deg, #a58d58, #171f23, #9a8556);
+    clip-path: polygon(50% 0, 94% 23%, 94% 77%, 50% 100%, 6% 77%, 6% 23%);
+  }
+  .rail-services > button:last-child .service-seal::before {
+    display: block;
+  }
+  .hall-utility-rail {
+    top: 148px;
+    width: 96px;
+    gap: 8px 2px;
+  }
+  .hall-utility-rail > button {
+    min-height: 39px;
+    gap: 2px;
+  }
+  .hall-utility-rail > button > svg {
+    width: 24px;
+    height: 24px;
+    padding: 5px;
+  }
+  .hall-expedition {
+    right: var(--hud-edge);
+    width: 198px;
+    bottom: 16px;
+  }
+  .hall-depart {
+    min-height: 44px;
+  }
+  .hall-lab-status {
+    top: 72px;
+    bottom: auto;
+    left: 50%;
+    width: auto;
+    transform: translateX(-50%);
+  }
+}
