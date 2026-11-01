@@ -15,7 +15,9 @@ export interface HallNpc {
 
 /** Normalized ground-plane landmarks shared by scene art, actors and movement. */
 export const HALL_LAYOUT = {
+  world: { width: 1296, height: 1216 },
   portal: { x: 0.5, y: 0.28 },
+  portalPlaza: { x: 0.5, y: 0.45 },
   spawn: { x: 0.5, y: 0.85 },
   centralClear: { left: 0.34, right: 0.66, top: 0.18, bottom: 0.76 },
   northSouthPath: { left: 0.41, right: 0.59, top: 0.22, bottom: 0.97 },

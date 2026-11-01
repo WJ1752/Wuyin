@@ -146,6 +146,7 @@
   touch-action: none;
   background: #223b39;
   cursor: crosshair;
+  transform-origin: 0 0;
   will-change: transform;
 }
 .hall-map > .town-scene {
@@ -182,6 +183,26 @@
   border-color: #96e4cb88;
   box-shadow: 0 0 18px #70dbc83d;
   background: #8ffbe10a;
+}
+.hall-portal-plaza {
+  width: 22%;
+  height: 15%;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+}
+.hall-portal-label {
+  position: absolute;
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  white-space: nowrap;
+  padding: 4px 16px;
+  background: linear-gradient(90deg, transparent, #10252bdd 20% 80%, transparent);
+  color: #cce5d4;
+  font: 13px var(--serif);
+  letter-spacing: 3px;
+  text-shadow: 0 2px 5px #000;
+  pointer-events: none;
 }
 .hall-actor {
   --sprite-width: 54px;
@@ -257,17 +278,13 @@
   pointer-events: none;
   filter: saturate(0.82) drop-shadow(1px 2px 0 #101d26);
 }
-.hall-map .hall-npc {
-  --sprite-width: calc(var(--npc-width, 48px) * var(--npc-scale, 1));
-  --sprite-height: calc(var(--npc-height, 64px) * var(--npc-scale, 1));
-}
 .hall-character {
   --sprite-width: 66px;
   --sprite-height: 66px;
 }
 .hall-map .hall-npc {
-  --sprite-width: calc(68px * var(--npc-scale, 1));
-  --sprite-height: calc(68px * var(--npc-scale, 1));
+  --sprite-width: 68px;
+  --sprite-height: 68px;
 }
 .hall-npc .hall-sprite {
   overflow: hidden;
@@ -285,34 +302,6 @@
   left: var(--art-left);
   bottom: var(--art-bottom);
   transform-origin: var(--art-anchor);
-}
-.npc-mentor {
-  --npc-width: 45px;
-  --npc-height: 68px;
-}
-.npc-cube {
-  --npc-width: 48px;
-  --npc-height: 71px;
-}
-.npc-chronicler {
-  --npc-width: 48px;
-  --npc-height: 61px;
-}
-.npc-smith {
-  --npc-width: 64px;
-  --npc-height: 61px;
-}
-.npc-mia {
-  --npc-width: 48px;
-  --npc-height: 62px;
-}
-.npc-keeper {
-  --npc-width: 58px;
-  --npc-height: 58px;
-}
-.npc-tamer {
-  --npc-width: 69px;
-  --npc-height: 62px;
 }
 .hall-actor-name {
   position: absolute;
@@ -626,9 +615,6 @@
   line-height: 1.7;
 }
 @media (max-width: 900px) {
-  .hall-map {
-    --npc-scale: 0.9;
-  }
   .hall-header {
     top: 112px;
     left: calc((100% - 104px) / 2);
@@ -651,26 +637,6 @@
     left: max(12px, env(safe-area-inset-left));
     max-width: calc(100% - 88px);
     padding-block: 2px;
-  }
-  .hall-nameplate {
-    font-size: 11px;
-    padding: 4px 9px;
-  }
-  .hall-nameplate svg {
-    width: 11px;
-    height: 11px;
-  }
-  .hall-actor {
-    --sprite-width: 44px;
-    --sprite-height: 53px;
-  }
-  .hall-character {
-    --sprite-width: 53px;
-    --sprite-height: 53px;
-  }
-  .hall-actor-name {
-    font-size: 9px;
-    padding: 1px 3px;
   }
   .hall-dialogue {
     left: calc((100% - 104px) / 2);
@@ -708,23 +674,8 @@
   }
 }
 @media (max-width: 600px) {
-  .hall-map {
-    --npc-scale: 0.76;
-  }
   .hall-header h2 {
     font-size: 18px;
-  }
-  .hall-map .hall-character {
-    --sprite-width: 44px;
-    --sprite-height: 44px;
-  }
-  .hall-map .hall-nameplate {
-    font-size: 10px;
-    gap: 4px;
-    padding: 4px 8px;
-  }
-  .hall-map .hall-actor-name {
-    display: none;
   }
   .npc-hall .hall-touch-controls .hall-interact {
     padding: 8px 17px;
@@ -737,9 +688,6 @@
   }
 }
 @media (max-height: 600px) and (min-width: 601px) {
-  .hall-map {
-    --npc-scale: 0.7;
-  }
   .hall-header {
     top: 18px;
     left: 50%;
@@ -750,13 +698,6 @@
   .hall-visitors {
     top: 115px;
     max-width: 220px;
-  }
-  .hall-map .hall-character {
-    --sprite-width: 48px;
-    --sprite-height: 48px;
-  }
-  .hall-actor-name {
-    display: none;
   }
   .npc-hall .hall-touch-controls .hall-interact {
     left: 50%;

@@ -8,9 +8,12 @@ const within = (point: Point, area: Area) =>
   point.x >= area.left && point.x <= area.right && point.y >= area.top && point.y <= area.bottom;
 
 test('outer-ring services leave the portal plaza and north-south route clear and remain reachable', () => {
-  const { portal, spawn, centralClear, northSouthPath, bounds } = HALL_LAYOUT;
+  const { portal, portalPlaza, spawn, centralClear, northSouthPath, bounds } = HALL_LAYOUT;
   assert.ok(within(portal, centralClear));
   assert.ok(within(portal, northSouthPath));
+  assert.ok(within(portalPlaza, centralClear));
+  assert.ok(within(portalPlaza, northSouthPath));
+  assert.deepEqual(clampHallPosition(portalPlaza.x, portalPlaza.y), portalPlaza);
   assert.ok(within(spawn, northSouthPath));
   assert.deepEqual(clampHallPosition(spawn.x, spawn.y), spawn);
   const services = HALL_NPCS.map((npc) => npc.panel).sort();

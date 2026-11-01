@@ -47,7 +47,7 @@ const ACTIVITIES: Record<string, string> = {
 };
 const START: { x: number; y: number } = HALL_LAYOUT.spawn;
 const INTERACTION_DISTANCE = 82;
-const HALL_ASPECT = 1296 / 1216;
+const HALL_ASPECT = HALL_LAYOUT.world.width / HALL_LAYOUT.world.height;
 // CSS and Pixi use the same image origin: the actor's coordinate is its ground contact.
 const characterOrigin = (classId: keyof typeof CHARACTER_ART): CSSProperties =>
   ({
@@ -101,6 +101,7 @@ export function NpcHall({
   // Move the entire shared ground plane so artwork, actors and pointer coordinates stay aligned.
   const worldWidth = Math.max(viewSize.width, viewSize.height * HALL_ASPECT, 720);
   const worldHeight = worldWidth / HALL_ASPECT;
+  const worldScale = worldWidth / HALL_LAYOUT.world.width;
   const cameraX = Math.min(
     0,
     Math.max(viewSize.width - worldWidth, viewSize.width / 2 - position.x * worldWidth),
@@ -116,9 +117,25 @@ export function NpcHall({
   const selectedNpc = HALL_NPCS.find((entry) => entry.id === selectedNpcId);
   const interactionNpc =
     selectedNpc && distanceTo(selectedNpc) <= INTERACTION_DISTANCE ? selectedNpc : nearest;
-  const inReach = distanceTo(interactionNpc) <= INTERACTION_DISTANCE;
+  const serviceInReach = distanceTo(interactionNpc) <= INTERACTION_DISTANCE;
+  const portalDistance = Math.min(
+    distanceTo(HALL_LAYOUT.portal),
+    distanceTo(HALL_LAYOUT.portalPlaza),
+  );
+  const interactingPortal =
+    portalDistance <= INTERACTION_DISTANCE &&
+    !(selectedNpc && serviceInReach) &&
+    portalDistance <= distanceTo(interactionNpc);
+  const inReach = interactingPortal || serviceInReach;
   const interaction = useRef<() => void>(() => {});
   const otherPlayers = players.filter((player) => !player.isSelf);
+  const enterPortal = () => {
+    if (!movingEnabled) return;
+    activity.current = 'rift';
+    setSelectedNpcId(null);
+    setTarget(null);
+    navigate.current('expedition');
+  };
   const openService = (npc: HallNpc) => {
     activity.current = ACTIVITIES[npc.panel] ? (npc.panel as LobbyActivity) : 'town';
     setSelectedNpcId(npc.id);
@@ -126,7 +143,8 @@ export function NpcHall({
     navigate.current(npc.panel);
   };
   interaction.current = () => {
-    if (inReach) openService(interactionNpc);
+    if (interactingPortal) enterPortal();
+    else if (serviceInReach) openService(interactionNpc);
   };
 
   useEffect(() => {
@@ -272,7 +290,8 @@ export function NpcHall({
         const width = board.current?.clientWidth || 500,
           height = board.current?.clientHeight || 460;
         const currentTarget = targetRef.current;
-        if (Math.hypot(x, y) < 0.05 && currentTarget) {
+        const followingTarget = Math.hypot(x, y) < 0.05 && !!currentTarget;
+        if (followingTarget && currentTarget) {
           x = (currentTarget.x - positionRef.current.x) * width;
           y = (currentTarget.y - positionRef.current.y) * height;
           if (Math.hypot(x, y) < 4) {
@@ -289,9 +308,10 @@ export function NpcHall({
         const isWalking = Math.hypot(x, y) > 0.05;
         if (isWalking) {
           const speed = Math.max(125, Math.min(width, height) * 0.28);
+          const step = followingTarget ? Math.min(speed * dt, Math.hypot(x, y)) : speed * dt;
           const next = clampHallPosition(
-            positionRef.current.x + ((x / length) * speed * dt) / width,
-            positionRef.current.y + ((y / length) * speed * dt) / height,
+            positionRef.current.x + ((x / length) * step) / width,
+            positionRef.current.y + ((y / length) * step) / height,
           );
           positionRef.current = next;
           setPosition(next);
@@ -388,9 +408,9 @@ export function NpcHall({
         ref={board}
         className={`hall-map ${walking ? 'is-walking' : ''}`}
         style={{
-          width: worldWidth,
-          height: worldHeight,
-          transform: `translate3d(${cameraX}px, ${cameraY}px, 0)`,
+          width: HALL_LAYOUT.world.width,
+          height: HALL_LAYOUT.world.height,
+          transform: `translate3d(${cameraX}px, ${cameraY}px, 0) scale(${worldScale})`,
         }}
         role="group"
         aria-label="营地地图，WASD或方向键移动，点击地面前往，靠近居民后按E交互"
@@ -434,8 +454,21 @@ export function NpcHall({
           aria-label="中央传送门，选择单人或组队远征"
           title="中央传送门 · 选择单人或组队远征"
           disabled={!movingEnabled}
-          onClick={() => onNavigate('expedition')}
+          onClick={enterPortal}
         />
+        <button
+          className="hall-portal hall-portal-plaza"
+          style={{
+            left: `${HALL_LAYOUT.portalPlaza.x * 100}%`,
+            top: `${HALL_LAYOUT.portalPlaza.y * 100}%`,
+          }}
+          aria-label="符文传送阵，选择单人或组队远征"
+          title="秘境传送 · 点击选择远征，靠近后也可按 E"
+          disabled={!movingEnabled}
+          onClick={enterPortal}
+        >
+          <span className="hall-portal-label">秘境传送</span>
+        </button>
         {HALL_NPCS.map((npc) => {
           const Icon = NPC_ICONS[npc.panel];
           const near = distanceTo(npc) <= INTERACTION_DISTANCE;
@@ -550,8 +583,14 @@ export function NpcHall({
           >
             <kbd>E</kbd>
             <span>
-              <small>{inReach ? interactionNpc.name : selectedNpc?.name}</small>
-              {inReach ? interactionNpc.service : '正在前往'}
+              <small>
+                {interactingPortal
+                  ? '秘境传送门'
+                  : inReach
+                    ? interactionNpc.name
+                    : selectedNpc?.name}
+              </small>
+              {interactingPortal ? '选择远征方式' : inReach ? interactionNpc.service : '正在前往'}
             </span>
             <ChevronRight size={15} />
           </button>
@@ -563,11 +602,13 @@ export function NpcHall({
         aria-live="polite"
       >
         <span>
-          {inReach
-            ? `「${interactionNpc.greeting}」`
-            : selectedNpc
-              ? `正在前往${selectedNpc.name}，靠近后点击交互或按 E。`
-              : 'WASD / 摇杆移动　·　点击居民交互'}
+          {interactingPortal
+            ? '踏入传送阵，选择独自远征或与同行旅人组队。'
+            : inReach
+              ? `「${interactionNpc.greeting}」`
+              : selectedNpc
+                ? `正在前往${selectedNpc.name}，靠近后点击交互或按 E。`
+                : 'WASD / 摇杆移动　·　点击居民或传送阵交互'}
         </span>
       </div>
       {publishError && (
