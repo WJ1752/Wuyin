@@ -178,6 +178,7 @@ export interface SaveData {
   volume: number;
   muted: boolean;
   autoSalvage: boolean;
+  keepRareAffix?: string;
   orientation: 'portrait' | 'landscape';
   tutorialSeen: boolean;
   progression?: {

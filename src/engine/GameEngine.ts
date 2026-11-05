@@ -117,6 +117,10 @@ export function getActiveSkills(
     highest('ultimate'),
   ].filter((s): s is SkillDef => Boolean(s));
 }
+function isSkeletonWarrior(index: number) {
+  return index < 6 || index >= 10;
+}
+
 interface Enemy {
   id: number;
   def: MonsterDef;
@@ -1722,14 +1726,33 @@ export class GameEngine {
       e.view.drawHealth(e.hp / e.maxHp);
     }
   }
+  private enemyTarget(e: Enemy): { x: number; y: number } {
+    const intercept = !e.boss && ['melee', 'swarm', 'charge', 'slam'].includes(e.def.behavior);
+    if (!this.coop && (!intercept || !this.summons.length)) return { x: this.x, y: this.y };
+    let target: GameEngine | CharacterRig = this;
+    let nearest = Infinity;
+    for (const actor of this.coop ? this.coopActors.values() : [this]) {
+      if (actor.hp <= 0) continue;
+      const playerDistance = (actor.x - e.x) ** 2 + (actor.y - e.y) ** 2;
+      if (playerDistance <= nearest) {
+        nearest = playerDistance;
+        target = actor;
+      }
+      if (!intercept) continue;
+      for (const [index, summon] of actor.summons.entries()) {
+        if (!isSkeletonWarrior(index) || (actor.summonStates.get(summon)?.hp ?? 0) <= 0) continue;
+        const distance = (summon.x - e.x) ** 2 + (summon.y - e.y) ** 2;
+        if (distance <= 120 ** 2 && distance < nearest) {
+          nearest = distance;
+          target = summon;
+        }
+      }
+    }
+    return target instanceof GameEngine ? { x: target.x, y: target.y } : target;
+  }
   private stepEnemyBrain(e: Enemy, dt: number) {
     if (this.config.training) return;
-    const target = this.coop
-      ? ([...this.coopActors.values()]
-          .filter((actor) => actor.hp > 0)
-          .sort((a, b) => Math.hypot(a.x - e.x, a.y - e.y) - Math.hypot(b.x - e.x, b.y - e.y))[0] ??
-        this)
-      : this;
+    const target = this.enemyTarget(e);
     const input = {
       dt,
       time: this.elapsed,
@@ -3422,7 +3445,7 @@ export class GameEngine {
       }
       const a = this.elapsed * 0.4 + (i / this.summons.length) * Math.PI * 2;
       const target = this.enemies.find((e) => e.hp > 0 && this.distance(e) < 320);
-      const warrior = i < 6 || i >= 10;
+      const warrior = isSkeletonWarrior(i);
       const tx =
           target && warrior
             ? target.x + Math.cos(a) * 24
@@ -3439,13 +3462,13 @@ export class GameEngine {
     const count = this.set('inarius', 2) ? 16 : 10;
     for (let i = 0; i < count; i++) {
       const rig = new CharacterRig(
-        i >= 6 && i < 10 ? 'sorcerer' : 'necromancer',
+        isSkeletonWarrior(i) ? 'necromancer' : 'sorcerer',
         {},
         { summon: true },
       );
       rig.scale.set(0.45);
       rig.alpha = 0.65;
-      rig.tint = i >= 6 && i < 10 ? 0xb4cdce : 0xc1c4aa;
+      rig.tint = isSkeletonWarrior(i) ? 0xc1c4aa : 0xb4cdce;
       this.entityLayer.addChild(rig);
       this.summons.push(rig);
       const maxHp = Math.max(1, this.config.stats.hp * 0.35);
@@ -3606,7 +3629,7 @@ export class GameEngine {
           const e = near[i % near.length];
           const summon = this.summons[i];
           if ((this.summonStates.get(summon)?.hp ?? 0) <= 0) continue;
-          if (i < 6 || i >= 10) {
+          if (isSkeletonWarrior(i)) {
             if (Math.hypot(e.x - summon.x, e.y - summon.y) > 80) continue;
             this.vfx.slash(
               summon.x,

@@ -146,6 +146,7 @@ function affixLabel(id: string, value: number) {
 }
 function SalvageButton({ item }: { item: Item }) {
   const salvage = useGameStore((state) => state.salvage);
+  const keep = useGameStore((state) => state.save.keepRareAffix);
   const [confirm, setConfirm] = useState(false);
   const precious = ['legendary', 'set', 'primal'].includes(item.rarity);
   return (
@@ -155,7 +156,7 @@ function SalvageButton({ item }: { item: Item }) {
         <button
           className={confirm ? 'danger-button' : 'ghost-button'}
           onClick={() => {
-            if (!bulkSalvageable(item) && !confirm) setConfirm(true);
+            if (!bulkSalvageable(item, keep) && !confirm) setConfirm(true);
             else salvage(item.id);
           }}
         >
@@ -1150,7 +1151,11 @@ function GamblePanel() {
       </div>
       <p className={spaces < 10 ? 'negative system-hint' : 'muted system-hint'}>
         背包剩余 {spaces} 格 · 单抽需 1 格，十连需 10 格。
-        {store.save.autoSalvage ? '自动分解已开启，稀有底材也会转为材料。' : ''}
+        {store.save.autoSalvage
+          ? store.save.keepRareAffix
+            ? `自动分解已开启，保留带「${AFFIXES.find((a) => a.id === store.save.keepRareAffix)?.name}」的稀有底材。`
+            : '自动分解已开启，稀有底材也会转为材料。'
+          : ''}
       </p>
       <p className="muted system-hint">
         秘藏跟随已通关难度成长；低层不会提前产出传奇、套装或太古。指定部位若没有对应传奇，则转为该阶段可产出的装备。装备留在行囊中。
@@ -1205,6 +1210,28 @@ function GamblePanel() {
   );
 }
 
+function RareAffixFilter() {
+  const keep = useGameStore((state) => state.save.keepRareAffix);
+  const update = useGameStore((state) => state.updateSettings);
+  return (
+    <label>
+      分解时保留的稀有词条
+      <select
+        className="system-select"
+        value={keep ?? ''}
+        onChange={(e) => update({ keepRareAffix: e.target.value || undefined })}
+      >
+        <option value="">不限词条，按原规则分解</option>
+        {AFFIXES.map((a) => (
+          <option key={a.id} value={a.id}>
+            {a.name}
+          </option>
+        ))}
+      </select>
+      <small>自动分解和一键分解会保留带此词条的黄装。背包满时溢出掉落仍会转为材料。</small>
+    </label>
+  );
+}
 function RareCraftPanel() {
   const { save, craftRare } = useGameStore();
   const [baseId, setBase] = useState('');
@@ -1229,6 +1256,7 @@ function RareCraftPanel() {
     <div className="system-columns">
       <section>
         <h3>选择稀有底材</h3>
+        <RareAffixFilter />
         <p>保留已有词条，为黄装追加至四条。加工过的底材会在一键分解时保留。</p>
         <select
           className="system-select"
@@ -1519,10 +1547,11 @@ function ForgePanel() {
             <span className="muted">镶嵌宝石会无损返还。</span>
             <button
               className="gold-button"
-              disabled={!save.inventory.some(bulkSalvageable)}
+              disabled={!save.inventory.some((item) => bulkSalvageable(item, save.keepRareAffix))}
               onClick={store.salvageLow}
             >
-              分解史诗及以下（保留刻印装备） · {save.inventory.filter(bulkSalvageable).length} 件
+              分解史诗及以下（保留刻印和筛选底材） ·{' '}
+              {save.inventory.filter((item) => bulkSalvageable(item, save.keepRareAffix)).length} 件
             </button>
           </div>
           <div className="relic-grid">
@@ -2245,13 +2274,14 @@ function SettingsPanel() {
           </select>
         </label>
         <label className="setting-row">
-          <span>自动分解史诗及以下掉落（寻找稀有底材时请关闭）</span>
+          <span>自动分解史诗及以下掉落</span>
           <input
             type="checkbox"
             checked={store.save.autoSalvage}
             onChange={(e) => store.updateSettings({ autoSalvage: e.target.checked })}
           />
         </label>
+        <RareAffixFilter />
       </section>
       <section className="card">
         <h3>旅程档案</h3>

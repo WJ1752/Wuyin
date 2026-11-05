@@ -368,3 +368,39 @@ test('camp compares three solo victories and settles a capped interval only once
   assert.equal(settleCamp(save, now), '');
   assert.equal(save.shards - before, 216);
 });
+
+test('character affix preference retains only matching rare bases during loot and bulk salvage', () => {
+  reset();
+  const state = useGameStore.getState;
+  state().updateSettings({ autoSalvage: true, keepRareAffix: 'cooldown' });
+  const base = generateLoot('ranger', 50, { rarity: 'rare' });
+  base.affixes = [
+    { id: 'cooldown', value: 0.08 },
+    { id: 'hp', value: 200 },
+  ];
+  const junk = { ...base, id: 'junk', affixes: [{ id: 'hp', value: 200 }] };
+  const epic: Item = { ...base, id: 'epic', rarity: 'epic' };
+  const prior = state().save.crystals;
+  state().completeRun({
+    won: false,
+    stage: 1,
+    seconds: 35,
+    kills: 0,
+    gold: 0,
+    shards: 0,
+    items: [base, junk, epic],
+  });
+  assert.deepEqual(
+    state().save.inventory.map((i) => i.id),
+    [base.id],
+  );
+  assert.equal(state().save.crystals, prior + 8);
+  const restored = validateSave(JSON.parse(JSON.stringify(state().save)));
+  assert.equal(restored.keepRareAffix, 'cooldown');
+  assert.throws(() => validateSave({ ...restored, keepRareAffix: 'invalid-affix' }));
+  state().salvageLow();
+  assert.equal(state().save.inventory.length, 1);
+  state().updateSettings({ keepRareAffix: undefined });
+  state().salvageLow();
+  assert.equal(state().save.inventory.length, 0);
+});

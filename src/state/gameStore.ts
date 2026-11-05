@@ -478,8 +478,10 @@ function equipFromInventory(s: SaveData, id: string) {
 function isPrecious(item: Item) {
   return ['legendary', 'set', 'primal'].includes(item.rarity);
 }
-export function bulkSalvageable(item: Item) {
-  return !isPrecious(item) && !(item.rarity === 'rare' && item.affixes.length > 2);
+export function bulkSalvageable(item: Item, keepRareAffix?: string) {
+  if (item.rarity === 'rare')
+    return item.affixes.length <= 2 && !item.affixes.some((a) => a.id === keepRareAffix);
+  return !isPrecious(item);
 }
 export function craftRecipe(base: Item, donor: Item, affixId: string) {
   if (
@@ -519,7 +521,7 @@ function addItems(save: SaveData, items: Item[]) {
   };
   for (const item of items) {
     const precious = isPrecious(item);
-    if (save.autoSalvage && bulkSalvageable(item)) {
+    if (save.autoSalvage && bulkSalvageable(item, save.keepRareAffix)) {
       receipt.autoSalvaged++;
     } else if (save.inventory.length >= MAX_INVENTORY) {
       receipt.overflow++;
@@ -934,6 +936,11 @@ export const useGameStore = create<GameState>((set, get) => {
     },
     updateSettings(settings) {
       mutate((s) => {
+        if ('keepRareAffix' in settings) {
+          if (!settings.keepRareAffix) delete s.keepRareAffix;
+          else if (AFFIXES.some((a) => a.id === settings.keepRareAffix))
+            s.keepRareAffix = settings.keepRareAffix;
+        }
         for (const key of [
           'volume',
           'muted',
@@ -1242,7 +1249,7 @@ export const useGameStore = create<GameState>((set, get) => {
     },
     salvageLow() {
       mutate((s) => {
-        const items = s.inventory.filter(bulkSalvageable);
+        const items = s.inventory.filter((item) => bulkSalvageable(item, s.keepRareAffix));
         for (const i of items) {
           const m = materialValue(i);
           s.crystals += m.crystals;

@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import type { ClassId } from '../src/core/types';
 import { SKILLS } from '../src/data/skillTrees';
+import { createMonsterBrain } from '../src/engine/MonsterAI';
 import { GameEngine } from '../src/engine/GameEngine';
 import { BuffManager } from '../src/engine/BuffAndPylon';
 import { computeStats, newSave } from '../src/state/gameStore';
@@ -305,6 +306,53 @@ test('poison scythe improves only damage over time and corroded fang settles the
 function summonAt(x: number, y = 0) {
   return { x, y, visible: true, alpha: 0.65, attack: noop, update: noop, scale: { set: noop } };
 }
+
+test('a warrior intercepts a melee strike and a fallen frontline returns aggro to heroes', () => {
+  const { engine } = engineFor('necromancer');
+  engine.config.training = false;
+  const warrior = summonAt(150),
+    mage = summonAt(152);
+  engine.summons = [warrior, ...Array.from({ length: 5 }, () => summonAt(-200)), mage];
+  for (const s of engine.summons) engine.summonStates.set(s, { hp: 100, maxHp: 100, reviveIn: 0 });
+  const attacker = {
+    ...enemy(3, 152),
+    def: { behavior: 'melee', family: 'skeleton', attack: 12, speed: 0 },
+    brain: createMonsterBrain(3),
+    affix: 0,
+  };
+  assert.equal(engine.enemyTarget(attacker), warrior);
+  assert.deepEqual(engine.enemyTarget({ ...attacker, x: 280 }), { x: engine.x, y: engine.y });
+  for (const behavior of ['slam', 'charge', 'swarm'])
+    assert.equal(engine.enemyTarget({ ...attacker, def: { ...attacker.def, behavior } }), warrior);
+  assert.deepEqual(engine.enemyTarget({ ...attacker, boss: true }), { x: engine.x, y: engine.y });
+  assert.deepEqual(engine.enemyTarget({ ...attacker, def: { behavior: 'ranged' } }), {
+    x: engine.x,
+    y: engine.y,
+  });
+  attacker.brain.attackTimer = 0;
+  // Skip drawing the telegraph while resolving the real AI timer and strike geometry.
+  const hp = engine.hp;
+  engine.handleEnemyEvent = (e: unknown, event: any) => {
+    if (event.kind === 'strike') engine.applyEnemyStrike(e, event);
+  };
+  for (let i = 0; i < 5; i++) engine.stepEnemyBrain(attacker, 0.1);
+  assert.equal(engine.hp, hp);
+  assert.ok(engine.summonStates.get(warrior).hp < 100);
+  engine.summonStates.get(warrior).hp = 0;
+  assert.deepEqual(engine.enemyTarget(attacker), { x: engine.x, y: engine.y });
+  const { engine: ally } = engineFor('ranger');
+  ally.x = 148;
+  engine.coop = {};
+  engine.coopActors = new Map([
+    ['local', engine],
+    ['ally', ally],
+  ]);
+  assert.deepEqual(engine.enemyTarget(attacker), { x: ally.x, y: ally.y });
+  engine.summonStates.get(warrior).hp = 100;
+  assert.equal(engine.enemyTarget(attacker), warrior);
+  engine.hp = 0;
+  assert.deepEqual(engine.enemyTarget(attacker), { x: ally.x, y: ally.y });
+});
 
 test('summons share monster attack geometry, stop while dead, and Rathma revives deaths and self-explosions immediately', () => {
   const { engine } = engineFor('necromancer');

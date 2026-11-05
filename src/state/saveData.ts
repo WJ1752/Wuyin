@@ -206,6 +206,7 @@ export function validateSave(input: unknown, historical = false): SaveData {
     throw new Error('宠物资料无效。');
   if (
     !bounded(s.volume, 0, 1) ||
+    (s.keepRareAffix !== undefined && !AFFIXES.some((a) => a.id === s.keepRareAffix)) ||
     !['portrait', 'landscape'].includes(String(s.orientation)) ||
     ['muted', 'autoSalvage', 'tutorialSeen'].some((k) => typeof s[k] !== 'boolean')
   )
