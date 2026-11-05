@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs';
 import { HALL_NPCS } from '../src/data/npcHall';
 import { NPC_ART } from '../src/data/npcVisuals';
 import { SKILLS } from '../src/data/skillTrees';
+import { SKILL_ART, CAST_ART, EFFECT_CELLS } from '../src/data/skillArt';
 import { LEGENDARIES } from '../src/data/legendaries';
 import { SETS } from '../src/data/sets';
 import { generateLoot } from '../src/engine/LootGenerator';
@@ -39,7 +40,22 @@ test('all seven hall residents resolve to distinct cells of a bundled high resol
   assert.equal(new Set(cells).size, HALL_NPCS.length, 'NPCs must use their own atlas cells');
 });
 
-test('every skill has distinct authored geometry and a self-contained combat SVG', () => {
+test('every skill has an illustrated tile and every active skill has a distinct cast sprite', () => {
+  const active = SKILLS.filter((skill) => skill.kind !== 'passive');
+  assert.deepEqual(Object.keys(SKILL_ART).sort(), SKILLS.map((s) => s.id).sort());
+  assert.deepEqual(Object.keys(CAST_ART).sort(), active.map((s) => s.id).sort());
+  for (const frames of [SKILL_ART, CAST_ART]) {
+    const all = Object.values(frames);
+    assert.equal(new Set(all.map((f) => `${f.src}/${f.column}/${f.row}`)).size, all.length);
+    for (const src of new Set(all.map((f) => f.src))) {
+      const file = readFileSync(new URL(`../public/${src}`, import.meta.url));
+      assert.equal(file.toString('ascii', 8, 12), 'WEBP');
+    }
+  }
+  assert.equal(new Set(EFFECT_CELLS).size, 12);
+});
+
+test('every skill retains a distinct vector fallback', () => {
   assert.deepEqual(Object.keys(SKILL_VISUALS).sort(), SKILLS.map((skill) => skill.id).sort());
   assert.equal(new Set(Object.values(SKILL_VISUALS).map(geometry)).size, SKILLS.length);
   for (const skill of SKILLS) {

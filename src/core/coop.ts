@@ -24,10 +24,18 @@ export interface CoopActorFrame {
   moving: boolean;
   downSeconds: number;
   inputSequence?: number;
+  cast?: { sequence: number; skillId: string; angle: number; tx: number; ty: number };
   pet?: { x: number; y: number };
   summons?: { x: number; y: number; active: boolean }[];
   snapshot: CombatSnapshot;
 }
+
+export type CombatEffectCue = { x: number; y: number; color: number } & (
+  | { kind: 'burst'; count: number; large: boolean; heal?: boolean }
+  | { kind: 'slash'; angle: number; radius: number }
+  | { kind: 'ring' | 'meteor'; radius: number }
+  | { kind: 'lightning'; tx: number; ty: number }
+);
 
 export interface CoopFrame {
   sequence: number;
@@ -35,6 +43,7 @@ export interface CoopFrame {
   progress: number;
   kills: number;
   actors: CoopActorFrame[];
+  effects?: (CombatEffectCue & { sequence: number; time: number })[];
   enemies: {
     id: number;
     defId: string;
@@ -46,8 +55,15 @@ export interface CoopFrame {
     boss: boolean;
     minion: boolean;
   }[];
-  projectiles: { x: number; y: number; angle: number; color: number }[];
-  zones: { x: number; y: number; radius: number; color: number }[];
+  projectiles: {
+    x: number;
+    y: number;
+    angle: number;
+    color: number;
+    skillId?: string;
+    scale?: number;
+  }[];
+  zones: { x: number; y: number; radius: number; color: number; skillId?: string }[];
   orbs: { x: number; y: number; kind: string }[];
   warnings: {
     id: number;

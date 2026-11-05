@@ -43,6 +43,29 @@ const SERVICES = [
   { id: 'leaderboard', label: '榜单', icon: Crown },
 ];
 
+export function CampWallet() {
+  const save = useGameStore((state) => state.save);
+  return (
+    <div className="hall-wallet" aria-label="持有资源">
+      <span title="金币">
+        <Coins size={16} />
+        <b>{formatBigNumber(save.gold)}</b>
+        <small>金币</small>
+      </span>
+      <span title="神秘碎片">
+        <Diamond size={16} />
+        <b>{formatBigNumber(save.shards)}</b>
+        <small>碎片</small>
+      </span>
+      <span title="奥术结晶">
+        <Gem size={16} />
+        <b>{formatBigNumber(save.crystals)}</b>
+        <small>结晶</small>
+      </span>
+    </div>
+  );
+}
+
 export function TownHud({
   onNavigate,
   onGuide,
@@ -101,7 +124,7 @@ export function TownHud({
             </small>
             <strong>{labBackup ? hero.name : (character?.name ?? hero.name)}</strong>
             <span className="traveler-level">
-              Lv.{save.level}{' '}
+              Lv.{save.level} <span className="compact-class">{hero.name}</span>
               <span>
                 {save.level >= 100 ? '巅峰行者' : `${save.xp} / ${save.level * 180} 经验`}
               </span>
@@ -125,23 +148,7 @@ export function TownHud({
         </button>
       </header>
 
-      <div className="hall-wallet" aria-label="持有资源">
-        <span title="金币">
-          <Coins size={16} />
-          <b>{formatBigNumber(save.gold)}</b>
-          <small>金币</small>
-        </span>
-        <span title="神秘碎片">
-          <Diamond size={16} />
-          <b>{formatBigNumber(save.shards)}</b>
-          <small>碎片</small>
-        </span>
-        <span title="奥术结晶">
-          <Gem size={16} />
-          <b>{formatBigNumber(save.crystals)}</b>
-          <small>结晶</small>
-        </span>
-      </div>
+      <CampWallet />
 
       <nav className="hall-service-rail" aria-label="大厅侧边功能">
         <span className="rail-caption">营地服务</span>
@@ -149,6 +156,7 @@ export function TownHud({
           {SERVICES.map(({ id, label, icon: Icon }) => (
             <button
               key={id}
+              className={id === 'character' || id === 'skills' ? 'camp-shortcut' : undefined}
               onClick={() => onNavigate(id)}
               aria-label={id === 'skills' && canLearn ? `技能 · ${points} 点可分配` : label}
               title={
@@ -162,7 +170,12 @@ export function TownHud({
               {id === 'skills' && canLearn && <i className="rail-alert">{points}</i>}
             </button>
           ))}
-          <button onClick={() => onNavigate('services')}>
+          <button className="camp-shortcut camp-directory" onClick={() => onNavigate('services')}>
+            {rewardReady && (
+              <i className="rail-alert" aria-label="有旅程奖励可领取">
+                ◆
+              </i>
+            )}
             <span className="service-seal">
               <Compass size={23} />
             </span>

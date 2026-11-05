@@ -272,7 +272,7 @@ export interface CombatSnapshot {
   buffs: { name: string; seconds: number; color: string }[];
   paused: boolean;
   finished: boolean;
-  pylons: { id: string; name: string; used: boolean }[];
+  pylons: { id: string; name: string; used: boolean; inReach?: boolean }[];
   fps: number;
 }
 export interface GameCallbacks {

@@ -1,0 +1,521 @@
+[
+  {
+    "setId": "delsere",
+    "seed": 7715,
+    "minutes": 120,
+    "cleared": 150,
+    "milestones": {
+      "100": 0,
+      "110": 375,
+      "120": 557,
+      "130": 820,
+      "140": 2082,
+      "150": 2760
+    },
+    "runs": 66,
+    "farmRuns": 6,
+    "failures": 2,
+    "farmSeconds": 365,
+    "post100Seconds": 2760,
+    "totalSeconds": 3650,
+    "level": 26,
+    "forge": 50,
+    "cube": {
+      "weapon": "endless_depths",
+      "armor": "aquila",
+      "jewelry": "zodiac"
+    },
+    "policy": "targeted"
+  },
+  {
+    "setId": "inarius",
+    "seed": 7715,
+    "minutes": 120,
+    "cleared": 150,
+    "milestones": {
+      "100": 0,
+      "110": 133,
+      "120": 256,
+      "130": 402,
+      "140": 599,
+      "150": 828
+    },
+    "runs": 51,
+    "farmRuns": 0,
+    "failures": 0,
+    "farmSeconds": 0,
+    "post100Seconds": 828,
+    "totalSeconds": 1582,
+    "level": 24,
+    "forge": 50,
+    "cube": {
+      "weapon": "jesseth",
+      "jewelry": "squirt",
+      "armor": "olda"
+    },
+    "policy": "targeted"
+  },
+  {
+    "setId": "shadow_blades",
+    "seed": 7715,
+    "minutes": 120,
+    "cleared": 150,
+    "milestones": {
+      "100": 0,
+      "110": 188,
+      "120": 340,
+      "130": 622,
+      "140": 923,
+      "150": 5098
+    },
+    "runs": 78,
+    "farmRuns": 18,
+    "failures": 6,
+    "farmSeconds": 1758,
+    "post100Seconds": 5098,
+    "totalSeconds": 5931,
+    "level": 29,
+    "forge": 50,
+    "cube": {
+      "jewelry": "squirt",
+      "weapon": "shadowfang",
+      "armor": "aquila"
+    },
+    "policy": "targeted"
+  },
+  {
+    "setId": "storm_wolf",
+    "seed": 7715,
+    "minutes": 120,
+    "cleared": 150,
+    "milestones": {
+      "100": 0,
+      "110": 135,
+      "120": 246,
+      "130": 341,
+      "140": 536,
+      "150": 718
+    },
+    "runs": 51,
+    "farmRuns": 0,
+    "failures": 0,
+    "farmSeconds": 0,
+    "post100Seconds": 718,
+    "totalSeconds": 1572,
+    "level": 23,
+    "forge": 50,
+    "cube": {
+      "weapon": "shadowfang",
+      "armor": "aquila",
+      "jewelry": "elements"
+    },
+    "policy": "targeted"
+  },
+  {
+    "setId": "stormcaller",
+    "seed": 8817,
+    "minutes": 120,
+    "cleared": 150,
+    "milestones": {
+      "100": 0,
+      "110": 96,
+      "120": 199,
+      "130": 288,
+      "140": 400,
+      "150": 572
+    },
+    "runs": 53,
+    "farmRuns": 0,
+    "failures": 0,
+    "farmSeconds": 0,
+    "post100Seconds": 572,
+    "totalSeconds": 1499,
+    "level": 24,
+    "forge": 50,
+    "cube": {
+      "weapon": "yang",
+      "jewelry": "squirt",
+      "armor": "aquila"
+    },
+    "policy": "targeted"
+  },
+  {
+    "setId": "stormcaller",
+    "seed": 7715,
+    "minutes": 120,
+    "cleared": 150,
+    "milestones": {
+      "100": 0,
+      "110": 575,
+      "120": 762,
+      "130": 927,
+      "140": 3010,
+      "150": 5464
+    },
+    "runs": 94,
+    "farmRuns": 27,
+    "failures": 11,
+    "farmSeconds": 2179,
+    "post100Seconds": 5464,
+    "totalSeconds": 6589,
+    "level": 31,
+    "forge": 50,
+    "cube": {},
+    "policy": "drops"
+  },
+  {
+    "setId": "tal_rasha",
+    "seed": 7715,
+    "minutes": 120,
+    "cleared": 150,
+    "milestones": {
+      "100": 0,
+      "110": 120,
+      "120": 220,
+      "130": 347,
+      "140": 559,
+      "150": 786
+    },
+    "runs": 51,
+    "farmRuns": 0,
+    "failures": 0,
+    "farmSeconds": 0,
+    "post100Seconds": 786,
+    "totalSeconds": 1618,
+    "level": 24,
+    "forge": 50,
+    "cube": {
+      "jewelry": "squirt",
+      "weapon": "deathwish",
+      "armor": "olda"
+    },
+    "policy": "targeted"
+  },
+  {
+    "setId": "trang_oul",
+    "seed": 7715,
+    "minutes": 120,
+    "cleared": 150,
+    "milestones": {
+      "100": 0,
+      "110": 138,
+      "120": 274,
+      "130": 636,
+      "140": 2378,
+      "150": 4230
+    },
+    "runs": 102,
+    "farmRuns": 36,
+    "failures": 12,
+    "farmSeconds": 1562,
+    "post100Seconds": 4230,
+    "totalSeconds": 4984,
+    "level": 33,
+    "forge": 50,
+    "cube": {
+      "weapon": "nayr",
+      "armor": "aquila",
+      "jewelry": "zodiac"
+    },
+    "policy": "targeted"
+  },
+  {
+    "setId": "vyr",
+    "seed": 7715,
+    "minutes": 120,
+    "cleared": 150,
+    "milestones": {
+      "100": 0,
+      "110": 133,
+      "120": 241,
+      "130": 344,
+      "140": 636,
+      "150": 839
+    },
+    "runs": 52,
+    "farmRuns": 0,
+    "failures": 0,
+    "farmSeconds": 0,
+    "post100Seconds": 839,
+    "totalSeconds": 1726,
+    "level": 24,
+    "forge": 50,
+    "cube": {
+      "weapon": "cosmic_strand",
+      "armor": "olda",
+      "jewelry": "elements"
+    },
+    "policy": "targeted"
+  },
+  {
+    "setId": "wasteland",
+    "seed": 8817,
+    "minutes": 120,
+    "cleared": 150,
+    "milestones": {
+      "100": 0,
+      "110": 371,
+      "120": 753,
+      "130": 1317,
+      "140": 2437,
+      "150": 7170
+    },
+    "runs": 84,
+    "farmRuns": 15,
+    "failures": 5,
+    "farmSeconds": 1394,
+    "post100Seconds": 7170,
+    "totalSeconds": 8167,
+    "level": 30,
+    "forge": 50,
+    "cube": {
+      "weapon": "lamentation",
+      "armor": "immortal_armor",
+      "jewelry": "squirt"
+    },
+    "policy": "targeted"
+  },
+  {
+    "setId": "wasteland",
+    "seed": 7715,
+    "minutes": 120,
+    "cleared": 111,
+    "milestones": {
+      "100": 0,
+      "110": 5137
+    },
+    "runs": 79,
+    "farmRuns": 25,
+    "failures": 9,
+    "farmSeconds": 2098,
+    "post100Seconds": 7233,
+    "totalSeconds": 8594,
+    "level": 29,
+    "forge": 44,
+    "cube": {},
+    "policy": "drops"
+  },
+  {
+    "setId": "wild_vines",
+    "seed": 7715,
+    "minutes": 120,
+    "cleared": 150,
+    "milestones": {
+      "100": 0,
+      "110": 127,
+      "120": 244,
+      "130": 403,
+      "140": 708,
+      "150": 3218
+    },
+    "runs": 66,
+    "farmRuns": 9,
+    "failures": 3,
+    "farmSeconds": 426,
+    "post100Seconds": 3218,
+    "totalSeconds": 4030,
+    "level": 27,
+    "forge": 50,
+    "cube": {
+      "weapon": "plaguebranch",
+      "jewelry": "squirt",
+      "armor": "olda"
+    },
+    "policy": "targeted"
+  },
+  {
+    "setId": "earthbreaker",
+    "seed": 7715,
+    "minutes": 120,
+    "cleared": 150,
+    "milestones": {
+      "100": 0,
+      "110": 116,
+      "120": 232,
+      "130": 349,
+      "140": 618,
+      "150": 857
+    },
+    "runs": 51,
+    "farmRuns": 0,
+    "failures": 0,
+    "farmSeconds": 0,
+    "post100Seconds": 857,
+    "totalSeconds": 1692,
+    "level": 23,
+    "forge": 50,
+    "cube": {
+      "weapon": "oathkeeper",
+      "armor": "aquila",
+      "jewelry": "zodiac"
+    },
+    "policy": "targeted"
+  },
+  {
+    "setId": "frost_hunter",
+    "seed": 7715,
+    "minutes": 120,
+    "cleared": 150,
+    "milestones": {
+      "100": 0,
+      "110": 118,
+      "120": 201,
+      "130": 329,
+      "140": 732,
+      "150": 4698
+    },
+    "runs": 86,
+    "farmRuns": 18,
+    "failures": 10,
+    "farmSeconds": 1474,
+    "post100Seconds": 4698,
+    "totalSeconds": 5712,
+    "level": 30,
+    "forge": 50,
+    "cube": {
+      "weapon": "windforce",
+      "armor": "aquila",
+      "jewelry": "squirt"
+    },
+    "policy": "targeted"
+  },
+  {
+    "setId": "immortal_thorns",
+    "seed": 7715,
+    "minutes": 120,
+    "cleared": 150,
+    "milestones": {
+      "100": 0,
+      "110": 229,
+      "120": 555,
+      "130": 915,
+      "140": 1718,
+      "150": 4820
+    },
+    "runs": 70,
+    "farmRuns": 6,
+    "failures": 2,
+    "farmSeconds": 494,
+    "post100Seconds": 4820,
+    "totalSeconds": 5726,
+    "level": 28,
+    "forge": 50,
+    "cube": {
+      "weapon": "judgment",
+      "jewelry": "squirt",
+      "armor": "oraviel"
+    },
+    "policy": "targeted"
+  },
+  {
+    "setId": "marauder",
+    "seed": 7715,
+    "minutes": 120,
+    "cleared": 150,
+    "milestones": {
+      "100": 0,
+      "110": 116,
+      "120": 373,
+      "130": 1853,
+      "140": 1988,
+      "150": 2983
+    },
+    "runs": 76,
+    "farmRuns": 15,
+    "failures": 5,
+    "farmSeconds": 668,
+    "post100Seconds": 2983,
+    "totalSeconds": 3920,
+    "level": 28,
+    "forge": 50,
+    "cube": {
+      "weapon": "dawn",
+      "armor": "aquila",
+      "jewelry": "squirt"
+    },
+    "policy": "targeted"
+  },
+  {
+    "setId": "rathma",
+    "seed": 7715,
+    "minutes": 120,
+    "cleared": 150,
+    "milestones": {
+      "100": 0,
+      "110": 89,
+      "120": 157,
+      "130": 227,
+      "140": 321,
+      "150": 415
+    },
+    "runs": 51,
+    "farmRuns": 0,
+    "failures": 0,
+    "farmSeconds": 0,
+    "post100Seconds": 415,
+    "totalSeconds": 1145,
+    "level": 24,
+    "forge": 50,
+    "cube": {
+      "jewelry": "squirt",
+      "weapon": "reilena",
+      "armor": "aquila"
+    },
+    "policy": "targeted"
+  },
+  {
+    "setId": "stormcaller",
+    "seed": 7715,
+    "minutes": 120,
+    "cleared": 150,
+    "milestones": {
+      "100": 0,
+      "110": 98,
+      "120": 172,
+      "130": 248,
+      "140": 381,
+      "150": 510
+    },
+    "runs": 55,
+    "farmRuns": 0,
+    "failures": 0,
+    "farmSeconds": 0,
+    "post100Seconds": 510,
+    "totalSeconds": 1432,
+    "level": 24,
+    "forge": 50,
+    "cube": {
+      "weapon": "yang",
+      "jewelry": "squirt",
+      "armor": "aquila"
+    },
+    "policy": "targeted"
+  },
+  {
+    "setId": "wasteland",
+    "seed": 7715,
+    "minutes": 120,
+    "cleared": 149,
+    "milestones": {
+      "100": 0,
+      "110": 499,
+      "120": 1178,
+      "130": 1907,
+      "140": 3246
+    },
+    "runs": 87,
+    "farmRuns": 15,
+    "failures": 5,
+    "farmSeconds": 916,
+    "post100Seconds": 7214,
+    "totalSeconds": 8179,
+    "level": 30,
+    "forge": 50,
+    "cube": {
+      "jewelry": "squirt",
+      "weapon": "lamentation",
+      "armor": "immortal_armor"
+    },
+    "policy": "targeted"
+  }
+]

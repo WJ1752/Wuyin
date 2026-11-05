@@ -118,7 +118,7 @@ export function AdventureGuide({
             <>
               <p>
                 每升一级获得 2
-                点技能点。从侧边打开「技能之书」学习后，主动技能才会加入战斗栏，被动分支强化其前置技能。
+                点技能点。在营地点击「技能」学习后，主动技能会加入战斗栏，被动分支强化其前置技能。
               </p>
               <ol className="guide-milestones">
                 <li>

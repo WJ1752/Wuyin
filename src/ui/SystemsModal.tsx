@@ -55,6 +55,7 @@ import { audio } from '../audio/SynthAudio';
 import { CharacterPreview } from './CharacterPreview';
 import { ItemIcon, PetIcon, SkillIcon } from './AssetIcon';
 import { JourneyPanel, LootChances } from './JourneyPanel';
+import { CampWallet } from './TownHud';
 import { isSkillAutoEnabled, skillLearningStatus, skillUnlockLevel } from '../data/progression';
 import { BUILD_GUIDES } from '../data/buildGuides';
 import { useDialog } from './useDialog';
@@ -1766,7 +1767,7 @@ function ServicesPanel({ onNavigate }: { onNavigate?: (panel: string) => void })
   };
   return (
     <div className="services-overview">
-      <p className="muted system-hint">选择需要的营地服务，也可以走到大厅对应的 NPC 身边互动。</p>
+      <CampWallet />
       <div className="services-grid">
         {Object.entries(TITLES)
           .filter(([id]) => id !== 'services')
@@ -1778,11 +1779,26 @@ function ServicesPanel({ onNavigate }: { onNavigate?: (panel: string) => void })
               disabled={!onNavigate}
             >
               <Icon size={27} />
-              <strong>{label}</strong>
+              <strong>{SYSTEM_LINKS[id] ?? label}</strong>
               <span>{descriptions[id]}</span>
               <ChevronRight size={16} />
             </button>
           ))}
+        <button className="service-card" onClick={() => onNavigate?.('guide')}>
+          <BookOpen size={27} />
+          <strong>冒险指南</strong>
+          <ChevronRight size={16} />
+        </button>
+        <button className="service-card" onClick={() => onNavigate?.('training')}>
+          <Sword size={27} />
+          <strong>训练场</strong>
+          <ChevronRight size={16} />
+        </button>
+        <button className="service-card" onClick={() => onNavigate?.('coop')}>
+          <Compass size={27} />
+          <strong>好友组队</strong>
+          <ChevronRight size={16} />
+        </button>
       </div>
     </div>
   );
@@ -2051,7 +2067,7 @@ function SettingsPanel() {
             onChange={(e) => store.updateSettings({ muted: e.target.checked })}
           />
         </label>
-        <label className="setting-row">
+        <label className="setting-row desktop-layout-setting">
           <span>界面方向</span>
           <select
             className="system-select"
@@ -2233,6 +2249,15 @@ export function SystemsModal({
         tabIndex={-1}
       >
         <header className="modal-header">
+          {onNavigate && panel !== 'services' && (
+            <button
+              className="camp-back"
+              onClick={() => onNavigate('services')}
+              aria-label="返回营地服务"
+            >
+              <ChevronRight size={20} />
+            </button>
+          )}
           <span className="modal-heading-icon">
             <Icon size={25} />
           </span>

@@ -23,6 +23,7 @@ const sequence = (value: unknown): value is number =>
   Number.isSafeInteger(value) && Number(value) >= 0;
 const position = (value: unknown) => finite(value) && Math.abs(value) <= 100000;
 const pylons = new Set<string>(PYLONS.map((pylon) => pylon.id));
+const skillIds = new Set(SKILLS.map((skill) => skill.id));
 const monsters = new Set([...MONSTERS, ...BOSSES].map((monster) => monster.id));
 monsters.add('treasure_goblin');
 interface Member extends CoopRoomMember {
@@ -175,6 +176,30 @@ function validResult(value: unknown, member: Member, room: Room): value is RunRe
     return false;
   }
 }
+function validEffect(cue: Record<string, unknown>) {
+  if (
+    !position(cue.x) ||
+    !position(cue.y) ||
+    !sequence(cue.sequence) ||
+    !nonnegative(cue.time) ||
+    !sequence(cue.color) ||
+    Number(cue.color) > 0xffffff
+  )
+    return false;
+  if (cue.kind === 'burst')
+    return (
+      sequence(cue.count) &&
+      Number(cue.count) <= 100 &&
+      typeof cue.large === 'boolean' &&
+      (cue.heal === undefined || typeof cue.heal === 'boolean')
+    );
+  if (cue.kind === 'lightning') return position(cue.tx) && position(cue.ty);
+  return (
+    (cue.kind === 'ring' || cue.kind === 'meteor' || (cue.kind === 'slash' && finite(cue.angle))) &&
+    nonnegative(cue.radius) &&
+    cue.radius <= 3000
+  );
+}
 function validFrame(value: unknown, room: Room): value is CoopFrame {
   if (
     !object(value) ||
@@ -199,6 +224,13 @@ function validFrame(value: unknown, room: Room): value is CoopFrame {
         finite(actor.facing) &&
         typeof actor.moving === 'boolean' &&
         nonnegative(actor.downSeconds) &&
+        (actor.cast === undefined ||
+          (object(actor.cast) &&
+            sequence(actor.cast.sequence) &&
+            skillIds.has(String(actor.cast.skillId)) &&
+            finite(actor.cast.angle) &&
+            position(actor.cast.tx) &&
+            position(actor.cast.ty))) &&
         validSnapshot(actor.snapshot),
     )
   )
@@ -208,6 +240,7 @@ function validFrame(value: unknown, room: Room): value is CoopFrame {
     value[key].length <= max &&
     value[key].every((entry) => object(entry) && valid(entry));
   if (
+    (value.effects !== undefined && !array('effects', 32, validEffect)) ||
     !array(
       'enemies',
       150,
@@ -227,6 +260,10 @@ function validFrame(value: unknown, room: Room): value is CoopFrame {
         position(projectile.x) &&
         position(projectile.y) &&
         finite(projectile.angle) &&
+        (projectile.scale === undefined ||
+          (nonnegative(projectile.scale) && projectile.scale <= 20)) &&
+        (projectile.skillId === undefined ||
+          (typeof projectile.skillId === 'string' && projectile.skillId.length <= 64)) &&
         sequence(projectile.color),
     ) ||
     !array(

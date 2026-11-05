@@ -1,4 +1,5 @@
-import { Graphics, Container } from 'pixi.js';
+import { Graphics, Container, Sprite } from 'pixi.js';
+import { getProjectileArt } from '../render/SkillTextures';
 import { pixelStamp } from '../render/PixelArt';
 export interface CastContext {
   resourceGranted: boolean;
@@ -17,7 +18,7 @@ export interface Projectile {
   originX: number;
   originY: number;
   hits: Set<number>;
-  view: Graphics;
+  view: Graphics | Sprite;
   skillId: string;
   color: number;
   scale: number;
@@ -37,27 +38,33 @@ export class ProjectileSystem {
     options: Partial<Projectile> = {},
   ) {
     if (this.items.length >= 150) return;
-    const view = new Graphics();
-    const palette = { o: 0x20303c, c: color, h: 0xf5e9ca, b: 0x8b9c9c };
-    const rows = skillId.includes('orb')
-      ? [
-          '...ooo...',
-          '..occco..',
-          '.ochhhco.',
-          'ochhhhcco',
-          'ochhhhcco',
-          '.occhcco.',
-          '..occo...',
-          '...oo....',
-        ]
-      : skillId.includes('missile')
-        ? ['.....cc...', '..ccchcc..', 'ccchhhhcc.', '..ccchcc..', '.....cc...']
-        : skillId.includes('spear') || skillId.includes('splinter')
-          ? ['.......h...', 'bbbhhhhhh..', 'hhhhhhhhhhh', 'bbbhhhhhh..', '.......h...']
-          : skillId.includes('blade') || skillId.includes('knives')
-            ? ['.....bb....', '..bbhhhb...', 'bbhhhhhhhh.', '..bbhhhbb..', '.....bb....']
-            : ['......cc...', 'ccc...chc..', 'hhhhhhhhhhc', 'ccc...chc..', '......cc...'];
-    pixelStamp(view, rows, palette, -18, -rows.length * 1.5, 3);
+    const { texture, tint } = getProjectileArt(skillId, color);
+    const view = texture ? new Sprite(texture) : new Graphics();
+    if (view instanceof Sprite) {
+      view.anchor.set(0.5);
+      view.tint = tint;
+    } else {
+      const palette = { o: 0x20303c, c: color, h: 0xf5e9ca, b: 0x8b9c9c };
+      const rows = skillId.includes('orb')
+        ? [
+            '...ooo...',
+            '..occco..',
+            '.ochhhco.',
+            'ochhhhcco',
+            'ochhhhcco',
+            '.occhcco.',
+            '..occo...',
+            '...oo....',
+          ]
+        : skillId.includes('missile')
+          ? ['.....cc...', '..ccchcc..', 'ccchhhhcc.', '..ccchcc..', '.....cc...']
+          : skillId.includes('spear') || skillId.includes('splinter')
+            ? ['.......h...', 'bbbhhhhhh..', 'hhhhhhhhhhh', 'bbbhhhhhh..', '.......h...']
+            : skillId.includes('blade') || skillId.includes('knives')
+              ? ['.....bb....', '..bbhhhb...', 'bbhhhhhhhh.', '..bbhhhbb..', '.....bb....']
+              : ['......cc...', 'ccc...chc..', 'hhhhhhhhhhc', 'ccc...chc..', '......cc...'];
+      pixelStamp(view, rows, palette, -18, -rows.length * 1.5, 3);
+    }
     this.layer.addChild(view);
     const p: Projectile = {
       x,
@@ -81,7 +88,9 @@ export class ProjectileSystem {
       proc: true,
       ...options,
     };
-    view.scale.set(p.scale);
+    view.scale.set(p.scale * (texture ? 46 / texture.width : 1));
+    view.position.set(x, y);
+    view.rotation = angle;
     this.items.push(p);
   }
   tick(

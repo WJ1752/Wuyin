@@ -507,3 +507,216 @@ select:focus-visible,
     animation: none;
   }
 }
+
+.paused-label .paused-layout-control {
+  display: none;
+}
+@media (max-width: 760px) and (orientation: portrait) {
+  .app .combat-screen .boss-health {
+    left: 12px;
+    right: 83px;
+  }
+  .app .coop-combat .coop-team-hud {
+    right: 83px;
+  }
+  .app .combat-screen .training-hint {
+    display: none;
+  }
+  .combat-screen .combat-tools,
+  .pylon-list button:disabled,
+  .pylon-list button[data-in-reach='false'] {
+    display: none;
+  }
+  .paused-label .paused-layout-control {
+    display: inline-flex;
+  }
+  .app .system-screen .system-groups,
+  .app .system-screen .system-navigation,
+  .app .system-screen .modal-footer,
+  .app .system-screen .modal-header .eyebrow {
+    display: none;
+  }
+  .app .system-screen .modal-header {
+    min-height: calc(58px + env(safe-area-inset-top));
+    gap: 10px;
+    padding: calc(5px + env(safe-area-inset-top)) 14px 5px;
+  }
+  .app .system-screen .modal-header h2 {
+    margin: 0;
+    font-size: 21px;
+  }
+  .app .system-screen .modal-heading-icon {
+    display: none;
+  }
+  .app .system-screen .camp-back,
+  .app .system-screen .modal-header .modal-close {
+    display: grid;
+    place-items: center;
+    width: 44px;
+    height: 44px;
+    padding: 0;
+  }
+  .app .system-screen .camp-back {
+    border: 0;
+    color: #ddc595;
+    background: transparent;
+  }
+  .camp-back svg {
+    transform: rotate(180deg);
+  }
+  .app .system-screen .modal-body {
+    padding: 13px 14px calc(20px + env(safe-area-inset-bottom));
+  }
+  .system-screen .services-overview .hall-wallet {
+    justify-content: space-around;
+  }
+  .system-screen .hall-wallet > span {
+    min-width: 0;
+    gap: 5px;
+    padding: 0 6px;
+  }
+  .system-screen .hall-wallet > span small {
+    font-size: 10px;
+  }
+  .system-screen .services-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 7px;
+  }
+  .system-screen .services-grid .service-card {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    min-height: 56px;
+    gap: 8px;
+    padding: 7px 8px;
+    border: 1px solid #a891573b;
+    background: #182222;
+  }
+  .system-screen .service-card strong {
+    font-size: 14px;
+    letter-spacing: 0;
+  }
+  .system-screen .service-card span,
+  .system-screen .service-card > svg:last-child {
+    display: none;
+  }
+  .system-screen .service-card > svg:first-child {
+    flex: none;
+    width: 29px;
+    height: 29px;
+  }
+  .app .combat-help,
+  .combat-skill.unlearned-skill,
+  .combat-skill .keybind,
+  .combat-screen > .virtual-joystick small,
+  .combat-tools > small {
+    display: none;
+  }
+  .app .combat-bottom {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    grid-template-areas: 'life power' 'skills skills';
+    align-items: center;
+    bottom: 0;
+    gap: 6px 10px;
+    padding: 7px max(10px, env(safe-area-inset-right)) max(8px, env(safe-area-inset-bottom))
+      max(10px, env(safe-area-inset-left));
+    border-top: 1px solid #aa906050;
+    background: linear-gradient(120deg, #1b2224f5, #111c20f5);
+  }
+  .combat-bottom .health-orb {
+    grid-area: life;
+  }
+  .combat-bottom .energy-orb {
+    grid-area: power;
+  }
+  .app .combat-bottom .resource-orb {
+    width: 100%;
+    height: 20px;
+    margin: 0;
+    aspect-ratio: auto;
+    outline: 0;
+    flex-direction: row-reverse;
+    justify-content: space-between;
+    gap: 4px;
+    padding: 0 7px;
+    border: 1px solid #ab95684d;
+    border-radius: 3px;
+    clip-path: none;
+    box-shadow: none;
+  }
+  .combat-bottom .orb-fill {
+    left: 0;
+    width: var(--fill);
+    height: 100%;
+    box-shadow: inset 0 1px #ffffff24;
+    border: 0;
+    transition: width 0.15s;
+    background: #863e48;
+  }
+  .combat-bottom .energy-orb .orb-fill {
+    background: #345e76;
+  }
+  .combat-bottom .resource-orb svg {
+    display: none;
+  }
+  .combat-bottom .resource-orb small {
+    font-size: 11px;
+  }
+  .app .combat-bottom .skills-bar {
+    grid-area: skills;
+    display: flex;
+    flex-wrap: nowrap;
+    align-items: flex-start;
+    gap: 4px;
+    justify-content: center;
+    margin: 0;
+  }
+  .combat-bottom .skills-bar .combat-skill {
+    width: calc((100% - 20px) / 6);
+    max-width: 64px;
+  }
+  .app .combat-skill .auto-toggle {
+    min-height: 26px;
+    padding: 2px 0;
+    margin: 0 0 4px;
+  }
+  .app .combat-skill .skill-cast {
+    width: 100%;
+    min-height: 44px;
+    height: 44px;
+  }
+  .app .combat-skill .skill-name {
+    display: block;
+    margin-top: 4px;
+    min-height: 0;
+  }
+  .combat-screen > .virtual-joystick {
+    bottom: calc(148px + env(safe-area-inset-bottom));
+  }
+  .combat-bottom:has(.unlearned-skill:nth-child(4)) .skills-bar {
+    justify-content: flex-end;
+    padding-left: 90px;
+  }
+  .combat-bottom:has(.unlearned-skill:nth-child(4)) .skills-bar .combat-skill {
+    width: min(64px, calc((100% - 8px) / 3));
+  }
+  .combat-screen:has(.unlearned-skill:nth-child(4)) > .virtual-joystick {
+    bottom: calc(10px + env(safe-area-inset-bottom));
+    width: 68px;
+    height: 68px;
+    left: max(16px, env(safe-area-inset-left));
+  }
+}
+@media (pointer: coarse) and (max-width: 760px) and (orientation: portrait) {
+  .app.in-combat {
+    padding: 0;
+  }
+  .app .desktop-layout-setting,
+  .paused-label .paused-layout-control {
+    display: none;
+  }
+  .app.orientation-portrait .combat-screen {
+    max-width: 100%;
+  }
+}

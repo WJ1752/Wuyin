@@ -56,7 +56,7 @@ import {
 const SAVE_KEY = 'mist-continent-save-v1';
 const RECOVERY_KEY = 'mist-continent-recovery-v1';
 // Each loadout keeps exactly one armor slot free for its build-defining relic.
-const BUILD_RELICS: Record<string, { worn: string[]; cube: string[] }> = {
+export const BUILD_RELICS: Record<string, { worn: string[]; cube: string[] }> = {
   stormcaller: {
     worn: ['dawn', 'dead_mans', 'olda', 'elements'],
     cube: ['yang', 'aquila', 'squirt'],

@@ -551,7 +551,312 @@
   bottom: 24px;
   max-width: min(60vw, 600px);
 }
-@media (max-width: 760px) {
+.traveler-level .compact-class,
+.camp-back {
+  display: none;
+}
+.services-overview .hall-wallet {
+  position: static;
+  justify-content: center;
+  margin: 0 0 16px;
+  padding: 12px 0;
+}
+/* A phone has one map viewport between two thumb-friendly control bands. */
+@media (max-width: 760px) and (orientation: portrait) {
+  .in-town {
+    --camp-top: calc(70px + env(safe-area-inset-top));
+    --camp-bottom: calc(126px + env(safe-area-inset-bottom));
+  }
+  .game-hall {
+    --hud-edge: max(12px, env(safe-area-inset-right));
+    background: linear-gradient(115deg, #202b2a, #101a20 68%);
+  }
+  .game-hall .npc-hall,
+  .game-hall::after {
+    inset: var(--camp-top) 0 var(--camp-bottom);
+    height: auto;
+  }
+  .game-hall::after {
+    box-shadow: inset 0 0 30px #06100f44;
+  }
+  .hall-hud .traveler-hud {
+    inset: 0 0 auto;
+    width: 100%;
+    height: var(--camp-top);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: env(safe-area-inset-top) var(--hud-edge) 0 max(14px, env(safe-area-inset-left));
+    border-bottom: 1px solid #806f4d;
+    filter: none;
+  }
+  .traveler-profile {
+    flex: 1;
+    min-width: 0;
+    max-width: 290px;
+    gap: 10px;
+  }
+  .traveler-avatar {
+    width: 39px;
+    height: 47px;
+  }
+  .traveler-identity {
+    gap: 1px;
+    padding: 0;
+  }
+  .traveler-identity > small,
+  .traveler-level > span {
+    display: none;
+  }
+  .traveler-level .compact-class {
+    display: inline;
+    font-size: 11px;
+  }
+  .traveler-identity strong {
+    font-size: 17px;
+    line-height: 1.25;
+    letter-spacing: 1px;
+  }
+  .traveler-level {
+    font-size: 12px;
+  }
+  .traveler-xp {
+    max-width: 130px;
+  }
+  .traveler-sync {
+    min-height: 44px;
+    padding: 0 5px;
+    margin: 0;
+    background: transparent;
+  }
+  .hall-hud > .hall-wallet,
+  .hall-utility-rail,
+  .rail-caption {
+    display: none;
+  }
+  .game-hall .hall-header {
+    top: 12px;
+    left: 50%;
+    flex-direction: row;
+    gap: 8px;
+    padding: 5px 12px;
+    border: 1px solid #ad95613d;
+    border-radius: 2px;
+    background: #101a1ce6;
+    white-space: nowrap;
+  }
+  .game-hall .hall-header h2 {
+    margin: 0;
+    font-size: 14px;
+    letter-spacing: 2px;
+  }
+  .game-hall .hall-header:before,
+  .game-hall .hall-header h2::before,
+  .game-hall .hall-header h2::after {
+    display: none;
+  }
+  .game-hall .hall-connection {
+    padding: 0;
+    font-size: 10px;
+  }
+  .game-hall .hall-visitors {
+    top: 49px;
+    left: var(--hud-edge);
+    max-width: calc(100% - 24px);
+  }
+  .game-hall .hall-network-note {
+    top: 86px;
+    max-width: calc(100% - 24px);
+  }
+  .game-hall .hall-npc:not(.selected):not(.in-reach) .hall-actor-name {
+    display: none;
+  }
+  .game-hall .hall-dialogue {
+    display: none;
+  }
+  .game-hall .hall-touch-controls .virtual-joystick {
+    bottom: 18px;
+    left: max(18px, env(safe-area-inset-left));
+    width: 68px;
+    height: 68px;
+  }
+  .game-hall .npc-hall .hall-interact {
+    left: auto;
+    bottom: 16px;
+    right: var(--hud-edge);
+    transform: none;
+    min-height: 48px;
+    max-width: 60%;
+    border: 1px solid #9d8454;
+    background: #152125eb;
+    padding: 7px 14px;
+  }
+  .game-hall .hall-interact kbd {
+    display: none;
+  }
+  .game-hall .hall-interact span {
+    font-size: 14px;
+  }
+  .hall-expedition {
+    inset: auto 0 0;
+    width: 100%;
+    height: var(--camp-bottom);
+    padding: 0;
+    background: linear-gradient(120deg, #273331, #162125 65%);
+    filter: none;
+    border-top: 1px solid #aa9163;
+    box-shadow: 0 -4px 15px #0003;
+  }
+  .hall-expedition::before {
+    display: none;
+  }
+  .expedition-destination {
+    height: 55px;
+    margin-inline: var(--hud-edge);
+    padding: 0;
+    border-bottom: 1px solid #ac926136;
+  }
+  .expedition-destination > span {
+    font: 10px var(--serif);
+    color: #baad8f;
+  }
+  .expedition-destination small {
+    font: 16px var(--serif);
+    letter-spacing: 1px;
+    color: #efdfb6;
+    margin-top: 1px;
+  }
+  .expedition-tier > button {
+    width: 42px;
+    min-height: 44px;
+  }
+  .app .expedition-tier input {
+    width: 36px;
+    min-height: 40px;
+    font-size: 19px;
+  }
+  .expedition-tier label {
+    font-size: 12px;
+  }
+  .hall-depart {
+    position: absolute;
+    right: var(--hud-edge);
+    bottom: calc(10px + env(safe-area-inset-bottom));
+    width: 45%;
+    min-height: 51px;
+    padding: 7px 12px;
+    gap: 7px;
+    border: 1px solid #e7cc8b;
+    color: #202721;
+    background: linear-gradient(110deg, #dfc690, #b59965);
+    clip-path: polygon(7px 0, 100% 0, 100% calc(100% - 7px), calc(100% - 7px) 100%, 0 100%, 0 7px);
+  }
+  .hall-depart:hover:not(:disabled) {
+    background: #e4ce9b;
+    color: #16201d;
+  }
+  .hall-depart > span {
+    font-size: 17px;
+    letter-spacing: 1px;
+    text-shadow: none;
+  }
+  .hall-depart small {
+    color: #364236;
+    font-size: 10px;
+    letter-spacing: 0;
+    margin-top: 2px;
+  }
+  .hall-depart > svg:first-child {
+    width: 22px;
+    height: 22px;
+    padding: 0;
+    border: 0;
+    box-shadow: none;
+  }
+  .hall-depart > svg:last-child {
+    width: 15px;
+  }
+  .hall-service-rail {
+    z-index: 111;
+    left: max(8px, env(safe-area-inset-left));
+    right: auto;
+    top: auto;
+    bottom: calc(10px + env(safe-area-inset-bottom));
+    width: calc(55% - 22px);
+    filter: none;
+    background: transparent;
+  }
+  .rail-services {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0;
+  }
+  .rail-services > button:not(.camp-shortcut) {
+    display: none;
+  }
+  .rail-services > button.camp-shortcut {
+    display: flex;
+    flex-direction: column;
+    grid-column: auto;
+    gap: 3px;
+    min-height: 51px;
+    margin: 0;
+    border: 0;
+    background: transparent;
+  }
+  .rail-services .camp-shortcut .service-seal {
+    width: 25px;
+    height: 24px;
+    background: transparent;
+    clip-path: none;
+  }
+  .rail-services .service-seal::before,
+  .rail-services .service-seal::after {
+    display: none;
+  }
+  .rail-services .camp-shortcut .service-seal svg {
+    width: 21px;
+    height: 21px;
+  }
+  .rail-services .camp-shortcut .service-label {
+    font: 12px var(--serif);
+    padding: 0;
+    background: transparent;
+    letter-spacing: 0;
+  }
+  .rail-alert {
+    right: 2px;
+    min-width: 15px;
+    height: 15px;
+  }
+  .hall-lab-status {
+    top: auto;
+    left: auto;
+    right: var(--hud-edge);
+    bottom: calc(var(--camp-bottom) + 82px);
+    transform: none;
+    background: #152126ed;
+    padding: 0 8px;
+    gap: 6px;
+  }
+  .hall-lab-status > span {
+    display: none;
+  }
+  .hall-lab-status > button {
+    min-height: 40px;
+  }
+  .in-town .toast {
+    bottom: calc(var(--camp-bottom) + 93px);
+    width: max-content;
+    max-width: calc(100% - 28px);
+  }
+}
+@media (max-width: 380px) and (orientation: portrait) {
+  .hall-depart > svg:last-child {
+    display: none;
+  }
+}
+@media (max-width: 760px) and (orientation: landscape) {
   .game-hall {
     --hud-edge: max(10px, env(safe-area-inset-right, 0px));
     --rail-width: 94px;

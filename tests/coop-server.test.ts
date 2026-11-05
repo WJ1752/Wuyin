@@ -208,6 +208,25 @@ test('inputs are validated and expire; final host results are shared once and re
     400,
   );
   const final = frame(active, 3);
+  const cue = {
+    kind: 'ring',
+    x: 0,
+    y: 0,
+    sequence: 1,
+    time: 1,
+    color: 0xffbbbb,
+    radius: 80,
+  } as const;
+  final.effects = [cue];
+  final.actors[0].cast = { sequence: 1, skillId: skill, angle: 0, tx: 20, ty: 20 };
+  assert.equal(
+    (
+      await host.request('POST', '/coop/exchange', {
+        snapshot: { ...final, effects: [{ ...cue, radius: 999999 }] },
+      })
+    ).statusCode,
+    400,
+  );
   final.results = Object.fromEntries(
     active.members.map((member) => [
       member.id,

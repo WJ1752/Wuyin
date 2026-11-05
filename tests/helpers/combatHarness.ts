@@ -1,6 +1,6 @@
 import { Container } from 'pixi.js';
 import { createRng } from '../../src/core/random';
-import type { SaveData } from '../../src/core/types';
+import type { RunResult, SaveData } from '../../src/core/types';
 import { MONSTERS } from '../../src/data/monsters';
 import { STAGES } from '../../src/data/stages';
 import { createMonsterBrain } from '../../src/engine/MonsterAI';
@@ -173,12 +173,17 @@ export function measureBuild(setId: string, pieces: number, targets: number, sec
 export function runRift(
   build: string | SaveData,
   stage = 71,
-  observe?: { setup?: (engine: any) => void; frame?: (engine: any, dt: number) => void },
+  observe?: {
+    setup?: (engine: any) => void;
+    frame?: (engine: any, dt: number) => void;
+    finish?: (result: RunResult) => void;
+  },
 ) {
   const { engine } = buildHarness(build, 4, stage, false);
   let won = false;
-  engine.callbacks.onFinish = (result: any) => {
+  engine.callbacks.onFinish = (result: RunResult) => {
     won = result.won;
+    observe?.finish?.(result);
   };
   observe?.setup?.(engine);
   engine.startEncounter();

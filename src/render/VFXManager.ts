@@ -1,5 +1,8 @@
 import { Container, Graphics, Sprite } from 'pixi.js';
-import { getSkillTexture } from './SkillTextures';
+import { getEffectTexture, getSkillTexture } from './SkillTextures';
+import type { SkillDef } from '../core/types';
+import type { CombatEffectCue } from '../core/coop';
+import type { EffectArt } from '../data/skillArt';
 import { pixelEllipse, pixelLine, pixelPolygon, snapPixel } from './PixelArt';
 export const ELEMENT_COLORS: Record<string, number> = {
   physical: 0xe4d6ac,
@@ -17,25 +20,121 @@ interface Effect {
 }
 export class VFXManager {
   private effects: Effect[] = [];
-  constructor(private layer: Container) {}
+  constructor(
+    private layer: Container,
+    private record?: (cue: CombatEffectCue) => void,
+  ) {}
+  replay(cue: CombatEffectCue) {
+    const { x, y, color } = cue;
+    switch (cue.kind) {
+      case 'burst':
+        return this.burst(x, y, color, cue.count, cue.large, cue.heal);
+      case 'ring':
+        return this.ring(x, y, color, cue.radius);
+      case 'slash':
+        return this.slash(x, y, cue.angle, color, cue.radius);
+      case 'lightning':
+        return this.lightning(x, y, cue.tx, cue.ty, color);
+      case 'meteor':
+        return this.meteor(x, y, color, cue.radius);
+    }
+  }
   private add<T extends Container>(view: T, life: number, update: (view: T, t: number) => void) {
     if (this.effects.length > 180) this.effects.shift()?.view.destroy();
     this.layer.addChild(view);
     this.effects.push({ view, age: 0, life, update: (t) => update(view, t) });
   }
-  signature(id: string, x: number, y: number) {
-    const texture = getSkillTexture(id);
+  signature(skill: SkillDef, x: number, y: number, angle: number, tx: number, ty: number) {
+    // Flying missiles and persistent ground spells carry their own artwork on the actual entity.
+    if (
+      [
+        'homing',
+        'explosive',
+        'multishot',
+        'elemental',
+        'spear',
+        'orb',
+        'boomerang',
+        'rain',
+        'meteor',
+        'blackhole',
+        'vines',
+        'whirlwind',
+      ].includes(skill.effect)
+    )
+      return;
+    const texture = getSkillTexture(skill.id);
     if (!texture) return;
     const glyph = new Sprite(texture);
     glyph.anchor.set(0.5);
-    glyph.position.set(Math.round(x), Math.round(y - 65));
-    glyph.width = glyph.height = 32;
-    this.add(glyph, 0.42, (view, t) => {
-      view.alpha = Math.sin(Math.PI * t) * 0.8;
-      view.y = Math.round(y - 65 - t * 12);
+    const directed = [
+      'frenzy',
+      'bash',
+      'hammer',
+      'scythe',
+      'spike',
+      'claw',
+      'fan',
+      'pull',
+    ].includes(skill.effect);
+    const targeted = ['siphon', 'chain', 'curse'].includes(skill.effect);
+    const size = skill.kind === 'ultimate' ? 138 : skill.kind === 'basic' ? 65 : 96;
+    glyph.position.set(
+      targeted ? tx : x + (directed ? Math.cos(angle) * 34 : 0),
+      (targeted ? ty : y + (directed ? Math.sin(angle) * 34 : 0)) - 20,
+    );
+    if (directed) glyph.rotation = angle;
+    glyph.width = glyph.height = size;
+    this.add(glyph, skill.kind === 'basic' ? 0.24 : 0.48, (view, t) => {
+      view.alpha = Math.min(1, (1 - t) * 2);
+      view.width = view.height = size * (0.75 + t * 0.4);
     });
   }
-  burst(x: number, y: number, color: number, count = 10, large = false) {
+  private stamp(
+    art: EffectArt,
+    x: number,
+    y: number,
+    color: number,
+    width: number,
+    height: number,
+    angle: number,
+    life: number,
+    animate: (view: Sprite, t: number) => void,
+  ) {
+    const authoredMeteor =
+      art === 'meteor' && color === ELEMENT_COLORS.fire ? getSkillTexture('meteor') : undefined;
+    const texture = authoredMeteor ?? getEffectTexture(art);
+    if (!texture) return false;
+    const sprite = new Sprite(texture);
+    sprite.anchor.set(0.5);
+    sprite.position.set(x, y);
+    sprite.tint = authoredMeteor ? 0xffffff : color;
+    sprite.width = width;
+    sprite.height = height;
+    sprite.rotation = angle;
+    this.add(sprite, life, animate);
+    return true;
+  }
+  burst(x: number, y: number, color: number, count = 10, large = false, heal = false) {
+    this.record?.({ kind: 'burst', x, y, color, count, large, heal });
+    const diameter = large ? 110 : 22 + count * 2;
+    if (
+      this.stamp(
+        heal ? 'heal' : 'burst',
+        x,
+        y,
+        color,
+        diameter,
+        diameter,
+        heal ? 0 : Math.random() * Math.PI,
+        0.38,
+        (v, t) => {
+          v.width = v.height = diameter * (0.55 + t * 0.75);
+          v.alpha = 1 - t;
+        },
+      )
+    )
+      return;
     const g = new Graphics();
     g.position.set(Math.round(x), Math.round(y));
     const pieces = Array.from({ length: count }, (_, i) => ({
@@ -54,6 +153,15 @@ export class VFXManager {
     });
   }
   ring(x: number, y: number, color: number, radius = 80) {
+    this.record?.({ kind: 'ring', x, y, color, radius });
+    if (
+      this.stamp('ring', x, y, color, 1, 1, 0, 0.55, (v, t) => {
+        v.width = 2 * radius * t;
+        v.height = radius * 1.3 * t;
+        v.alpha = 0.85 * (1 - t);
+      })
+    )
+      return;
     const g = new Graphics();
     g.position.set(Math.round(x), Math.round(y));
     this.add(g, 0.55, (v, t) => {
@@ -63,6 +171,14 @@ export class VFXManager {
     });
   }
   slash(x: number, y: number, angle: number, color: number, radius = 65) {
+    this.record?.({ kind: 'slash', x, y, color, angle, radius });
+    if (
+      this.stamp('slash', x, y, color, radius * 2, radius * 2, angle - 0.35, 0.25, (v, t) => {
+        v.rotation = angle - 0.35 + t * 0.7;
+        v.alpha = 1 - t;
+      })
+    )
+      return;
     const g = new Graphics();
     g.position.set(Math.round(x), Math.round(y));
     this.add(g, 0.25, (v, t) => {
@@ -85,6 +201,24 @@ export class VFXManager {
     });
   }
   lightning(x: number, y: number, tx: number, ty: number, color = 0xc3b3ff) {
+    this.record?.({ kind: 'lightning', x, y, tx, ty, color });
+    const length = Math.hypot(tx - x, ty - y);
+    if (
+      this.stamp(
+        'lightning',
+        (x + tx) / 2,
+        (y + ty) / 2,
+        color,
+        length,
+        Math.min(72, 16 + length * 0.2),
+        Math.atan2(ty - y, tx - x),
+        0.18,
+        (v, t) => {
+          v.alpha = 1 - t;
+        },
+      )
+    )
+      return;
     const g = new Graphics();
     let px = x,
       py = y;
@@ -102,6 +236,14 @@ export class VFXManager {
     });
   }
   meteor(x: number, y: number, color: number, radius: number) {
+    this.record?.({ kind: 'meteor', x, y, color, radius });
+    if (
+      this.stamp('meteor', x - 72, y - 250, color, 85, 85, 0, 0.43, (v, t) => {
+        v.position.set(x - 72 * (1 - t), y - 250 * (1 - t));
+        v.alpha = 1 - Math.max(0, t - 0.86) * 5;
+      })
+    )
+      return;
     const g = new Graphics();
     this.add(g, 0.65, (v, t) => {
       v.clear();

@@ -399,6 +399,22 @@
 .hall-self.walking .hall-sprite {
   animation: hall-walk 0.3s steps(2) infinite;
 }
+@media (prefers-reduced-motion: no-preference) {
+  .hall-npc .hall-sprite,
+  .hall-character:not(.walking) .hall-sprite {
+    transform-origin: 50% 96%;
+    animation: camp-breathe var(--idle-period, 3.4s) ease-in-out var(--idle-delay, -1s) infinite;
+  }
+}
+@keyframes camp-breathe {
+  0%,
+  100% {
+    transform: rotate(-0.9deg) scale(1.01, 0.985);
+  }
+  50% {
+    transform: rotate(1deg) scale(0.99, 1.025);
+  }
+}
 @keyframes hall-walk {
   0%,
   100% {

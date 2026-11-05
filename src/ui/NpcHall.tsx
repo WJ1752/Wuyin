@@ -483,7 +483,7 @@ export function NpcHall({
         >
           <span className="hall-portal-label">秘境传送</span>
         </button>
-        {HALL_NPCS.map((npc) => {
+        {HALL_NPCS.map((npc, index) => {
           const Icon = NPC_ICONS[npc.panel];
           const near = distanceTo(npc) <= INTERACTION_DISTANCE;
           return (
@@ -496,6 +496,8 @@ export function NpcHall({
                   top: `${npc.y * 100}%`,
                   zIndex: Math.round(npc.y * 100),
                   '--npc-color': npc.color,
+                  '--idle-period': `${2.9 + (index % 4) * 0.35}s`,
+                  '--idle-delay': `${-index * 0.73}s`,
                 } as CSSProperties
               }
               onClick={() => approach(npc)}

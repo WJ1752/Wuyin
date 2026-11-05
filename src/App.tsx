@@ -208,7 +208,13 @@ function App() {
       <SystemsModal
         panel={['coop', 'expedition'].includes(panel ?? '') ? null : panel}
         onClose={() => setPanel(null)}
-        onNavigate={setPanel}
+        onNavigate={(id) => {
+          if (id === 'training' || id === 'guide') {
+            setPanel(null);
+            if (id === 'training') enter(true);
+            else setShowGuide(true);
+          } else setPanel(id);
+        }}
         onEnterHall={() => setPanel(null)}
       />
       {notice && !result && !panel && !showGuide && (
@@ -506,6 +512,10 @@ function CombatView({
     const current = useGameStore.getState();
     if (isSkillAutoEnabled(current.save.autoSkills, skill) !== next) current.toggleAuto(id);
   };
+  const toggleLayout = () =>
+    updateSettings({
+      orientation: save.orientation === 'portrait' ? 'landscape' : 'portrait',
+    });
   return (
     <section
       className={`combat-screen ${coop ? 'coop-combat' : ''}`}
@@ -540,7 +550,7 @@ function CombatView({
               {!snapshot
                 ? '正在布置战场…'
                 : config.training
-                  ? '目标 · 练习移动与施法'
+                  ? '练习移动与施法 · 训练无收益'
                   : snapshot.boss
                     ? '目标 · 击败守关首领'
                     : snapshot.kills === 0
@@ -628,15 +638,7 @@ function CombatView({
         >
           <BookOpen size={17} />
         </button>
-        <button
-          className="icon-button"
-          aria-label="切换横竖屏布局"
-          onClick={() =>
-            updateSettings({
-              orientation: save.orientation === 'portrait' ? 'landscape' : 'portrait',
-            })
-          }
-        >
+        <button className="icon-button" aria-label="切换横竖屏布局" onClick={toggleLayout}>
           {save.orientation === 'portrait' ? <Maximize size={17} /> : <Minimize size={17} />}
         </button>
         <small>{snapshot?.fps ?? 60} FPS</small>
@@ -650,7 +652,12 @@ function CombatView({
       </div>
       <div className="pylon-list">
         {snapshot?.pylons.map((p) => (
-          <button key={p.id} disabled={p.used} onClick={() => engine.current?.activatePylon(p.id)}>
+          <button
+            key={p.id}
+            data-in-reach={p.inReach}
+            disabled={p.used}
+            onClick={() => engine.current?.activatePylon(p.id)}
+          >
             <Zap size={14} />
             {p.name}
             {p.used ? <Check size={13} /> : <span>激活</span>}
@@ -661,9 +668,11 @@ function CombatView({
         <div className="resource-orb health-orb">
           <div
             className="orb-fill"
-            style={{
-              height: `${((snapshot?.hp ?? config.stats.hp) / (snapshot?.maxHp ?? config.stats.hp)) * 100}%`,
-            }}
+            style={
+              {
+                '--fill': `${((snapshot?.hp ?? config.stats.hp) / (snapshot?.maxHp ?? config.stats.hp)) * 100}%`,
+              } as CSSProperties
+            }
           />
           <Heart size={22} />
           <b>{formatBigNumber(snapshot?.hp ?? config.stats.hp)}</b>
@@ -738,9 +747,11 @@ function CombatView({
         <div className="resource-orb energy-orb">
           <div
             className="orb-fill"
-            style={{
-              height: `${((snapshot?.resource ?? config.stats.maxResource) / (snapshot?.maxResource ?? config.stats.maxResource)) * 100}%`,
-            }}
+            style={
+              {
+                '--fill': `${((snapshot?.resource ?? config.stats.maxResource) / (snapshot?.maxResource ?? config.stats.maxResource)) * 100}%`,
+              } as CSSProperties
+            }
           />
           <Sparkles size={22} />
           <b>{Math.floor(snapshot?.resource ?? config.stats.maxResource)}</b>
@@ -772,6 +783,9 @@ function CombatView({
           <Moon />
           <h2>{coop ? '远征仍在进行' : '时间已静止'}</h2>
           {coop && <p>菜单期间角色停止接收移动操作，战场持续进行。请及时返回队伍。</p>}
+          <button className="paused-layout-control outline-button" onClick={toggleLayout}>
+            切换至{save.orientation === 'portrait' ? '横屏' : '竖屏'}布局
+          </button>
           {combatGuide && (
             <div className="paused-build-guide">
               <strong>
