@@ -62,6 +62,10 @@ export function getLootProfile(stage: number, source: LootSource = 'world') {
   return { stage, label, chances };
 }
 
+export function isSkillAutoEnabled(autoSkills: Record<string, boolean>, skill: SkillDef) {
+  return autoSkills[skill.id] ?? skill.kind !== 'movement';
+}
+
 export function starterSkills(classId: ClassId): Record<string, number> {
   const basic = SKILLS.find((skill) => skill.classId === classId && skill.kind === 'basic')!;
   return { [basic.id]: 1 };

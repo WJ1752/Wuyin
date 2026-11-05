@@ -46,11 +46,10 @@ import { AFFIXES, GEMS, PETS } from '../data/affixes';
 import { generateLoot } from '../engine/LootGenerator';
 import {
   availableSkillPoints,
+  isSkillAutoEnabled,
   getProgressionMilestones,
   progressionSet,
-  PROGRESSION_MILESTONES,
   skillLearningStatus,
-  skillUnlockLevel,
   starterSkills,
 } from '../data/progression';
 
@@ -274,6 +273,56 @@ export function snapshotAccounts(
   });
 }
 
+// A live document owns its save until it leaves. Waiting tabs read from disk only
+// after acquiring ownership, so their first snapshot includes the previous player's work.
+async function waitForSaveTab() {
+  if (typeof window === 'undefined') return;
+  window.addEventListener('pageshow', (event) => {
+    if (event.persisted) window.location.reload();
+  });
+  if (navigator.locks) {
+    await new Promise<void>((resolve, reject) => {
+      navigator.locks
+        .request('mist-continent-play', async () => {
+          const release = new Promise<void>((done) =>
+            window.addEventListener('pagehide', () => done(), { once: true }),
+          );
+          resolve();
+          await release;
+        })
+        .catch(reject);
+    });
+    return;
+  }
+  // Plain HTTP on the LAN lacks Web Locks. An IndexedDB version upgrade is
+  // exclusive and waits for existing connections to close, including on a crash.
+  await new Promise<void>((resolve, reject) => {
+    const open = (version?: number) => {
+      const request = indexedDB.open('mist-continent-play-lock', version);
+      let ownsVersion = false;
+      request.onupgradeneeded = () => {
+        ownsVersion = true;
+      };
+      request.onsuccess = () => {
+        const db = request.result;
+        if (ownsVersion) {
+          window.addEventListener('pagehide', () => db.close(), { once: true });
+          resolve();
+        } else {
+          const nextVersion = db.version + 1;
+          db.close();
+          open(nextVersion);
+        }
+      };
+      request.onerror = () => {
+        if (request.error?.name === 'VersionError') open();
+        else reject(request.error);
+      };
+    };
+    open();
+  });
+}
+
 let dbPromise: Promise<IDBDatabase> | undefined;
 function database(): Promise<IDBDatabase> {
   if (!dbPromise)
@@ -324,6 +373,7 @@ interface GameState {
   activeAccountId: string;
   inCombat: boolean;
   ready: boolean;
+  waitingForTab: boolean;
   notice: string;
   labBackup: SaveData | null;
   lastGamble: Item[];
@@ -344,6 +394,8 @@ interface GameState {
   completeRun: (result: RunResult) => void;
   getStats: () => Stats;
   equip: (id: string) => void;
+  equipEmptySlots: () => void;
+  claimJourneyRewards: () => void;
   unequip: (slot: Slot) => void;
   allocateSkill: (id: string) => void;
   resetSkills: () => void;
@@ -371,27 +423,91 @@ interface GameState {
   importSave: (text: string) => void;
   resetProgress: () => void;
 }
+export function itemClass(item: Item) {
+  return (
+    SETS.find((set) => set.id === item.setId)?.classId ??
+    LEGENDARIES.find((legendary) => legendary.id === item.legendaryId)?.classId
+  );
+}
+
+// Fill only vacant slots. Use the item's visible base stats to choose among candidates.
+export function emptySlotItems(save: SaveData): Item[] {
+  const picks = new Map<Slot, Item>();
+  for (const item of save.inventory) {
+    if (save.equipment[item.slot]) continue;
+    const requiredClass = itemClass(item);
+    if (requiredClass && requiredClass !== save.classId) continue;
+    const previous = picks.get(item.slot);
+    if (!previous || item.attack + item.armor > previous.attack + previous.armor)
+      picks.set(item.slot, item);
+  }
+  return [...picks.values()];
+}
+
+function equipFromInventory(s: SaveData, id: string) {
+  const i = s.inventory.findIndex((x) => x.id === id);
+  if (i < 0) return;
+  const item = s.inventory[i];
+  const requiredClass = itemClass(item);
+  if (requiredClass && requiredClass !== s.classId) return '这件装备属于其他职业。';
+  const t = SETS.find((t) => t.id === item.setId);
+  const old = s.equipment[item.slot];
+  const before = t ? Object.values(s.equipment).filter((part) => part?.setId === t.id).length : 0;
+  s.inventory.splice(i, 1);
+  if (old) s.inventory.push(old);
+  s.equipment[item.slot] = item;
+  if (t) {
+    const count = Object.values(s.equipment).filter((part) => part?.setId === t.id).length;
+    const bonus =
+      before < 4 && count >= 4
+        ? `四件成型！${t.four}`
+        : before < 2 && count >= 2
+          ? `双件共鸣！${t.two}`
+          : '';
+    if (bonus)
+      return `${t.name} · ${bonus}${!s.skills[t.skillId] ? ' · 记得前往技能之书学习对应技能。' : ''}`;
+  }
+  return `已装备 ${item.name}`;
+}
+
+function isPrecious(item: Item) {
+  return ['legendary', 'set', 'primal'].includes(item.rarity);
+}
 function materialValue(item: Item) {
-  return {
-    crystals: ['legendary', 'set', 'primal'].includes(item.rarity) ? 12 : 4,
-    souls: ['legendary', 'set', 'primal'].includes(item.rarity) ? 2 : 0,
-  };
+  return isPrecious(item) ? { crystals: 12, souls: 2 } : { crystals: 4, souls: 0 };
 }
 function refundGem(save: SaveData, item: Item) {
   if (item.gem) save.gems[item.gem.id][item.gem.level - 1]++;
 }
 function addItems(save: SaveData, items: Item[]) {
+  const receipt = {
+    stored: 0,
+    autoSalvaged: 0,
+    overflow: 0,
+    preciousOverflow: 0,
+    crystals: 0,
+    souls: 0,
+  };
   for (const item of items) {
-    if (
-      (save.autoSalvage && ['common', 'uncommon', 'rare', 'epic'].includes(item.rarity)) ||
-      save.inventory.length >= MAX_INVENTORY
-    ) {
-      const m = materialValue(item);
-      save.crystals += m.crystals;
-      save.souls += m.souls;
-      refundGem(save, item);
-    } else save.inventory.push(item);
+    const precious = isPrecious(item);
+    if (save.autoSalvage && !precious) {
+      receipt.autoSalvaged++;
+    } else if (save.inventory.length >= MAX_INVENTORY) {
+      receipt.overflow++;
+      if (precious) receipt.preciousOverflow++;
+    } else {
+      save.inventory.push(item);
+      receipt.stored++;
+      continue;
+    }
+    const material = materialValue(item);
+    receipt.crystals += material.crystals;
+    receipt.souls += material.souls;
+    refundGem(save, item);
   }
+  save.crystals += receipt.crystals;
+  save.souls += receipt.souls;
+  return receipt;
 }
 function chapterRewards(
   save: SaveData,
@@ -405,7 +521,7 @@ function chapterRewards(
   for (const milestone of getProgressionMilestones(save)) {
     if (milestone.claimed || stage < milestone.stage) continue;
     if (save.inventory.length >= MAX_INVENTORY) {
-      earned.push('背包已满，未领取的旅程奖励将在腾出空间后的下一次达标通关补发');
+      earned.push('背包已满，腾出空间后可在套装旅程领取奖励');
       break;
     }
     const set = progressionSet(save);
@@ -484,6 +600,7 @@ export const useGameStore = create<GameState>((set, get) => {
     activeAccountId: initial.activeAccountId,
     inCombat: false,
     ready: false,
+    waitingForTab: false,
     notice: '',
     labBackup: null,
     lastGamble: [],
@@ -496,6 +613,16 @@ export const useGameStore = create<GameState>((set, get) => {
     async hydrate() {
       if (hydrated) return;
       hydrated = true;
+      let lockUnavailable = false;
+      const waiting = setTimeout(() => set({ waitingForTab: true }), 500);
+      try {
+        await waitForSaveTab();
+      } catch {
+        lockUnavailable = true;
+      } finally {
+        clearTimeout(waiting);
+        set({ waitingForTab: false });
+      }
       let loaded: unknown;
       const candidates: { source: string; value: unknown }[] = [];
       let fallback = false;
@@ -597,6 +724,7 @@ export const useGameStore = create<GameState>((set, get) => {
           notice += ' 检测到异常备用存档，原始内容已备份，可在设置中导出。';
       }
       if (fallback) notice += ' 当前使用浏览器备份存储。';
+      if (lockUnavailable) notice += ' 浏览器未提供跨页存档保护，请在单个标签页游玩。';
       save.lastSaved = Date.now();
       set({
         save,
@@ -856,7 +984,22 @@ export const useGameStore = create<GameState>((set, get) => {
           const gem = GEMS[Math.floor(Math.random() * GEMS.length)];
           s.gems[gem.id][Math.min(9, Math.floor(result.stage / 20))]++;
         }
-        addItems(s, result.items);
+        const receipt = addItems(s, result.items);
+        if (result.items.length) {
+          const loot = [`战场装备入包 ${receipt.stored} 件`];
+          if (receipt.autoSalvaged) loot.push(`按设置分解 ${receipt.autoSalvaged} 件`);
+          if (receipt.overflow) {
+            const precious = receipt.preciousOverflow
+              ? `（其中传奇及以上 ${receipt.preciousOverflow} 件）`
+              : '';
+            loot.push(`背包满额分解 ${receipt.overflow} 件${precious}`);
+          }
+          if (receipt.crystals)
+            loot.push(
+              `分解所得 ${receipt.crystals} 结晶${receipt.souls ? `、${receipt.souls} 遗忘之魂` : ''}`,
+            );
+          chapterNotices.push(loot.join('，'));
+        }
         if (priorKills < 100 && s.kills >= 100) s.gold += 500;
         if (priorClears < 5 && s.clears >= 5) s.shards += 250;
         if (priorStage < 15 && s.highestStage >= 15) s.crystals += 50;
@@ -872,33 +1015,22 @@ export const useGameStore = create<GameState>((set, get) => {
     },
     getStats: () => computeStats(get().save),
     equip(id) {
+      mutate((s) => equipFromInventory(s, id));
+    },
+    equipEmptySlots() {
       mutate((s) => {
-        const i = s.inventory.findIndex((x) => x.id === id);
-        if (i < 0) return;
-        const item = s.inventory[i];
-        const l = LEGENDARIES.find((l) => l.id === item.legendaryId);
-        const t = SETS.find((t) => t.id === item.setId);
-        if ((l?.classId && l.classId !== s.classId) || (t && t.classId !== s.classId))
-          return '这件装备属于其他职业。';
-        const old = s.equipment[item.slot];
-        const before = t
-          ? Object.values(s.equipment).filter((part) => part?.setId === t.id).length
-          : 0;
-        s.inventory.splice(i, 1);
-        if (old) s.inventory.push(old);
-        s.equipment[item.slot] = item;
-        if (t) {
-          const count = Object.values(s.equipment).filter((part) => part?.setId === t.id).length;
-          const bonus =
-            before < 4 && count >= 4
-              ? `四件成型！${t.four}`
-              : before < 2 && count >= 2
-                ? `双件共鸣！${t.two}`
-                : '';
-          if (bonus)
-            return `${t.name} · ${bonus}${!s.skills[t.skillId] ? ' · 记得前往技能之书学习对应技能。' : ''}`;
-        }
-        return `已装备 ${item.name}`;
+        const picks = emptySlotItems(s);
+        if (!picks.length) return '背包中没有适合空位的装备。';
+        for (const item of picks) equipFromInventory(s, item.id);
+        return `已穿戴 ${picks.length} 件装备：${picks.map((item) => item.name).join('、')}`;
+      });
+    },
+    claimJourneyRewards() {
+      if (!requireCamp()) return;
+      mutate((s) => {
+        const account = get().accounts.find((entry) => entry.id === get().activeAccountId)!;
+        const earned = chapterRewards(s, s.progression?.clearedStage ?? 0, [], account.stash);
+        return earned.join(' · ') || '已领取全部达成的旅程奖励。';
       });
     },
     unequip(slot) {
@@ -960,7 +1092,9 @@ export const useGameStore = create<GameState>((set, get) => {
     },
     toggleAuto(id) {
       mutate((s) => {
-        s.autoSkills[id] = !(s.autoSkills[id] ?? true);
+        const skill = SKILLS.find((node) => node.id === id && node.classId === s.classId);
+        if (!skill || skill.kind === 'passive' || !s.skills[id]) return;
+        s.autoSkills[id] = !isSkillAutoEnabled(s.autoSkills, skill);
       });
     },
     extract(id) {

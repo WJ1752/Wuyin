@@ -7,6 +7,7 @@ import { calculateDamage, formatBigNumber, mitigateDamage } from '../src/engine/
 import { selectAutoCast } from '../src/engine/AutoCastAI';
 import { generateLoot } from '../src/engine/LootGenerator';
 import { newSave, validateSave } from '../src/state/gameStore';
+import { runRift } from './helpers/combatHarness';
 
 const stats: Stats = {
   hp: 1000,
@@ -34,6 +35,13 @@ const stats: Stats = {
   maxResource: 100,
   luck: 0,
 };
+
+test('all five newly created characters can reach and defeat the first guardian in starter gear', () => {
+  for (const hero of CLASSES) {
+    const result = runRift(newSave(hero.id), 1);
+    assert.ok(result.won, `${hero.name} failed after ${result.seconds}s and ${result.kills} kills`);
+  }
+});
 
 test('damage multiplies each distinct damage bucket and only enables conditional buckets when applicable', () => {
   assert.equal(

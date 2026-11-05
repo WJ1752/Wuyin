@@ -40,6 +40,8 @@ import { LEGENDARIES } from '../data/legendaries';
 import { AFFIXES, GEMS, PETS } from '../data/affixes';
 import {
   computeStats,
+  emptySlotItems,
+  itemClass,
   cubeSlot,
   MAX_INVENTORY,
   MAX_STASH,
@@ -53,7 +55,7 @@ import { audio } from '../audio/SynthAudio';
 import { CharacterPreview } from './CharacterPreview';
 import { ItemIcon, PetIcon, SkillIcon } from './AssetIcon';
 import { JourneyPanel, LootChances } from './JourneyPanel';
-import { skillLearningStatus, skillUnlockLevel } from '../data/progression';
+import { isSkillAutoEnabled, skillLearningStatus, skillUnlockLevel } from '../data/progression';
 import { BUILD_GUIDES } from '../data/buildGuides';
 import { useDialog } from './useDialog';
 import { apiRequest } from '../state/cloudStore';
@@ -132,12 +134,6 @@ function costLabel(value: number) {
 function affixLabel(id: string, value: number) {
   const d = AFFIXES.find((a) => a.id === id);
   return `${d?.name ?? id} +${d?.unit === '%' ? (value * 100).toFixed(1) : Math.round(value)}${d?.unit ?? ''}`;
-}
-function itemClass(item: Item) {
-  return (
-    SETS.find((set) => set.id === item.setId)?.classId ??
-    LEGENDARIES.find((legendary) => legendary.id === item.legendaryId)?.classId
-  );
 }
 function SalvageButton({ item }: { item: Item }) {
   const salvage = useGameStore((state) => state.salvage);
@@ -453,6 +449,7 @@ function CharacterPanel() {
   const equipped = item && save.equipment[item.slot]?.id === item.id;
   const usable = !item || !itemClass(item) || itemClass(item) === save.classId;
   const stash = store.accounts.find((account) => account.id === store.activeAccountId)?.stash ?? [];
+  const emptyPicks = emptySlotItems(save);
   const visibleItems = save.inventory.filter(
     (entry) =>
       (filter === 'all' ||
@@ -593,6 +590,16 @@ function CharacterPanel() {
             {save.inventory.length} / {MAX_INVENTORY} · 空余 {MAX_INVENTORY - save.inventory.length}
           </span>
         </div>
+        {emptyPicks.length > 0 && (
+          <button
+            className="gold-button"
+            data-sound="equip"
+            title="同部位优先穿戴基础攻击与护甲之和最高的一件"
+            onClick={store.equipEmptySlots}
+          >
+            <Shirt size={16} /> 补齐 {emptyPicks.length} 个装备空位
+          </button>
+        )}
         <div className="inventory-filters">
           <input
             aria-label="搜索背包装备"
@@ -863,10 +870,10 @@ function SkillsPanel() {
             {node.kind !== 'passive' && !!save.skills[node.id] && (
               <button
                 className="ghost-button"
-                aria-pressed={save.autoSkills[node.id] !== false}
+                aria-pressed={isSkillAutoEnabled(save.autoSkills, node)}
                 onClick={() => store.toggleAuto(node.id)}
               >
-                {save.autoSkills[node.id] !== false
+                {isSkillAutoEnabled(save.autoSkills, node)
                   ? '自动施放 · 点击改为手动'
                   : '手动施放 · 点击改为自动'}
               </button>

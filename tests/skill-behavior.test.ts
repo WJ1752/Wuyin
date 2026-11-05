@@ -121,6 +121,53 @@ function enemy(id: number, x: number, y = 0) {
   };
 }
 
+test('frost gear distinguishes freeze and slow from ordinary stun', () => {
+  const { engine, hits } = engineFor('sorcerer');
+  engine.random = () => 0.15;
+  engine.powers.set('winterglass', 0.25);
+  engine.setCounts.set('frost_hunter', 4);
+  const target = enemy(1, 50);
+  target.stun = 6;
+  const strike = () => engine.hit(target, skill('magic_missile'));
+  strike();
+  const ordinary = hits.at(-1)!;
+  assert.equal(ordinary.crit, false);
+  engine.freeze(target, 2);
+  strike();
+  assert.equal(hits.at(-1)!.crit, true);
+  engine.elapsed = 2;
+  strike();
+  assert.deepEqual(hits.at(-1), ordinary);
+  target.slow = 1;
+  strike();
+  assert.equal(hits.at(-1)!.crit, false);
+  assert.ok(hits.at(-1)!.damage > ordinary.damage);
+});
+
+test('bone relic adds two pierces to bone splinters and ancestral shield scales retaliation', () => {
+  const { engine, projectiles } = engineFor('necromancer');
+  engine.config.skills.bone_splinters = 1;
+  engine.perform(skill('bone_spike'), true);
+  const base = projectiles[0].options.pierce;
+  engine.powers.set('bone_relic', 1.2);
+  engine.perform(skill('bone_spike'), true);
+  assert.equal(projectiles[3].options.pierce, base + 2);
+
+  const { engine: barb, hits } = engineFor('barbarian');
+  const attacker = enemy(2, 30);
+  const strike = { shape: 'circle', x: 0, y: 0, radius: 60, damage: 1 };
+  barb.config.stats.thorns = 100;
+  barb.applyEnemyStrike(attacker, strike);
+  assert.equal(attacker.maxHp - attacker.hp, 100);
+  barb.powers.set('shield_of_ancients', 2);
+  barb.applyEnemyStrike(attacker, strike);
+  assert.equal(attacker.maxHp - attacker.hp, 400);
+  barb.setCounts.set('immortal_thorns', 4);
+  barb.config.stats.critChance = 1;
+  barb.applyEnemyStrike(attacker, strike);
+  assert.equal(hits.at(-1)!.crit, true);
+});
+
 test('movement uses each skill distance and duration, including arrow-key direction and boundary clamp', () => {
   for (const id of ['teleport', 'tumble', 'charge', 'blood_step', 'shadow_step']) {
     const definition = skill(id);

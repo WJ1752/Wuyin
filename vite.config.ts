@@ -8,6 +8,9 @@ export default defineConfig({
   plugins: [react(), tailwindcss()],
   base: './',
   cacheDir: '.cache/vite',
+  // Large esbuild transforms use native temporary files, which managed Windows
+  // workspaces can forbid deleting. Terser keeps the local browser build in memory.
+  build: process.platform === 'win32' ? { target: 'esnext', minify: 'terser' } : {},
   server: {
     proxy: { '/api': process.env.DEV_API_TARGET ?? 'http://127.0.0.1:3001' },
   },

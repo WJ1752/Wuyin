@@ -47,10 +47,12 @@ export function TownHud({
   onNavigate,
   onGuide,
   onTrain,
+  onSolo,
 }: {
   onNavigate: (panel: string) => void;
   onGuide: () => void;
   onTrain: () => void;
+  onSolo: () => void;
 }) {
   const {
     save,
@@ -62,6 +64,7 @@ export function TownHud({
     updateSettings,
   } = useGameStore();
   const cloud = useCloudStore();
+  const onlineExpedition = cloud.status === 'online' && !labBackup;
   const account = accounts.find((entry) => entry.id === activeAccountId);
   const character = account?.characters.find((entry) => entry.id === account.activeCharacterId);
   const hero = CLASSES.find((entry) => entry.id === save.classId) ?? CLASSES[0];
@@ -243,12 +246,15 @@ export function TownHud({
         </div>
         <button
           className="hall-depart"
-          onClick={() => onNavigate('expedition')}
+          onClick={onlineExpedition ? () => onNavigate('expedition') : onSolo}
           disabled={cloudTransition}
         >
           <Compass size={25} />
           <span>
-            启程出征<small>单人 / 1–4 人组队</small>
+            {onlineExpedition ? '启程出征' : '独自远征'}
+            <small>
+              {onlineExpedition ? '单人 / 1–4 人组队' : `挑战第 ${save.selectedStage} 层`}
+            </small>
           </span>
           <ArrowRight size={19} />
         </button>

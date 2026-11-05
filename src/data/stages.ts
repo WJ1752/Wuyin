@@ -77,7 +77,9 @@ export const STAGES: StageDef[] = Array.from({ length: 150 }, (_, index) => {
       Math.pow(1.08, Math.min(index, 14)) *
       Math.pow(1.11, Math.max(0, Math.min(index - 14, 15))) *
       Math.pow(1.12, Math.max(0, Math.min(index - 29, 15))) *
-      Math.pow(1.16, Math.max(0, index - 44)),
+      Math.pow(1.16, Math.max(0, Math.min(index, 99) - 44)) *
+      // Beyond floor 100, gear upgrades must still move the guardian's five-minute timer.
+      Math.pow(1.065, Math.max(0, index - 99)),
     damageMultiplier:
       Math.pow(1.025, Math.min(index, 44)) * Math.pow(1.035, Math.max(0, index - 44)),
     reward: Math.round(150 + level * 45 + Math.pow(level, 1.35) * 8),
@@ -85,6 +87,7 @@ export const STAGES: StageDef[] = Array.from({ length: 150 }, (_, index) => {
 });
 export const RIFT_RULES = {
   timeLimit: 300,
+  waveInterval: 5,
   normalProgressMin: 0.8,
   normalProgressMax: 1.5,
   eliteOrbs: 3,

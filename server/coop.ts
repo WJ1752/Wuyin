@@ -9,6 +9,7 @@ import { newSave, validateSave } from '../src/state/saveData';
 import { SKILLS } from '../src/data/skillTrees';
 import { BOSSES, MONSTERS } from '../src/data/monsters';
 import { PYLONS } from '../src/engine/BuffAndPylon';
+import { RIFT_RULES } from '../src/data/stages';
 
 const WAIT_TTL = 45000;
 const HOST_TTL = 15000;
@@ -158,7 +159,11 @@ function validResult(value: unknown, member: Member, room: Room): value is RunRe
     typeof value.won !== 'boolean' ||
     value.stage !== room.stage ||
     value.partySize !== room.members.length ||
-    !['seconds', 'kills', 'gold', 'shards'].every((key) => nonnegative(value[key])) ||
+    !nonnegative(value.seconds) ||
+    value.seconds > RIFT_RULES.timeLimit ||
+    !['kills', 'gold', 'shards'].every(
+      (key) => sequence(value[key]) && Number(value[key]) <= 1e7,
+    ) ||
     !Array.isArray(value.items) ||
     value.items.length > 240
   )

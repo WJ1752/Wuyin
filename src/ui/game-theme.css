@@ -365,8 +365,47 @@ select:focus-visible,
   border: 1px solid #99875b66;
   border-radius: 2px;
   box-shadow: none;
-  font-size: 8px;
+  font-size: 10px;
   letter-spacing: 0.5px;
+}
+.app .skill-name {
+  font-size: 11px;
+  line-height: 1.2;
+  color: #e0ddcd;
+}
+.app .resource-orb small {
+  font-size: 10px;
+}
+.app .rift-progress small {
+  font-size: 11px;
+  gap: 6px;
+  color: #d5dbca;
+}
+@container (max-width: 560px) {
+  .combat-bottom {
+    display: grid;
+    grid-template-columns: clamp(34px, 10cqw, 48px) minmax(0, 1fr) clamp(34px, 10cqw, 48px);
+    gap: 6px;
+  }
+  .app .combat-bottom .resource-orb {
+    width: 100%;
+    height: auto;
+    aspect-ratio: 1;
+  }
+  .skills-bar {
+    display: grid;
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+    gap: 3px;
+  }
+  .combat-skill,
+  .app .skill-cast {
+    width: 100%;
+  }
+  .app .skill-name {
+    min-height: 2.4em;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
 }
 .app .auto-toggle[aria-pressed='true'] {
   color: #b6c49c;

@@ -5,7 +5,7 @@ import { RARITY_COLORS, RARITY_NAMES, SLOT_NAMES } from '../core/types';
 import { CLASSES } from '../data/classes';
 import { clampHallPosition, HALL_LAYOUT, HALL_NPCS } from '../data/npcHall';
 import type { HallNpc } from '../data/npcHall';
-import { NPC_ART } from '../data/npcVisuals';
+import { NPC_ART, NPC_ATLAS } from '../data/npcVisuals';
 import { CHARACTER_ART } from '../render/CharacterTextures';
 import { apiRequest, useCloudStore } from '../state/cloudStore';
 import { useGameStore } from '../state/gameStore';
@@ -21,7 +21,7 @@ import {
   PawPrint,
   X,
 } from './PixelIcons';
-import { HallScene } from './HallScene';
+import { CAMP_ART, HallScene } from './HallScene';
 import { VirtualJoystick } from './VirtualJoystick';
 import { useDialog } from './useDialog';
 import './npc-hall.css';
@@ -89,6 +89,16 @@ export function NpcHall({
   const [players, setPlayers] = useState<LobbyPlayer[]>([]);
   const [onlineCount, setOnlineCount] = useState(0);
   const [network, setNetwork] = useState<'connecting' | 'online' | 'offline'>('connecting');
+  const [artAttempt, setArtAttempt] = useState(0);
+  const [artStatus, setArtStatus] = useState<Record<string, 'ready' | 'error'>>({});
+  const artSrc = (src: string) => (artAttempt ? `${src}?retry=${artAttempt}` : src);
+  const heroArt = artSrc(CHARACTER_ART[save.classId].src);
+  const mapArt = artSrc(CAMP_ART);
+  const npcArt = artSrc(NPC_ATLAS);
+  const waitingForArt = [mapArt, npcArt, heroArt].some((src) => !artStatus[src]);
+  const failedArt = [mapArt, npcArt, heroArt].some((src) => artStatus[src] === 'error');
+  const markArt = (src: string, status: 'ready' | 'error') =>
+    setArtStatus((old) => (old[src] === status ? old : { ...old, [src]: status }));
   const [publishError, setPublishError] = useState('');
   const [inspectedPlayer, setInspectedPlayer] = useState<LobbyPlayer | null>(null);
   const profileRef = useDialog(!!inspectedPlayer, () => setInspectedPlayer(null));
@@ -406,7 +416,7 @@ export function NpcHall({
       )}
       <div
         ref={board}
-        className={`hall-map ${walking ? 'is-walking' : ''}`}
+        className={`hall-map ${walking ? 'is-walking' : ''} ${waitingForArt && !failedArt ? 'awaiting-art' : ''}`}
         style={{
           width: HALL_LAYOUT.world.width,
           height: HALL_LAYOUT.world.height,
@@ -446,7 +456,11 @@ export function NpcHall({
         onPointerCancel={(event) => stopPointer(event, true)}
         onLostPointerCapture={(event) => stopPointer(event, true)}
       >
-        <HallScene />
+        <HallScene
+          src={mapArt}
+          onLoad={() => markArt(mapArt, 'ready')}
+          onError={() => markArt(mapArt, 'error')}
+        />
         <div className="hall-ground-light" />
         <button
           className="hall-portal"
@@ -499,7 +513,9 @@ export function NpcHall({
                     left: `${-NPC_ART[npc.id].column * 100}%`,
                     top: `${-NPC_ART[npc.id].row * 100}%`,
                   }}
-                  src={NPC_ART[npc.id].src}
+                  src={npcArt}
+                  onLoad={() => markArt(npcArt, 'ready')}
+                  onError={() => markArt(npcArt, 'error')}
                   alt={`${npc.name}，${NPC_ART[npc.id].description}`}
                   draggable={false}
                 />
@@ -559,11 +575,37 @@ export function NpcHall({
             <b>你</b>
           </span>
           <span className="hall-sprite">
-            <img src={CHARACTER_ART[save.classId].src} alt="你的营地角色" draggable={false} />
+            <img
+              src={heroArt}
+              onLoad={() => markArt(heroArt, 'ready')}
+              onError={() => markArt(heroArt, 'error')}
+              alt="你的营地角色"
+              draggable={false}
+            />
           </span>
           <span className="hall-self-ring" />
         </div>
       </div>
+      {(waitingForArt || failedArt) && (
+        <div className="hall-art-status" role="status">
+          {failedArt ? (
+            <>
+              营地贴图加载失败
+              <button
+                className="outline-button"
+                onClick={() => {
+                  setArtStatus({});
+                  setArtAttempt((n) => n + 1);
+                }}
+              >
+                重试加载
+              </button>
+            </>
+          ) : (
+            '正在载入营地画面…'
+          )}
+        </div>
+      )}
       <div className="hall-touch-controls">
         <VirtualJoystick
           disabled={!movingEnabled}

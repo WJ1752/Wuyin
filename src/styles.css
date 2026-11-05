@@ -2736,6 +2736,33 @@ kbd {
 .result-actions button {
   min-height: 44px;
 }
+.result-loot {
+  margin: 12px 0;
+  text-align: left;
+  color: var(--gold);
+  font-size: 13px;
+}
+.result-loot summary {
+  cursor: pointer;
+  padding: 8px 0;
+}
+.result-loot ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.result-loot li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border-top: 1px solid var(--line);
+  padding: 4px 0;
+}
+.result-loot small {
+  margin-left: auto;
+  color: #bec2b7;
+  white-space: nowrap;
+}
 .auto-toggle {
   min-height: 28px;
   border: 1px solid #789a9455;

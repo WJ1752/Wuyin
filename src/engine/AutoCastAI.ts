@@ -1,4 +1,5 @@
 import type { SkillDef } from '../core/types';
+import { isSkillAutoEnabled } from '../data/progression';
 export function selectAutoCast(
   skills: SkillDef[],
   state: {
@@ -17,8 +18,7 @@ export function selectAutoCast(
   const available = skills.filter(
     (s) =>
       s.kind !== 'passive' &&
-      state.auto[s.id] !== false &&
-      (state.auto[s.id] === true || s.kind !== 'movement') &&
+      isSkillAutoEnabled(state.auto, s) &&
       !state.cooldowns[s.id] &&
       (state.free || (state.costs?.[s.id] ?? s.cost) <= state.resource),
   );

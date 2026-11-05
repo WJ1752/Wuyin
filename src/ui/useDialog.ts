@@ -19,7 +19,7 @@ export function useDialog(open: boolean, onClose: () => void) {
       } else if (event.key === 'Tab') {
         const items = Array.from(
           ref.current?.querySelectorAll<HTMLElement>(
-            'button:not(:disabled),a[href],input:not(:disabled),select:not(:disabled),textarea:not(:disabled),[tabindex="0"]',
+            'button:not(:disabled),a[href],summary,input:not(:disabled),select:not(:disabled),textarea:not(:disabled),[tabindex="0"]',
           ) ?? [],
         ).filter((element) => element.offsetParent !== null && !element.hidden);
         const first = items[0];

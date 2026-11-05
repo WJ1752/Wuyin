@@ -86,7 +86,7 @@ export function AdventureGuide({
             <>
               <div className="guide-callout">
                 在大厅用摇杆或 WASD 走动，点击 NPC 会走近，靠近后点「交互」或按
-                E。侧边功能栏可随时打开装备、技能、职业榜和其他服务；点击传送门选择远征。
+                E。右下角选层后即可出征。要找队友，点击营地传送门选择组队远征。
               </div>
               <p>
                 你已掌握{basic?.name ?? '基础技能'}

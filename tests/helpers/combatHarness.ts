@@ -1,11 +1,11 @@
 import { Container } from 'pixi.js';
 import { createRng } from '../../src/core/random';
-import { LEGENDARIES } from '../../src/data/legendaries';
+import type { SaveData } from '../../src/core/types';
 import { MONSTERS } from '../../src/data/monsters';
 import { STAGES } from '../../src/data/stages';
 import { createMonsterBrain } from '../../src/engine/MonsterAI';
 import { createBossBrain } from '../../src/engine/BossAI';
-import { GameEngine, getActiveSkills } from '../../src/engine/GameEngine';
+import { GameEngine } from '../../src/engine/GameEngine';
 import { ProjectileSystem } from '../../src/engine/ProjectileSystem';
 import { createCombatConfig, newSave, useGameStore } from '../../src/state/gameStore';
 
@@ -30,46 +30,36 @@ const view = () => {
 };
 
 /** Same simulation and projectile collision code as the game; only drawing/audio are stubbed. */
-export function buildHarness(setId: string, pieces = 4, stage = 71, training = true) {
-  const originalRandom = Math.random;
-  Math.random = createRng(8801);
-  try {
-    useGameStore.setState({ save: newSave(), labBackup: null });
-    useGameStore.getState().activateBuild(setId);
-  } finally {
-    Math.random = originalRandom;
+export function buildHarness(build: string | SaveData, pieces = 4, stage = 71, training = true) {
+  if (typeof build === 'string') {
+    const originalRandom = Math.random;
+    Math.random = createRng(8801);
+    try {
+      useGameStore.setState({ save: newSave(), labBackup: null });
+      useGameStore.getState().activateBuild(build);
+    } finally {
+      Math.random = originalRandom;
+    }
   }
-  const save = JSON.parse(JSON.stringify(useGameStore.getState().save));
-  // Keep every item's stats identical, changing only the active set identity.
-  let remaining = pieces;
-  for (const item of Object.values(save.equipment) as any[])
-    if (item.setId && --remaining < 0) delete item.setId;
+  const save = structuredClone(typeof build === 'string' ? useGameStore.getState().save : build);
+  if (typeof build === 'string') {
+    // Laboratory comparisons keep item stats identical and vary only the active set identity.
+    let remaining = pieces;
+    for (const item of Object.values(save.equipment))
+      if (item?.setId && --remaining < 0) delete item.setId;
+  }
   save.selectedStage = stage;
   const config = { ...createCombatConfig(save), training };
   const engine: any = new GameEngine();
+  engine.setupCharacter(config, { onSound: noop, onSnapshot: noop, onFinish: noop });
   Object.assign(engine, {
     initialized: true,
-    config,
-    skills: getActiveSkills(config),
-    hp: config.stats.hp,
-    resource: config.stats.maxResource,
     random: createRng(4107),
     hero: view(),
     pet: view(),
     vfx: new Proxy({}, { get: () => noop }),
     numbers: { show: noop, tick: noop },
-    callbacks: { onSound: noop, onSnapshot: noop, onFinish: noop },
   });
-  for (const item of Object.values(config.equipment) as any[]) {
-    if (item.setId) engine.setCounts.set(item.setId, (engine.setCounts.get(item.setId) ?? 0) + 1);
-    if (item.legendaryId)
-      engine.powers.set(LEGENDARIES.find((l) => l.id === item.legendaryId)!.effect, item.power);
-  }
-  for (const id of Object.values(config.cube)) {
-    const def = LEGENDARIES.find((l) => l.id === id)!;
-    engine.powers.set(def.effect, def.max);
-  }
-  engine.applyStaticPowers();
   engine.projectiles = new ProjectileSystem(new Container());
   engine.makeZone = (
     x: number,
@@ -181,16 +171,17 @@ export function measureBuild(setId: string, pieces: number, targets: number, sec
 }
 
 export function runRift(
-  setId: string,
+  build: string | SaveData,
   stage = 71,
   observe?: { setup?: (engine: any) => void; frame?: (engine: any, dt: number) => void },
 ) {
-  const { engine } = buildHarness(setId, 4, stage, false);
+  const { engine } = buildHarness(build, 4, stage, false);
   let won = false;
   engine.callbacks.onFinish = (result: any) => {
     won = result.won;
   };
   observe?.setup?.(engine);
+  engine.startEncounter();
   while (!engine.finished && engine.elapsed < 300) {
     const target = engine.enemies
       .filter((e: any) => e.hp > 0)

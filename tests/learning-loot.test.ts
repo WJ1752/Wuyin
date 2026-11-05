@@ -55,6 +55,13 @@ test('learning starts with one attack, gates ranks and parent branches, and refu
   assert.equal(useGameStore.getState().save.skills.arrow_rain, undefined);
   const save = { ...useGameStore.getState().save, level: 5 };
   useGameStore.setState({ save });
+  const movement = SKILLS.find((node) => node.classId === 'ranger' && node.kind === 'movement')!;
+  useGameStore.getState().allocateSkill(movement.id);
+  const legacy = useGameStore.getState().save;
+  delete legacy.autoSkills[movement.id];
+  useGameStore.setState({ save: validateSave(legacy) });
+  useGameStore.getState().toggleAuto(movement.id);
+  assert.equal(useGameStore.getState().save.autoSkills[movement.id], true);
   const branch = SKILLS.find((node) => node.id === 'split_arrow')!;
   assert.match(skillLearningStatus(save, branch).reason, /前置/);
   useGameStore.getState().allocateSkill('hunting_arrow');
@@ -147,6 +154,10 @@ test('gambling uses cleared difficulty instead of level or unlocked stage and pe
   useGameStore.getState().completeRun(clear(4));
   assert.equal(useGameStore.getState().save.progression!.claimedMilestones.length, 0);
   useGameStore.getState().salvage(useGameStore.getState().save.inventory[0].id);
-  useGameStore.getState().completeRun(clear(4));
+  const clears = useGameStore.getState().save.clears;
+  useGameStore.getState().claimJourneyRewards();
+  useGameStore.getState().claimJourneyRewards();
+  assert.equal(useGameStore.getState().save.clears, clears);
+  assert.equal(useGameStore.getState().save.inventory.length, 240);
   assert.deepEqual(useGameStore.getState().save.progression!.claimedMilestones, ['ranger:4']);
 });

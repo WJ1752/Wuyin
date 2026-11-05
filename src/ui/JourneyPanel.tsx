@@ -9,7 +9,7 @@ import {
   RARITY_UNLOCK_STAGE,
   type LootSource,
 } from '../data/progression';
-import { useGameStore } from '../state/gameStore';
+import { MAX_INVENTORY, useGameStore } from '../state/gameStore';
 import { ItemIcon, SkillIcon } from './AssetIcon';
 import { Check, Lock } from './PixelIcons';
 import './journey.css';
@@ -35,7 +35,12 @@ export function LootChances({ stage, source = 'world' }: { stage: number; source
 }
 
 export function JourneyPanel({ onNavigate }: { onNavigate?: (panel: string) => void }) {
-  const { save, selectProgressionSet, accounts, activeAccountId, labBackup } = useGameStore();
+  const { save, selectProgressionSet, claimJourneyRewards, accounts, activeAccountId, labBackup } =
+    useGameStore();
+  const milestones = getProgressionMilestones(save);
+  const hasPending = milestones.some(
+    (m) => !m.claimed && m.stage <= (save.progression?.clearedStage ?? 0),
+  );
   const stash = labBackup
     ? []
     : (accounts.find((account) => account.id === activeAccountId)?.stash ?? []);
@@ -108,8 +113,19 @@ export function JourneyPanel({ onNavigate }: { onNavigate?: (panel: string) => v
           </div>
         )}
       </section>
+      {hasPending && !labBackup && (
+        <button
+          className="gold-button"
+          disabled={save.inventory.length >= MAX_INVENTORY}
+          onClick={claimJourneyRewards}
+        >
+          {save.inventory.length >= MAX_INVENTORY
+            ? '背包已满，请先腾出空位'
+            : '领取已达成的旅程奖励'}
+        </button>
+      )}
       <div className="journey-milestones">
-        {getProgressionMilestones(save).map((milestone) => (
+        {milestones.map((milestone) => (
           <article className={`card ${milestone.claimed ? 'claimed' : ''}`} key={milestone.stage}>
             <div className="journey-marker" style={{ color: RARITY_COLORS[milestone.rarity] }}>
               {milestone.claimed ? <Check /> : <Lock />}
@@ -120,16 +136,11 @@ export function JourneyPanel({ onNavigate }: { onNavigate?: (panel: string) => v
                 {milestone.claimed
                   ? '已领取'
                   : (save.progression?.clearedStage ?? 0) >= milestone.stage
-                    ? '已达成 · 等待补发'
+                    ? '已达成 · 待领取'
                     : '首通奖励'}
               </span>
               <h3>{milestone.title}</h3>
               <p className="muted">{milestone.detail}</p>
-              {!milestone.claimed && (save.progression?.clearedStage ?? 0) >= milestone.stage && (
-                <p className="positive">
-                  腾出背包空间，再通关第 {milestone.stage} 层或更高层即可自动补发。
-                </p>
-              )}
             </div>
           </article>
         ))}

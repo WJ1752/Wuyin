@@ -14,7 +14,7 @@ import { SKILLS } from '../data/skillTrees';
 import { SETS } from '../data/sets';
 import { LEGENDARIES } from '../data/legendaries';
 import { MONSTERS, BOSSES, ELITE_AFFIXES } from '../data/monsters';
-import { STAGES } from '../data/stages';
+import { RIFT_RULES, STAGES } from '../data/stages';
 import { CharacterRig } from '../render/ProceduralRig';
 import { preloadCharacterTextures } from '../render/CharacterTextures';
 import { preloadSkillTextures } from '../render/SkillTextures';
@@ -42,6 +42,12 @@ import { coopBalance } from '../data/coopBalance';
 import { PET_ART } from '../data/petVisuals';
 import { preloadPetTexture, getPetTexture } from '../render/PetTextures';
 import type { RunResult } from '../core/types';
+
+const arenaLimit = 780;
+const clampArena = (value: number) => Math.max(-arenaLimit, Math.min(arenaLimit, value));
+// Turn an outward spawn offset inward at the edge, keeping the intended distance from the player.
+const spawnCoordinate = (origin: number, offset: number) =>
+  Math.abs(origin + offset) <= arenaLimit ? origin + offset : origin - offset;
 
 export function getActiveSkills(
   config: Pick<CombatConfig, 'classId' | 'skills'> &
@@ -82,6 +88,7 @@ interface Enemy {
   age: number;
   attackTimer: number;
   stun: number;
+  frozenUntil?: number;
   slow: number;
   slowRatio?: number;
   armorReduction?: { value: number; expires: number };
@@ -312,10 +319,7 @@ export class GameEngine {
     if (config.classId === 'necromancer') this.createSummons();
     if (this.coop) await this.createCoopActors();
     if (this.disposed) return;
-    if (!this.isCoopGuest) {
-      this.spawnWave();
-      if (this.random() < 0.18 && !config.training) this.spawnGoblin();
-    }
+    if (!this.isCoopGuest) this.startEncounter();
     this.app.ticker.add(this.tick);
     this.app.ticker.maxFPS = 120;
     window.addEventListener('keydown', this.onKeyDown);
@@ -564,11 +568,7 @@ export class GameEngine {
       if (this.finished) break;
     }
     if (!this.finished) {
-      this.spawnTimer -= dt;
-      if (this.spawnTimer <= 0 && !this.bossSpawned) {
-        this.spawnWave();
-        this.spawnTimer = 5;
-      }
+      this.updateWaves(dt);
       this.updateEnemies(dt);
       this.updateWarningAnimations(dt);
       this.updateOrbs(dt);
@@ -1012,11 +1012,7 @@ export class GameEngine {
   private update(dt: number) {
     this.elapsed += dt;
     this.updateActor(dt);
-    this.spawnTimer -= dt;
-    if (this.spawnTimer <= 0 && !this.bossSpawned) {
-      this.spawnWave();
-      this.spawnTimer = 5;
-    }
+    this.updateWaves(dt);
     this.updateEnemies(dt);
     this.updateWarningAnimations(dt);
     this.updateOrbs(dt);
@@ -1089,8 +1085,8 @@ export class GameEngine {
       (this.buffs.has('wolf') ? 1.4 : 1) *
       (this.set('wasteland', 2) && this.buffs.has('whirlwind') ? 1.4 : 1) *
       (this.power('bulkathos') && this.buffs.has('whirlwind') ? 1 + this.power('bulkathos') : 1);
-    this.x = Math.max(-780, Math.min(780, this.x + mx * speed * dt));
-    this.y = Math.max(-780, Math.min(780, this.y + my * speed * dt));
+    this.x += mx * speed * dt;
+    this.y += my * speed * dt;
     if (
       !this.buffs.has('speed') &&
       !this.buffs.has('whirlwind') &&
@@ -1105,6 +1101,8 @@ export class GameEngine {
         }
       }
     }
+    this.x = clampArena(this.x);
+    this.y = clampArena(this.y);
     this.hero.position.set(this.x, this.y);
     this.hero.zIndex = this.y;
     this.hero.update(
@@ -1198,7 +1196,11 @@ export class GameEngine {
               this.random() * Math.PI * 2,
               p.color,
               'shatter_spear',
-              { pierce: 2, proc: false, multiplier: skill.multiplier },
+              {
+                pierce: 2 + (this.power('bone_relic') ? 2 : 0),
+                proc: false,
+                multiplier: skill.multiplier,
+              },
             );
         if (skill.effect === 'elemental' && this.set('frost_hunter', 4))
           for (let j = 0; j < 6; j++)
@@ -1264,11 +1266,11 @@ export class GameEngine {
       );
     }
     for (const o of this.orbs) {
-      if (!o.item) continue;
+      if (!o.item && o.kind !== 'progress') continue;
       const p = point(o.x, o.y);
       if (p.x < 4 || p.x > 100 || p.y < 4 || p.y > 100) continue;
       g.poly([p.x, p.y - 3, p.x + 3, p.y, p.x, p.y + 3, p.x - 3, p.y]).fill(
-        RARITY_COLORS[o.item.rarity],
+        o.item ? RARITY_COLORS[o.item.rarity] : 0xc5a5ef,
       );
     }
     for (const pylon of this.pylons) {
@@ -1290,6 +1292,8 @@ export class GameEngine {
     boss = false,
     minion = false,
   ): Enemy {
+    x = clampArena(x);
+    y = clampArena(y);
     const stage = STAGES[this.config.stage - 1] ?? STAGES[0];
     const view = new MonsterRig(def, elite, boss, minion);
     const balance = coopBalance(this.coopHost.coop?.members.length ?? 1);
@@ -1330,7 +1334,16 @@ export class GameEngine {
     this.enemies.push(e);
     return e;
   }
+  private startEncounter() {
+    this.spawnWave();
+    if (!this.config.training && this.random() < RIFT_RULES.goblinChance) this.spawnGoblin();
+  }
+  private updateWaves(dt: number) {
+    this.spawnTimer -= dt;
+    if (this.spawnTimer <= 0 && !this.bossSpawned) this.spawnWave();
+  }
   private spawnWave() {
+    this.spawnTimer = RIFT_RULES.waveInterval;
     if (this.config.training) {
       if (!this.enemies.length)
         for (let i = 0; i < 3; i++)
@@ -1351,8 +1364,10 @@ export class GameEngine {
           );
       return;
     }
-    if (this.enemies.filter((e) => e.hp > 0).length > 55) return;
-    const count = this.config.training ? 8 : 12;
+    const alive = this.enemies.filter((e) => e.hp > 0).length;
+    if (alive > 55) return;
+    // Match the opening crowd to a character who has only a basic attack.
+    const count = Math.min(12, 4 + this.config.stage * 2, this.config.stage * 8 - alive);
     for (let i = 0; i < count; i++) {
       const a = this.random() * Math.PI * 2,
         d = 260 + this.random() * 180;
@@ -1363,14 +1378,18 @@ export class GameEngine {
         ];
       this.spawn(
         def,
-        Math.max(-800, Math.min(800, this.x + Math.cos(a) * d)),
-        Math.max(-800, Math.min(800, this.y + Math.sin(a) * d)),
+        spawnCoordinate(this.x, Math.cos(a) * d),
+        spawnCoordinate(this.y, Math.sin(a) * d),
       );
     }
-    if (this.elapsed > 4 && Math.floor(this.elapsed / 5) % 3 === 1) {
+    if (
+      this.elapsed > 4 &&
+      Math.floor(this.elapsed / RIFT_RULES.waveInterval) % 3 === 1 &&
+      (this.config.stage >= 5 || !this.enemies.some((e) => e.elite && e.hp > 0))
+    ) {
       const a = this.random() * 6.28,
-        x = this.x + Math.cos(a) * 350,
-        y = this.y + Math.sin(a) * 350;
+        x = spawnCoordinate(this.x, Math.cos(a) * 350),
+        y = spawnCoordinate(this.y, Math.sin(a) * 350);
       this.spawn(MONSTERS[this.config.stage % MONSTERS.length], x, y, true);
       for (let i = 0; i < 3; i++)
         this.spawn(
@@ -1412,8 +1431,16 @@ export class GameEngine {
     this.shake = 12;
     this.callbacks.onSound('boss');
     const def = BOSSES[(this.config.stage - 1) % BOSSES.length];
-    this.spawn(def, this.x, this.y - 220, false, true);
-    this.numbers.show(this.x, this.y - 130, def.name, true, 0xf2ba9b);
+    // The first guardians meet a hero with a single basic attack and no guaranteed gear.
+    const openingHealth = Math.min(1, 0.25 + (this.config.stage - 1) * 0.15);
+    const boss = this.spawn(
+      { ...def, hp: def.hp * openingHealth },
+      this.x,
+      spawnCoordinate(this.y, -220),
+      false,
+      true,
+    );
+    this.numbers.show(boss.x, boss.y + 90, def.name, true, 0xf2ba9b);
   }
   private updateEnemies(dt: number) {
     for (let i = this.enemies.length - 1; i >= 0; i--) {
@@ -1481,10 +1508,12 @@ export class GameEngine {
         e.y += Math.sin(a) * speed * dt;
       }
       if (this.buffs.has('speed') && d < 50) {
-        e.stun = 0.6;
+        e.stun = Math.max(e.stun, 0.6);
         e.x -= Math.cos(a) * dt * 200;
         e.y -= Math.sin(a) * dt * 200;
       }
+      e.x = clampArena(e.x);
+      e.y = clampArena(e.y);
       if (e.poison > 0) {
         const poisonTime = Math.min(dt, e.poison);
         e.poison = Math.max(0, e.poison - dt);
@@ -1687,9 +1716,14 @@ export class GameEngine {
           this.resource + 8 + (this.learned('thick_skin') ? 6 : 0),
         );
       if (this.config.stats.thorns > 0 && e.hp > 0) {
-        e.hp -= this.config.stats.thorns;
-        this.numbers.show(e.x, e.y, this.config.stats.thorns);
-        if (e.hp <= 0) this.kill(e);
+        if (this.set('immortal_thorns', 4) && this.skills[0])
+          this.hitThorns(e, this.skills[0], this.config.stats.thorns);
+        else {
+          const damage = this.config.stats.thorns * (1 + this.power('shield_of_ancients'));
+          e.hp -= damage;
+          this.numbers.show(e.x, e.y, damage);
+          if (e.hp <= 0) this.kill(e);
+        }
       }
     }
   }
@@ -1741,7 +1775,9 @@ export class GameEngine {
     e.slow = Math.max(e.slow, duration);
   }
   private freeze(e: Enemy, duration: number) {
-    e.stun = Math.max(e.stun, duration + (this.power('froststring') ? 1 : 0));
+    const seconds = duration + (this.power('froststring') ? 1 : 0);
+    e.frozenUntil = Math.max(e.frozenUntil ?? 0, this.elapsed + seconds);
+    e.stun = Math.max(e.stun, seconds);
     if (this.set('delsere', 4)) delete this.cooldowns.teleport;
   }
   private applyVulnerability(e: Enemy, key: string, value: number, duration: number) {
@@ -1893,16 +1929,16 @@ export class GameEngine {
             : angle;
       this.vfx.ring(this.x, this.y, color, 45);
       if (skill.effect === 'shadowstep' && nearest && this.distance(nearest) <= skill.radius) {
-        this.x = Math.max(-780, Math.min(780, nearest.x + Math.cos(angle) * 30));
-        this.y = Math.max(-780, Math.min(780, nearest.y + Math.sin(angle) * 30));
+        this.x = clampArena(nearest.x + Math.cos(angle) * 30);
+        this.y = clampArena(nearest.y + Math.sin(angle) * 30);
         if (this.power('shadowfang')) {
           this.shadowCharges = 3;
           this.buffs.add('shadowfang', '暗影獠牙 · 3次攻击', 60);
         }
         this.hit(nearest, skill, multiplier, true, false, cast, true);
       } else {
-        this.x = Math.max(-780, Math.min(780, this.x + Math.cos(movement) * skill.radius));
-        this.y = Math.max(-780, Math.min(780, this.y + Math.sin(movement) * skill.radius));
+        this.x = clampArena(this.x + Math.cos(movement) * skill.radius);
+        this.y = clampArena(this.y + Math.sin(movement) * skill.radius);
       }
       if (skill.effect === 'teleport') {
         this.shield = this.config.stats.hp * (0.4 + (this.power('cosmic_strand') ? 0.2 : 0));
@@ -2046,7 +2082,7 @@ export class GameEngine {
         if (skill.effect === 'pull') {
           e.x = this.x + (e.x - this.x) * 0.25;
           e.y = this.y + (e.y - this.y) * 0.25;
-          if (skill.id === 'iron_hook') e.stun = skill.duration;
+          if (skill.id === 'iron_hook') e.stun = Math.max(e.stun, skill.duration);
           if (skill.id === 'hurricane_break')
             e.armorReduction = { value: 0.35, expires: this.elapsed + skill.duration };
         }
@@ -2065,7 +2101,7 @@ export class GameEngine {
             0.3 * this.rankScale(skill.id) + this.power('ravenwing'),
             6,
           );
-          e.stun = 1.5;
+          e.stun = Math.max(e.stun, 1.5);
         }
         this.hit(e, skill, multiplier);
       }
@@ -2080,7 +2116,7 @@ export class GameEngine {
       if (skill.effect === 'hammer') radius *= 1 + this.buffs.stacks('earthbreaker') * 0.08;
       if (skill.effect === 'bash' && this.learned('seismic_bash')) {
         radius *= 1.3;
-        for (const e of targets) if (this.distance(e) < radius) e.stun = 1;
+        for (const e of targets) if (this.distance(e) < radius) e.stun = Math.max(e.stun, 1);
       }
       if (skill.effect === 'siphon') {
         const drained = targets
@@ -2117,7 +2153,7 @@ export class GameEngine {
       if (skill.effect === 'spike' && this.learned('bone_splinters'))
         for (let j = 0; j < 3; j++)
           this.projectiles.spawn(this.x, this.y, angle + (j - 1) * 0.2, color, 'bone_splinters', {
-            pierce: 10,
+            pierce: 10 + (this.power('bone_relic') ? 2 : 0),
             proc: false,
             multiplier: skill.multiplier,
           });
@@ -2295,11 +2331,12 @@ export class GameEngine {
     if (!skill || e.hp <= 0) return;
     skill = this.resolveSkill(skill);
     const stats = { ...this.config.stats, independent: [...this.config.stats.independent] };
+    const frozen = (e.frozenUntil ?? 0) > this.elapsed;
     let chance = stats.critChance;
     if (this.buffs.has('berserker')) chance += 0.3;
     if (skill.effect === 'hammer') chance += Math.floor(this.resource / 5) * 0.01;
     if (this.learned('prodigy') && this.resource > stats.maxResource * 0.9) chance += 0.1;
-    if (this.power('winterglass') && e.stun > 0) chance += this.power('winterglass');
+    if (this.power('winterglass') && frozen) chance += this.power('winterglass');
     const crit =
       !dot &&
       (skill.effect !== 'thorns' || this.set('immortal_thorns', 4)) &&
@@ -2317,7 +2354,7 @@ export class GameEngine {
     for (const set of SETS) {
       if (!this.set(set.id, 4)) continue;
       let applies = set.skillId === skill.id;
-      if (set.id === 'frost_hunter') applies = e.slow > 0 || e.stun > 0;
+      if (set.id === 'frost_hunter') applies = e.slow > 0 || frozen;
       if (set.id === 'wild_vines') applies = e.poison > 0;
       if (set.id === 'inarius') applies = this.distance(e) < 150;
       if (set.id === 'immortal_thorns') applies = skill.effect === 'thorns';
@@ -2546,12 +2583,16 @@ export class GameEngine {
       if (this.power('windforce') && this.random() < this.power('windforce')) {
         e.x += (e.x - this.x) * 0.08;
         e.y += (e.y - this.y) * 0.08;
-        e.stun = 1;
+        e.stun = Math.max(e.stun, 1);
       }
     }
     if (e.hp <= 0) this.kill(e);
   }
-  private hitThorns(enemy: Enemy, source: SkillDef) {
+  private hitThorns(
+    enemy: Enemy,
+    source: SkillDef,
+    base = this.config.stats.armor * 10 + this.config.stats.thorns,
+  ) {
     this.hit(
       enemy,
       {
@@ -2562,9 +2603,7 @@ export class GameEngine {
         element: 'physical',
         multiplier: 1,
       },
-      ((this.config.stats.armor * 10 + this.config.stats.thorns) /
-        Math.max(1, this.config.stats.attack)) *
-        (1 + this.power('shield_of_ancients')),
+      (base / Math.max(1, this.config.stats.attack)) * (1 + this.power('shield_of_ancients')),
       false,
     );
   }

@@ -4,7 +4,15 @@ import { SKILLS } from '../src/data/skillTrees';
 import { SETS } from '../src/data/sets';
 import { MONSTERS } from '../src/data/monsters';
 import { selectAutoCast } from '../src/engine/AutoCastAI';
-import { buildHarness, measureBuild } from './helpers/combatHarness';
+import { buildHarness, measureBuild, runRift } from './helpers/combatHarness';
+
+test('each completed laboratory build can clear the final guardian within the rift timer', (t) => {
+  for (const set of SETS) {
+    const result = runRift(set.id, 150);
+    t.diagnostic(`${set.name} · ${result.seconds.toFixed(1)}s · ${result.kills} kills`);
+    assert.ok(result.won, `${set.name} failed the final rift`);
+  }
+});
 
 test('all fifteen four-piece builds gain meaningful sustained damage with identical item stats', () => {
   const damage: number[] = [];

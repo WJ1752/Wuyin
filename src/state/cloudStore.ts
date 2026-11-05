@@ -29,6 +29,7 @@ interface LocalCloudSave {
 }
 type Status = 'guest' | 'choosing' | 'online' | 'offline' | 'expired' | 'conflict';
 interface CloudState {
+  localReady: boolean;
   user: CloudUser | null;
   localUser: CloudUser | null;
   status: Status;
@@ -324,6 +325,7 @@ function queueSync() {
 }
 
 export const useCloudStore = create<CloudState>((set, get) => ({
+  localReady: false,
   user: null,
   localUser: null,
   status: 'guest',
@@ -337,6 +339,7 @@ export const useCloudStore = create<CloudState>((set, get) => ({
   initialize() {
     if (initialized) return initialized;
     initialized = (async () => {
+      set({ busy: true });
       registerCloudPersistence({ persist: persistLocal, backup: backupOnExit });
       useGameStore.subscribe(() => {
         const game = useGameStore.getState();
@@ -370,6 +373,8 @@ export const useCloudStore = create<CloudState>((set, get) => ({
             set({ status: 'offline' });
           }
         }
+        // Once the right local character is installed, combat can start even on a slow network.
+        set({ localReady: true });
         const auth = await session();
         set({ user: auth.user });
         if (!auth.user) {
@@ -399,6 +404,8 @@ export const useCloudStore = create<CloudState>((set, get) => ({
         }
       } catch (error) {
         fail(error);
+      } finally {
+        set({ localReady: true, busy: false });
       }
     })();
     return initialized;

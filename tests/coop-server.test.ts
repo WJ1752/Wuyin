@@ -214,6 +214,16 @@ test('inputs are validated and expire; final host results are shared once and re
       { partySize: 2, won: true, stage: 1, seconds: 2, kills: 5, gold: 10, shards: 3, items: [] },
     ]),
   );
+  for (const bad of [{ gold: 0.5 }, { kills: 2.1 }, { seconds: 301 }, { shards: 1e16 }]) {
+    const results = Object.fromEntries(
+      Object.entries(final.results).map(([id, result]) => [id, { ...result, ...bad }]),
+    );
+    assert.equal(
+      (await host.request('POST', '/coop/exchange', { snapshot: { ...final, results } }))
+        .statusCode,
+      400,
+    );
+  }
   const finished = await host.request('POST', '/coop/exchange', { snapshot: final });
   assert.equal(finished.statusCode, 200, finished.body);
   assert.equal(finished.json().room.status, 'finished');

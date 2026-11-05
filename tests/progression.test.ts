@@ -7,6 +7,8 @@ import {
   useGameStore,
   computeStats,
   cubeSlot,
+  emptySlotItems,
+  snapshotAccounts,
   createCombatConfig,
 } from '../src/state/gameStore';
 import { generateLoot } from '../src/engine/LootGenerator';
@@ -56,6 +58,64 @@ test('save import accepts generated equipment and rejects corrupt economy and du
   assert.throws(() => validateSave({ ...save, cube: { armor: 'dawn' }, extracted: ['dawn'] }));
   assert.throws(() => validateSave({ ...save, petId: 'missing' }));
 });
+test('quick equip fills empty slots with compatible gear and preserves choices across reloads', () => {
+  reset();
+  const save = newSave();
+  const equipped = generateLoot('ranger', 1, { slot: 'weapon', rarity: 'common' });
+  const betterWeapon = generateLoot('ranger', 100, { legendaryId: 'dawn' });
+  const wrongClass = generateLoot('barbarian', 100, { setId: 'wasteland', slot: 'head' });
+  const weakHead = generateLoot('ranger', 1, { slot: 'head', rarity: 'common' });
+  const strongHead = generateLoot('ranger', 20, { slot: 'head', rarity: 'epic' });
+  strongHead.gem = { id: 'ruby', level: 1 };
+  save.equipment.weapon = equipped;
+  save.inventory = [betterWeapon, wrongClass, weakHead, strongHead];
+  useGameStore.setState({ save });
+  assert.deepEqual(
+    emptySlotItems(save).map((item) => item.id),
+    [strongHead.id],
+  );
+  useGameStore.getState().equipEmptySlots();
+  useGameStore.getState().equipEmptySlots();
+  const restored = validateSave(
+    snapshotAccounts(useGameStore.getState()).accounts[0].characters[0].save,
+  );
+  assert.equal(restored.equipment.weapon?.id, equipped.id);
+  assert.equal(restored.equipment.head?.id, strongHead.id);
+  assert.deepEqual(restored.equipment.head?.gem, strongHead.gem);
+  assert.deepEqual(
+    restored.inventory.map((item) => item.id),
+    [betterWeapon.id, wrongClass.id, weakHead.id],
+  );
+});
+
+test('settlement reports drops actually stored or salvaged after the chapter gift takes a slot', () => {
+  reset();
+  const save = newSave();
+  const common = generateLoot('ranger', 1, { rarity: 'common' });
+  const relic = generateLoot('ranger', 16, { legendaryId: 'dawn' });
+  save.autoSalvage = true;
+  save.inventory = Array.from({ length: 238 }, (_, i) => ({ ...common, id: `packed-${i}` }));
+  useGameStore.setState({ save });
+  useGameStore.getState().completeRun({
+    won: true,
+    stage: 4,
+    seconds: 90,
+    kills: 50,
+    gold: 0,
+    shards: 0,
+    items: [common, relic, { ...relic, id: 'overflow' }],
+  });
+  const state = useGameStore.getState();
+  assert.equal(state.save.inventory.length, 240);
+  assert.equal(state.save.inventory.at(-1)?.id, relic.id);
+  assert.equal(state.save.crystals - save.crystals, 16);
+  assert.equal(state.save.souls - save.souls, 2);
+  assert.match(
+    state.notice,
+    /战场装备入包 1 件，按设置分解 1 件，背包满额分解 1 件（其中传奇及以上 1 件），分解所得 16 结晶、2 遗忘之魂/,
+  );
+});
+
 test('gem combination, replacement and removal preserve total gem value', () => {
   reset();
   const save = useGameStore.getState().save;
