@@ -14,7 +14,7 @@ import { SKILLS } from '../data/skillTrees';
 import { SETS } from '../data/sets';
 import { LEGENDARIES } from '../data/legendaries';
 import { MONSTERS, BOSSES, ELITE_AFFIXES } from '../data/monsters';
-import { RIFT_RULES, STAGES } from '../data/stages';
+import { RIFT_PYLON_SITES, RIFT_RULES, STAGES } from '../data/stages';
 import { CharacterRig } from '../render/ProceduralRig';
 import { getAtlasTexture, preloadAtlas } from '../render/TextureAtlas';
 import { preloadCharacterTextures } from '../render/CharacterTextures';
@@ -333,6 +333,7 @@ export class GameEngine {
     this.portraitHud = window.matchMedia('(max-width: 760px) and (orientation: portrait)');
     this.setupCharacter(config, callbacks);
     if (this.coop?.seed !== undefined) this.random = createRng(this.coop.seed);
+    const stage = STAGES[config.stage - 1] ?? STAGES[0];
     await Promise.all([
       preloadCharacterTextures(config.classId, config.equipment),
       preloadSkillTextures(this.skills.map((skill) => skill.id)),
@@ -347,7 +348,7 @@ export class GameEngine {
         ],
         'nearest',
       ),
-      preloadMapTextures(),
+      preloadMapTextures(stage.theme),
       preloadPropTextures(),
       preloadMonsterTextures(),
     ]);
@@ -373,7 +374,7 @@ export class GameEngine {
     this.world.addChild(this.floorLayer, this.entityLayer, this.effectsLayer, this.textLayer);
     this.app.stage.addChild(this.world, this.minimap);
     this.entityLayer.sortableChildren = true;
-    this.floorLayer.addChild(createMap(STAGES[config.stage - 1]?.theme ?? 0));
+    this.floorLayer.addChild(createMap(stage));
     this.hero = new CharacterRig(config.classId, config.equipment);
     this.entityLayer.addChild(this.hero);
     this.vfx = new VFXManager(
@@ -3453,13 +3454,12 @@ export class GameEngine {
     }
   }
   private createPylons() {
-    const shuffled = [...PYLONS].sort(() => this.random() - 0.5).slice(0, 2);
+    const shuffled = [...PYLONS].sort(() => this.random() - 0.5).slice(0, RIFT_PYLON_SITES.length);
     this.pylons = shuffled.map((p, i) => {
       const view = new Container(),
         g = new Graphics(),
         color = Number.parseInt(p.color.slice(1), 16);
-      const x = i === 0 ? -170 : 190,
-        y = i === 0 ? -150 : 150;
+      const { x, y } = RIFT_PYLON_SITES[i];
       pixelEllipse(g, 0, 8, 30, 12, color, 3, 0.7, true);
       view.addChild(g);
       const shrine = createPropSprite(p.id, 91);

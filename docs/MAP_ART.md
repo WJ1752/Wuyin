@@ -1,8 +1,16 @@
-# 暮林营地地图重绘
+# 营地与秘境地图
+
+## 当前像素地图
+
+营地背景沿用中央传送门与外围七处服务的布局。冷色石面、深青树林及局部灯火与怪物、圣坛的限色像素画风配合。交互点由 `npcHall.ts` 统一定位。
+
+150 层秘境沿用每五层轮换的森林、墓园、熔火和虚空主题。每个主题一张三格地表图集，进入秘境时只预载当前主题。每层组合两种地表，绘制曲径、岔道、十字广场、环道或带侧庭的长廊。道路宽度、朝向和摆件位置取自楼层专用随机种子，单人和组队进入同层时看到相同的地形。道路用于视觉分区，战场仍可自由通行。
+
+以下为早期素材和布局记录。
 
 ## 第三版：中央传送门与外围服务
 
-当前主城使用 `public/assets/maps/watchers-camp-v3.png`，1296×1216、不透明 PNG；使用内置 imagegen 编辑第二版，沿用同一精细像素风。传送门、符文广场与南北道路留空，移除中央篝火，七处服务建筑沿外围排布。`HALL_LAYOUT` 统一传送门、出生点、留白区、道路与行走边界；七名NPC脚点和朝广场侧的接近点由 `npcHall.ts` 定义。
+当时主城使用 `public/assets/maps/watchers-camp-v3.png`，1296×1216、不透明 PNG；使用内置 imagegen 编辑第二版，沿用同一精细像素风。传送门、符文广场与南北道路留空，移除中央篝火，七处服务建筑沿外围排布。`HALL_LAYOUT` 统一传送门、出生点、留白区、道路与行走边界；七名NPC脚点和朝广场侧的接近点由 `npcHall.ts` 定义。
 
 | 服务 | 门前脚点 (x,y) | 接近点 (x,y) |
 | --- | --- | --- |
@@ -52,7 +60,7 @@ Far upper 20% is forest canopy, ruined ramparts and a little atmosphere, so game
 Constraints: NO TEXT, no letters, no numbers, no logos, no interface, no borders, no UI frames, no characters, no people, no animals, no perspective vanishing point, no sky horizon. Production game environment only.
 ```
 
-## 四主题战斗地表
+## 旧版四主题战斗地表
 
 `public/assets/maps/rift-ground-atlas-v2.png` 为内置 `image_gen` 按同一 ranger 画风生成的1254×1254不透明四格图集。象限依次对应现有主题ID：左上幽暗密林、右上荒芜墓园、左下熔火地狱、右下虚空圣殿。没有改变原有150层主题配置。
 

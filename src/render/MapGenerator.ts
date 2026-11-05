@@ -1,9 +1,13 @@
-import { Assets, Container, Graphics, Rectangle, Sprite, Texture, TilingSprite } from 'pixi.js';
+import { SeededRandom } from '../core/random';
+import type { StageDef } from '../core/types';
+import { RIFT_PYLON_SITES, THEMES } from '../data/stages';
+import { Container, Graphics, Sprite, type Texture, TilingSprite } from 'pixi.js';
 import { pixelEllipse, pixelLine, pixelPolygon, pixelStamp, snapPixel } from './PixelArt';
 import { getAtlasTexture, preloadAtlas } from './TextureAtlas';
 
 const scenerySizes = { pine: 104, mushrooms: 40, grave: 52, basalt: 66, crystal: 78 };
 const themeProps = ['pine', 'grave', 'basalt', 'crystal'] as const;
+const sceneryLight = [0x839c9b, 0xa9a6bc, 0xbb9695, 0xa69abd];
 const propIds = [
   'conduit',
   'power',
@@ -35,26 +39,30 @@ export function createPropSprite(id: string, size: number) {
   return sprite;
 }
 
-const groundTextures: Texture[] = [];
-let loading: Promise<void> | undefined;
+const groundSheets = ['forest', 'crypt', 'ember', 'void'];
+const groundId = (theme: number, material: number) => `ground:${theme}:${material}`;
 
-/** Load once for all runs; retain the authored ground below when an asset is unavailable. */
-export function preloadMapTextures(): Promise<void> {
-  return (loading ??= Assets.load<Texture>('assets/maps/rift-ground-atlas-v2.png')
-    .then((atlas) => {
-      atlas.source.scaleMode = 'nearest';
-      const width = atlas.width / 2;
-      const height = atlas.height / 2;
-      for (let index = 0; index < 4; index++) {
-        groundTextures[index] = new Texture({
-          source: atlas.source,
-          frame: new Rectangle((index % 2) * width, Math.floor(index / 2) * height, width, height),
-        });
-      }
-    })
-    .catch(() => {
-      // Preserve the existing procedural map as the offline/error fallback.
-    }));
+export function preloadMapTextures(theme: number) {
+  return preloadAtlas(
+    `assets/maps/${groundSheets[theme]}-floors.webp`,
+    3,
+    1,
+    [0, 1, 2].map((material) => [groundId(theme, material), material, 0]),
+    'nearest',
+  );
+}
+
+/** The material repeats at the same world scale across atlases of different resolutions. */
+function tileGround(texture: Texture, size: number) {
+  const scale = 280 / texture.width;
+  const tiles = new TilingSprite({
+    texture,
+    width: size,
+    height: size,
+    tileScale: { x: scale, y: scale },
+  });
+  tiles.position.set(-size / 2, -size / 2);
+  return tiles;
 }
 
 const PALETTES = [
@@ -64,24 +72,73 @@ const PALETTES = [
   [0x28243d, 0x352f4b, 0x49415f, 0x8b79b9, 0xd2b8ed],
 ];
 
-export function createMap(theme: number, size = 1800): Container {
+export function createMap({ theme, level }: StageDef, size = 1800): Container {
   const root = new Container();
   const palette = PALETTES[theme % PALETTES.length];
   const ground = new Graphics().rect(-size / 2, -size / 2, size, size).fill(palette[0]);
   root.addChild(ground);
-  let seed = 77 + theme * 973;
-  const rand = () => (seed = (seed * 1664525 + 1013904223) >>> 0) / 4294967296;
-  const texture = groundTextures[theme % PALETTES.length];
-  if (texture) {
-    const terrain = new TilingSprite({
-      texture,
-      width: size,
-      height: size,
-      tileScale: { x: 0.78, y: 0.78 },
-      tint: 0xb8b8b8,
-    });
-    terrain.position.set(-size / 2, -size / 2);
-    root.addChild(terrain);
+  // A stage owns its scenery seed. Drawing the map never consumes combat RNG.
+  const rng = new SeededRandom(`rift-map-${level}`);
+  const rand = rng.next;
+  const chapter = Math.floor((level - 1) / (5 * THEMES.length));
+  const floor = (level - 1) % 5;
+  const material = (floor + chapter) % 3;
+  const layout = (floor + chapter + theme) % 5;
+  const width = rng.int(68, 106);
+  const bend = rng.int(80, 170);
+  const phase = rand() * Math.PI * 2;
+  const across = rand() < 0.5;
+  const offset = rng.int(-58, 58);
+  const onPath = (x: number, y: number) => {
+    const u = (across ? y : x) - offset;
+    const v = across ? x : y;
+    switch (layout) {
+      case 0: // Winding trail
+        return Math.abs(u - bend * Math.sin(v / 240 + phase)) < width;
+      case 1: // Fork around an island, rejoining at either end
+        return Math.abs(Math.abs(u) - Math.max(0, 200 - Math.abs(v) * 0.42)) < width;
+      case 2: // Crossroads and a paved central square
+        return (
+          Math.min(Math.abs(u), Math.abs(v)) < width ||
+          Math.max(Math.abs(u), Math.abs(v)) < width * 1.7
+        );
+      case 3: // A ring with east and west approaches
+        return (
+          Math.abs(Math.hypot(u, v) - (180 + bend)) < width ||
+          (Math.abs(v) < width && Math.abs(u) > 180)
+        );
+      default: // An avenue with staggered side courts
+        return (
+          Math.abs(u) < width ||
+          (Math.abs(Math.sin(v / 155 + phase)) < 0.48 &&
+            Math.abs(u - Math.cos(v / 155 + phase) * 140) < 225)
+        );
+    }
+  };
+  const texture = getAtlasTexture(groundId(theme, material));
+  const pathTexture = getAtlasTexture(groundId(theme, (material + 1 + (chapter % 2)) % 3));
+  if (texture && pathTexture) {
+    root.addChild(tileGround(texture, size));
+    const road = tileGround(pathTexture, size);
+    const mask = new Graphics();
+    // Merge contiguous cells per row to keep the stair-stepped boundary inexpensive.
+    const cell = 12,
+      half = size / 2;
+    for (let y = -half; y < half; y += cell) {
+      let start: number | undefined;
+      for (let x = -half; x < half; x += cell) {
+        if (onPath(x + cell / 2, y + cell / 2)) {
+          start ??= x;
+        } else if (start !== undefined) {
+          mask.rect(start, y, x - start, Math.min(cell, half - y));
+          start = undefined;
+        }
+      }
+      if (start !== undefined) mask.rect(start, y, half - start, Math.min(cell, half - y));
+    }
+    mask.fill(0xffffff);
+    root.addChild(road, mask);
+    road.mask = mask;
   } else {
     // Quiet paving gives combat a readable centre; irregular islands break the tile grid.
     for (let y = -size / 2; y < size / 2; y += 48) {
@@ -117,10 +174,16 @@ export function createMap(theme: number, size = 1800): Container {
   for (let i = 0; i < 105; i++) {
     const x = snapPixel((rand() - 0.5) * (size - 80));
     const y = snapPixel((rand() - 0.5) * (size - 80));
-    if (Math.hypot(x, y) < 210) continue;
+    if (
+      Math.hypot(x, y) < 180 ||
+      onPath(x, y) ||
+      RIFT_PYLON_SITES.some((site) => Math.hypot(x - site.x, y - site.y) < 96)
+    )
+      continue;
     const propId = theme === 0 && i % 4 === 0 ? 'mushrooms' : themeProps[theme % themeProps.length];
     const prop = createPropSprite(propId, scenerySizes[propId]);
     if (prop) {
+      prop.tint = sceneryLight[theme];
       prop.position.set(x, y + 4);
       root.addChild(prop);
       continue;

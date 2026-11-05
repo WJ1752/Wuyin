@@ -85,6 +85,11 @@ export const STAGES: StageDef[] = Array.from({ length: 150 }, (_, index) => {
     reward: Math.round(150 + level * 45 + Math.pow(level, 1.35) * 8),
   };
 });
+export const RIFT_PYLON_SITES = [
+  { x: -170, y: -150 },
+  { x: 190, y: 150 },
+] as const;
+
 export const RIFT_RULES = {
   timeLimit: 300,
   waveInterval: 5,
