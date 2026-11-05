@@ -1,4 +1,6 @@
-import { Container, Graphics, ColorMatrixFilter } from 'pixi.js';
+import { Container, Graphics, ColorMatrixFilter, Sprite } from 'pixi.js';
+import { getAtlasTexture } from './TextureAtlas';
+import type { MonsterAttackPose } from '../core/coop';
 import type { MonsterDef } from '../core/types';
 import { pixelEllipse, pixelLine, pixelPolygon, pixelStamp } from './PixelArt';
 
@@ -395,6 +397,13 @@ export class MonsterRig extends Container {
   private form = new Container();
   private bar = new Graphics();
   private flash = 0;
+  private stride = 0;
+  private facing = -1;
+  private pace = 0;
+  private readonly motion = globalThis.matchMedia?.('(prefers-reduced-motion: reduce)').matches
+    ? 0.25
+    : 1;
+  private readonly gait: 'hover' | 'slither' | 'walk' | 'still';
   private hitFilter = new ColorMatrixFilter();
   constructor(
     def: MonsterDef,
@@ -403,6 +412,9 @@ export class MonsterRig extends Container {
     public minion = false,
   ) {
     super();
+    if (['ghost', 'eye', 'bat', 'drake', 'imp'].includes(def.family)) this.gait = 'hover';
+    else if (['serpent', 'worm'].includes(def.family)) this.gait = 'slither';
+    else this.gait = def.family === 'dummy' ? 'still' : 'walk';
     const color = Number.parseInt(def.color.replace('#', ''), 16);
     const shadow = new Graphics();
     pixelEllipse(shadow, 0, 8, boss ? 54 : 23, boss ? 18 : 9, 0x09151f, 3, 0.6);
@@ -420,15 +432,25 @@ export class MonsterRig extends Container {
       );
     this.addChild(shadow, this.form);
     this.hitFilter.matrix = [0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 1, 0];
-    const body = new Graphics();
-    drawPixelCreature(body, def.family.toLowerCase(), color, boss);
-    this.form.addChild(body);
+    const texture = getAtlasTexture(`monster:${def.id}`);
+    if (texture) {
+      const body = new Sprite(texture);
+      body.anchor.set(0.5, 251 / 256);
+      body.width = body.height = boss ? 90 : 42 + def.radius * 1.3;
+      body.y = 8;
+      this.form.addChild(body);
+    } else {
+      const body = new Graphics();
+      drawPixelCreature(body, def.family.toLowerCase(), color, boss);
+      this.form.addChild(body);
+    }
     if (boss) this.form.scale.set(2);
     this.addChild(this.bar);
     this.drawHealth(1);
   }
   hit() {
-    this.flash = 0.07;
+    if (this.flash <= 0) this.form.filters = [this.hitFilter];
+    this.flash = 0.12;
   }
   drawHealth(ratio: number) {
     const w = this.boss ? 90 : 36,
@@ -443,10 +465,51 @@ export class MonsterRig extends Container {
       .fill(this.boss ? 0xe97c81 : this.elite ? 0xe9c680 : 0xc87a83);
     this.bar.alpha = ratio < 1 || this.elite || this.boss ? 1 : 0;
   }
-  update(time: number, dt: number, moving: boolean) {
-    this.flash = Math.max(0, this.flash - dt);
-    this.form.filters = this.flash > 0 ? [this.hitFilter] : [];
-    this.form.y = moving ? Math.round(Math.sin(time * 10) * 2) : 0;
-    this.form.x = moving ? Math.round(Math.cos(time * 5)) : 0;
+  update(time: number, dt: number, dx: number, dy: number, id: number, pose?: MonsterAttackPose) {
+    if (this.flash > 0) {
+      this.flash = Math.max(0, this.flash - dt);
+      if (this.flash === 0) this.form.filters = null;
+    }
+    if (this.gait === 'still') return;
+    const heading = pose ? Math.cos(pose.angle) : dx / Math.max(0.001, Math.hypot(dx, dy));
+    if (Math.abs(heading) > 0.18) this.facing = Math.sign(heading);
+    // Cap displacement so a teleport cannot skip through multiple steps in one frame.
+    const distance = Math.min(Math.hypot(dx, dy), 180 * dt);
+    this.stride += distance / (this.boss ? 12 : 7);
+    const activity = Math.min(1, distance / Math.max(45 * dt, 0.001));
+    this.pace += (activity - this.pace) * (1 - Math.exp(-dt * 14));
+
+    const breath = Math.sin(time * 2.6 + id) * this.motion;
+    const sway = Math.sin(this.stride + id) * this.pace * this.motion;
+    let lift = Math.abs(sway) * 2.8;
+    let drift = sway * 0.8;
+    if (this.gait === 'hover') {
+      lift = (3 + Math.sin(time * 3.8 + id) * 2.5) * this.motion;
+      drift += breath * 0.9;
+    } else if (this.gait === 'slither') {
+      lift *= 0.18;
+      drift = sway * 2.8;
+    }
+    let reachX = 0;
+    let reachY = 0;
+    let crouch = 0;
+    if (pose) {
+      const t = Math.min(1, Math.max(0, (time - pose.start) / Math.max(0.01, pose.duration)));
+      const windup = t * t * (3 - 2 * t);
+      // Release from the held pose, extend quickly, then settle back on the feet.
+      const reach = pose.strike
+        ? 8 * Math.sin(Math.PI * t) * (1 - t) - 3 * Math.exp(-15 * t)
+        : -3 * windup;
+      reachX = Math.cos(pose.angle) * reach * this.motion;
+      reachY = Math.sin(pose.angle) * reach * this.motion;
+      crouch = (pose.strike ? Math.exp(-15 * t) : windup) * 0.055 * this.motion;
+    }
+    const size = this.boss ? 2 : 1;
+    this.form.position.set((drift + reachX) * size, (reachY - lift) * size);
+    this.form.rotation = sway * 0.034 + reachX * 0.012;
+    this.form.scale.set(
+      -this.facing * size * (1 - breath * 0.006 + crouch),
+      size * (1 + breath * 0.014 - crouch),
+    );
   }
 }

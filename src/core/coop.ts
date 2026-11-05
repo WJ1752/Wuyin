@@ -1,4 +1,4 @@
-import type { CombatConfig, CombatSnapshot, RunResult } from './types';
+import type { CombatConfig, CombatSnapshot, Rarity, RunResult } from './types';
 
 /** Host runs the shared simulation; peers only send controls and render host frames. */
 export interface CoopInput {
@@ -37,6 +37,13 @@ export type CombatEffectCue = { x: number; y: number; color: number } & (
   | { kind: 'lightning'; tx: number; ty: number }
 );
 
+export interface MonsterAttackPose {
+  angle: number;
+  start: number;
+  duration: number;
+  strike: boolean;
+}
+
 export interface CoopFrame {
   sequence: number;
   elapsed: number;
@@ -54,6 +61,7 @@ export interface CoopFrame {
     elite: boolean;
     boss: boolean;
     minion: boolean;
+    pose?: MonsterAttackPose;
   }[];
   projectiles: {
     x: number;
@@ -64,7 +72,7 @@ export interface CoopFrame {
     scale?: number;
   }[];
   zones: { x: number; y: number; radius: number; color: number; skillId?: string }[];
-  orbs: { x: number; y: number; kind: string }[];
+  orbs: { x: number; y: number; kind: string; rarity?: Rarity }[];
   warnings: {
     id: number;
     x: number;

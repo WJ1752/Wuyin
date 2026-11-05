@@ -1,39 +1,11 @@
-import { Assets, Rectangle, Texture } from 'pixi.js';
+import { getAtlasTexture, preloadAtlas } from './TextureAtlas';
 import { CAST_ART, EFFECT_CELLS, GROUND_CELLS, type EffectArt } from '../data/skillArt';
-
-const textures = new Map<string, Texture>();
-const pending = new Map<string, Promise<void>>();
-
-function loadSheet(src: string, columns: number, rows: number, frames: [string, number, number][]) {
-  const previous = pending.get(src);
-  if (previous) return previous;
-  const request = Assets.load<Texture>(src)
-    .then((atlas) => {
-      const width = atlas.width / columns,
-        height = atlas.height / rows;
-      for (const [id, column, row] of frames) {
-        textures.set(
-          id,
-          new Texture({
-            source: atlas.source,
-            frame: new Rectangle(column * width, row * height, width, height),
-          }),
-        );
-      }
-    })
-    .catch(() => {
-      // Geometry renderers remain available if a sheet is interrupted. Retry next rift.
-      pending.delete(src);
-    });
-  pending.set(src, request);
-  return request;
-}
 
 /** UI illustrations and transparent in-world casts are separate assets. */
 export async function preloadSkillTextures(ids: string[]): Promise<void> {
   const sources = new Set(ids.map((id) => CAST_ART[id]?.src).filter(Boolean));
   const sheets = [...sources].map((src) =>
-    loadSheet(
+    preloadAtlas(
       src,
       4,
       2,
@@ -43,13 +15,13 @@ export async function preloadSkillTextures(ids: string[]): Promise<void> {
     ),
   );
   sheets.push(
-    loadSheet(
+    preloadAtlas(
       './assets/skills/ground.webp',
       4,
       2,
       GROUND_CELLS.map((id, i) => [`fx:${id}`, i % 4, Math.floor(i / 4)]),
     ),
-    loadSheet(
+    preloadAtlas(
       './assets/skills/effects.webp',
       4,
       3,
@@ -58,8 +30,8 @@ export async function preloadSkillTextures(ids: string[]): Promise<void> {
   );
   await Promise.all(sheets);
 }
-export const getSkillTexture = (id: string) => textures.get(id);
-export const getEffectTexture = (id: EffectArt) => textures.get(`fx:${id}`);
+export const getSkillTexture = (id: string) => getAtlasTexture(id);
+export const getEffectTexture = (id: EffectArt) => getAtlasTexture(`fx:${id}`);
 export function getZoneTexture(skillId: string | undefined, icy: boolean) {
   if (skillId === 'meteor') return getEffectTexture(icy ? 'frostfield' : 'scorch');
   if (skillId === 'tumble') return getEffectTexture('caltrops');

@@ -1,5 +1,38 @@
-import { Assets, Container, Graphics, Rectangle, Texture, TilingSprite } from 'pixi.js';
+import { Assets, Container, Graphics, Rectangle, Sprite, Texture, TilingSprite } from 'pixi.js';
 import { pixelEllipse, pixelLine, pixelPolygon, pixelStamp, snapPixel } from './PixelArt';
+import { getAtlasTexture, preloadAtlas } from './TextureAtlas';
+
+const scenerySizes = { pine: 104, mushrooms: 40, grave: 52, basalt: 66, crystal: 78 };
+const themeProps = ['pine', 'grave', 'basalt', 'crystal'] as const;
+const propIds = [
+  'conduit',
+  'power',
+  'speed',
+  'channeling',
+  'pine',
+  'mushrooms',
+  'grave',
+  'basalt',
+  'crystal',
+];
+
+export function preloadPropTextures() {
+  return preloadAtlas(
+    'assets/maps/rift-props.webp',
+    3,
+    3,
+    propIds.map((id, i) => [`prop:${id}`, i % 3, Math.floor(i / 3)]),
+  );
+}
+
+export function createPropSprite(id: string, size: number) {
+  const texture = getAtlasTexture(`prop:${id}`);
+  if (!texture) return;
+  const sprite = new Sprite(texture);
+  sprite.anchor.set(0.5, 188 / 192);
+  sprite.width = sprite.height = size;
+  return sprite;
+}
 
 const groundTextures: Texture[] = [];
 let loading: Promise<void> | undefined;
@@ -84,6 +117,13 @@ export function createMap(theme: number, size = 1800): Container {
     const x = snapPixel((rand() - 0.5) * (size - 80));
     const y = snapPixel((rand() - 0.5) * (size - 80));
     if (Math.hypot(x, y) < 210) continue;
+    const propId = theme === 0 && i % 4 === 0 ? 'mushrooms' : themeProps[theme % themeProps.length];
+    const prop = createPropSprite(propId, scenerySizes[propId]);
+    if (prop) {
+      prop.position.set(x, y + 4);
+      root.addChild(prop);
+      continue;
+    }
     const g = new Graphics();
     g.position.set(x, y);
     pixelEllipse(g, 0, 5, 30, 10, 0x101921, 3, 0.55);

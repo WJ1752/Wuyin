@@ -16,6 +16,7 @@ import { LEGENDARIES } from '../data/legendaries';
 import { MONSTERS, BOSSES, ELITE_AFFIXES } from '../data/monsters';
 import { RIFT_RULES, STAGES } from '../data/stages';
 import { CharacterRig } from '../render/ProceduralRig';
+import { getAtlasTexture, preloadAtlas } from '../render/TextureAtlas';
 import { preloadCharacterTextures } from '../render/CharacterTextures';
 import {
   getEffectTexture,
@@ -24,7 +25,13 @@ import {
   preloadSkillTextures,
 } from '../render/SkillTextures';
 import { MonsterRig } from '../render/MonsterRenderer';
-import { createMap, preloadMapTextures } from '../render/MapGenerator';
+import { preloadMonsterTextures } from '../render/MonsterTextures';
+import {
+  createMap,
+  createPropSprite,
+  preloadMapTextures,
+  preloadPropTextures,
+} from '../render/MapGenerator';
 import { VFXManager, ELEMENT_COLORS } from '../render/VFXManager';
 import { FloatingText } from '../render/FloatingText';
 import { calculateDamage, mitigateDamage } from './CombatSystem';
@@ -42,7 +49,13 @@ import {
 } from './MonsterAI';
 import { createRng } from '../core/random';
 import { createBossBrain, stepBossAI, type BossBrain } from './BossAI';
-import type { CoopActorFrame, CoopEngineOptions, CoopFrame, CoopInput } from '../core/coop';
+import type {
+  CoopActorFrame,
+  CoopEngineOptions,
+  CoopFrame,
+  CoopInput,
+  MonsterAttackPose,
+} from '../core/coop';
 import { coopBalance } from '../data/coopBalance';
 import { PET_ART } from '../data/petVisuals';
 import { preloadPetTexture, getPetTexture } from '../render/PetTextures';
@@ -113,6 +126,8 @@ interface Enemy {
   maxHp: number;
   radius: number;
   view: MonsterRig;
+  pose?: MonsterAttackPose;
+  guestVelocity?: { x: number; y: number };
   elite: boolean;
   boss: boolean;
   minion: boolean;
@@ -322,7 +337,13 @@ export class GameEngine {
       preloadCharacterTextures(config.classId, config.equipment),
       preloadSkillTextures(this.skills.map((skill) => skill.id)),
       preloadPetTexture(config.petId),
+      preloadAtlas('assets/maps/rift-loot.webp', 2, 1, [
+        ['loot:item', 0, 0],
+        ['loot:gold', 1, 0],
+      ]),
       preloadMapTextures(),
+      preloadPropTextures(),
+      preloadMonsterTextures(),
     ]);
     if (this.disposed) return;
     this.app = new Application();
@@ -330,7 +351,7 @@ export class GameEngine {
       resizeTo: host,
       antialias: false,
       background: 0x142426,
-      resolution: 1,
+      resolution: Math.min(window.devicePixelRatio || 1, 2),
       roundPixels: true,
       autoDensity: true,
       powerPreference: 'high-performance',
@@ -689,6 +710,7 @@ export class GameEngine {
         elite: e.elite,
         boss: e.boss,
         minion: e.minion,
+        pose: e.pose,
       })),
       projectiles: [...this.coopActors.values()].flatMap((actor) =>
         actor.projectiles.items.map((p) => ({
@@ -709,7 +731,7 @@ export class GameEngine {
           skillId: z.skill.id,
         })),
       ),
-      orbs: this.orbs.map((o) => ({ x: o.x, y: o.y, kind: o.kind })),
+      orbs: this.orbs.map((o) => ({ x: o.x, y: o.y, kind: o.kind, rarity: o.item?.rarity })),
       warnings: [...this.warningAnimations].map(([id, w]) => ({
         id,
         x: w.event.x,
@@ -760,7 +782,7 @@ export class GameEngine {
     )
       return;
     this.coopReceivedSequence = frame.sequence;
-    const dt = 0.1;
+    const dt = Math.max(0.001, frame.elapsed - this.elapsed);
     this.elapsed = frame.elapsed;
     for (const cue of frame.effects ?? []) {
       if (cue.sequence <= this.effectSequence) continue;
@@ -837,6 +859,10 @@ export class GameEngine {
         };
         enemy = this.spawn(def, state.x, state.y, state.elite, state.boss, state.minion);
       }
+      enemy.guestVelocity = { x: (state.x - enemy.x) / dt, y: (state.y - enemy.y) / dt };
+      enemy.pose = state.pose;
+      enemy.age = 0;
+      if (state.hp < enemy.hp) enemy.view.hit();
       Object.assign(enemy, {
         id: state.id,
         x: state.x,
@@ -847,7 +873,6 @@ export class GameEngine {
       enemy.view.position.set(state.x, state.y);
       enemy.view.zIndex = state.y;
       enemy.view.alpha = state.hp > 0 ? 1 : 0.3;
-      enemy.view.update(frame.elapsed + state.id, dt, true);
       enemy.view.drawHealth(Math.max(0, state.hp / state.maxHp));
       next.push(enemy);
       existing.delete(state.id);
@@ -910,6 +935,14 @@ export class GameEngine {
     }
     for (const o of frame.orbs) {
       const color = o.kind === 'health' ? 0xdd5269 : o.kind === 'progress' ? 0xb49be7 : 0xd7bb76;
+      if (o.kind === 'gold' || o.kind === 'item') {
+        const size = o.kind === 'gold' ? 25 : 32;
+        const tint =
+          o.rarity && RARITY_COLORS[o.rarity]
+            ? Number.parseInt(RARITY_COLORS[o.rarity].slice(1), 16)
+            : 0xffffff;
+        if (stamp(getAtlasTexture(`loot:${o.kind}`), o.x, o.y, size, size, 0, tint, 1)) continue;
+      }
       if (
         (o.kind === 'health' || o.kind === 'progress') &&
         stamp(getEffectTexture('globe'), o.x, o.y, 22, 22, 0, color, 1)
@@ -1134,6 +1167,19 @@ export class GameEngine {
       const time = performance.now() / 1000;
       for (const actor of this.coopActors.values()) {
         if (actor.hp > 0) actor.hero.update(time, dt, actor.moving, actor.facing, false);
+      }
+      for (const e of this.enemies) {
+        if (e.hp <= 0 || !e.guestVelocity) continue;
+        e.age += dt;
+        const movingTime = e.age <= 0.25 ? dt : 0;
+        e.view.update(
+          this.elapsed + e.age,
+          dt,
+          e.guestVelocity.x * movingTime,
+          e.guestVelocity.y * movingTime,
+          e.id,
+          e.pose,
+        );
       }
       this.vfx.tick(dt);
     }
@@ -1662,9 +1708,10 @@ export class GameEngine {
         owner.hit(e, e.bleedSkill, dt * (owner.learned('blood_fan') ? 1.6 : 1), false, true);
       }
       if (e.hp <= 0) continue;
+      if (e.pose && this.elapsed >= e.pose.start + e.pose.duration) e.pose = undefined;
+      e.view.update(this.elapsed, dt, e.x - e.view.x, e.y - e.view.y, e.id, e.pose);
       e.view.position.set(e.x, e.y);
       e.view.zIndex = e.y;
-      e.view.update(this.elapsed + e.id, dt, d > 35);
       e.view.drawHealth(e.hp / e.maxHp);
     }
   }
@@ -1729,6 +1776,14 @@ export class GameEngine {
     }
   }
   private handleEnemyEvent(e: Enemy, event: MonsterAIEvent) {
+    if (event.kind === 'telegraph' || event.kind === 'strike') {
+      e.pose = {
+        angle: event.angle,
+        start: this.elapsed,
+        duration: event.kind === 'strike' ? 0.32 : event.delay,
+        strike: event.kind === 'strike',
+      };
+    }
     if (event.kind === 'telegraph') {
       this.clearWarning(event.id);
       const g = new Graphics();
@@ -3075,24 +3130,27 @@ export class GameEngine {
       g = new Graphics();
     let color = kind === 'health' ? 0xdd5269 : kind === 'progress' ? 0xb49be7 : 0xd7bb76;
     if (item) color = Number.parseInt(RARITY_COLORS[item.rarity].slice(1), 16);
+    const texture =
+      kind === 'item' || kind === 'gold' ? getAtlasTexture(`loot:${kind}`) : undefined;
     if (kind === 'item') {
-      pixelStamp(
-        g,
-        [
-          '..oo....',
-          '.ohho...',
-          '.ohhho..',
-          '..ohhho.',
-          '...ohhho',
-          '..oohoo.',
-          '.ooo....',
-          '.o......',
-        ],
-        { o: 0x152128, h: color },
-        -12,
-        -12,
-        3,
-      );
+      if (!texture)
+        pixelStamp(
+          g,
+          [
+            '..oo....',
+            '.ohho...',
+            '.ohhho..',
+            '..ohhho.',
+            '...ohhho',
+            '..oohoo.',
+            '.ooo....',
+            '.o......',
+          ],
+          { o: 0x152128, h: color },
+          -12,
+          -12,
+          3,
+        );
       // Only build-defining drops claim a tall beacon; ordinary gear stays readable on the floor.
       if (item && ['legendary', 'set', 'primal'].includes(item.rarity)) {
         const texture = getEffectTexture('beacon');
@@ -3110,14 +3168,15 @@ export class GameEngine {
         pixelEllipse(g, 0, 8, 18, 7, color, 3, 0.7, true);
       }
     } else if (kind === 'gold') {
-      pixelStamp(
-        g,
-        ['.gggg.', 'ghhhhg', 'ghgghg', 'ghgghg', '.gggg.'],
-        { g: 0x9b6c3e, h: 0xf1cc70 },
-        -9,
-        -6,
-        3,
-      );
+      if (!texture)
+        pixelStamp(
+          g,
+          ['.gggg.', 'ghhhhg', 'ghgghg', 'ghgghg', '.gggg.'],
+          { g: 0x9b6c3e, h: 0xf1cc70 },
+          -9,
+          -6,
+          3,
+        );
     } else if (getEffectTexture('globe')) {
       const globe = new Sprite(getEffectTexture('globe'));
       globe.anchor.set(0.5);
@@ -3137,6 +3196,13 @@ export class GameEngine {
       pixelEllipse(g, 0, 10, 10, 4, color, 3, 0.2);
     }
     view.addChild(g);
+    if (texture) {
+      const loot = new Sprite(texture);
+      loot.anchor.set(0.5);
+      loot.width = loot.height = kind === 'gold' ? 25 : 32;
+      if (item) loot.tint = color;
+      view.addChild(loot);
+    }
     view.position.set(x, y);
     this.effectsLayer.addChild(view);
     this.orbs.push({ kind, x, y, age: 0, view, item, value });
@@ -3389,30 +3455,36 @@ export class GameEngine {
       const x = i === 0 ? -170 : 190,
         y = i === 0 ? -150 : 150;
       pixelEllipse(g, 0, 8, 30, 12, color, 3, 0.7, true);
-      pixelStamp(
-        g,
-        [
-          '...oo...',
-          '..ohho..',
-          '.ohhhho.',
-          '..ohho..',
-          '...oo...',
-          '..sshs..',
-          '..shhs..',
-          '..shhs..',
-          '..shhs..',
-          '.sshss..',
-          '.sssss..',
-          'ssssssss',
-        ],
-        { o: 0x20313c, h: color, s: 0x778182 },
-        -16,
-        -68,
-        4,
-      );
-      g.rect(-4, -116, 8, 48).fill({ color, alpha: 0.2 });
-      g.rect(-2, -116, 4, 48).fill({ color, alpha: 0.6 });
       view.addChild(g);
+      const shrine = createPropSprite(p.id, 91);
+      if (shrine) {
+        shrine.y = 9;
+        view.addChild(shrine);
+      } else {
+        pixelStamp(
+          g,
+          [
+            '...oo...',
+            '..ohho..',
+            '.ohhhho.',
+            '..ohho..',
+            '...oo...',
+            '..sshs..',
+            '..shhs..',
+            '..shhs..',
+            '..shhs..',
+            '.sshss..',
+            '.sssss..',
+            'ssssssss',
+          ],
+          { o: 0x20313c, h: color, s: 0x778182 },
+          -16,
+          -68,
+          4,
+        );
+        g.rect(-4, -116, 8, 48).fill({ color, alpha: 0.2 });
+        g.rect(-2, -116, 4, 48).fill({ color, alpha: 0.6 });
+      }
       const label = new Text({
         text: p.name,
         style: { fontFamily: 'monospace', fontSize: 12, fill: color },
