@@ -16,5 +16,6 @@ export function preloadMonsterTextures() {
     6,
     6,
     ids.map((id, i) => [`monster:${id}`, i % 6, Math.floor(i / 6)]),
+    'nearest',
   );
 }

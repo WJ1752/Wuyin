@@ -1,4 +1,4 @@
-import { Assets, Rectangle, Texture } from 'pixi.js';
+import { Assets, Rectangle, Texture, type SCALE_MODE } from 'pixi.js';
 
 const textures = new Map<string, Texture>();
 const pending = new Map<string, Promise<void>>();
@@ -8,11 +8,13 @@ export function preloadAtlas(
   columns: number,
   rows: number,
   frames: [string, number, number][],
+  scaleMode?: SCALE_MODE,
 ) {
   const previous = pending.get(src);
   if (previous) return previous;
   const request = Assets.load<Texture>(src)
     .then((atlas) => {
+      if (scaleMode) atlas.source.scaleMode = scaleMode;
       const width = atlas.width / columns,
         height = atlas.height / rows;
       for (const [id, column, row] of frames) {

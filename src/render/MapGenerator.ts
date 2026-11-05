@@ -22,6 +22,7 @@ export function preloadPropTextures() {
     3,
     3,
     propIds.map((id, i) => [`prop:${id}`, i % 3, Math.floor(i / 3)]),
+    'nearest',
   );
 }
 

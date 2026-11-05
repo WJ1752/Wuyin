@@ -337,10 +337,16 @@ export class GameEngine {
       preloadCharacterTextures(config.classId, config.equipment),
       preloadSkillTextures(this.skills.map((skill) => skill.id)),
       preloadPetTexture(config.petId),
-      preloadAtlas('assets/maps/rift-loot.webp', 2, 1, [
-        ['loot:item', 0, 0],
-        ['loot:gold', 1, 0],
-      ]),
+      preloadAtlas(
+        'assets/maps/rift-loot.webp',
+        2,
+        1,
+        [
+          ['loot:item', 0, 0],
+          ['loot:gold', 1, 0],
+        ],
+        'nearest',
+      ),
       preloadMapTextures(),
       preloadPropTextures(),
       preloadMonsterTextures(),
