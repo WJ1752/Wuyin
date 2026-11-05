@@ -345,7 +345,7 @@ export class GameEngine {
     if (this.coop?.seed !== undefined) this.random = createRng(this.coop.seed);
     const stage = STAGES[config.stage - 1] ?? STAGES[0];
     await Promise.all([
-      preloadCharacterTextures(config.classId, config.equipment),
+      preloadCharacterTextures(config.classId),
       preloadSkillTextures(this.skills.map((skill) => skill.id)),
       preloadPetTexture(config.petId),
       preloadAtlas(
@@ -385,7 +385,7 @@ export class GameEngine {
     this.app.stage.addChild(this.world, this.minimap);
     this.entityLayer.sortableChildren = true;
     this.floorLayer.addChild(createMap(stage));
-    this.hero = new CharacterRig(config.classId, config.equipment);
+    this.hero = new CharacterRig(config.classId);
     this.entityLayer.addChild(this.hero);
     this.vfx = new VFXManager(
       this.effectsLayer,
@@ -455,7 +455,7 @@ export class GameEngine {
     await Promise.all(
       options.members.map((member) =>
         Promise.all([
-          preloadCharacterTextures(member.config.classId, member.config.equipment),
+          preloadCharacterTextures(member.config.classId),
           preloadSkillTextures(getActiveSkills(member.config).map((skill) => skill.id)),
           preloadPetTexture(member.config.petId),
         ]),
@@ -475,7 +475,7 @@ export class GameEngine {
         });
         actor.initialized = true;
         this.linkCoopActor(actor);
-        actor.hero = new CharacterRig(member.config.classId, member.config.equipment);
+        actor.hero = new CharacterRig(member.config.classId);
         this.entityLayer.addChild(actor.hero);
         actor.projectiles = new ProjectileSystem(this.effectsLayer);
         actor.createPet();
@@ -3479,7 +3479,6 @@ export class GameEngine {
     for (let i = 0; i < count; i++) {
       const rig = new CharacterRig(
         isSkeletonWarrior(i) ? 'necromancer' : 'sorcerer',
-        {},
         { summon: true },
       );
       rig.scale.set(0.45);

@@ -1783,11 +1783,14 @@
   height: 220px;
   display: grid;
   place-items: center;
+  overflow: hidden;
 }
-.character-rig-preview canvas {
+.character-rig-preview .hero-art {
   display: block;
-  max-width: 100%;
-  image-rendering: pixelated;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  object-position: center bottom;
 }
 .character-dossier .dossier-emblem {
   top: 47px;

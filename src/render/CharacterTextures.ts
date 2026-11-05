@@ -1,14 +1,7 @@
 import { Assets, Texture } from 'pixi.js';
-import type { ClassId, Item, SaveData } from '../core/types';
-import { getAtlasTexture, preloadAtlas } from './TextureAtlas';
-import {
-  EQUIPMENT_ATLAS,
-  EQUIPMENT_DROP_CATALOG,
-  EQUIPMENT_SHAPES,
-  getItemVisual,
-  getItemAppearanceKey,
-  getItemSvg,
-} from '../data/visuals';
+import type { ClassId } from '../core/types';
+import { EQUIPMENT_ATLAS, EQUIPMENT_DROP_CATALOG } from '../data/visuals';
+import { preloadAtlas } from './TextureAtlas';
 
 /** Shared by the town portrait, inventory preview and combat rig. */
 export const CHARACTER_ART: Record<ClassId, { src: string; anchorX: number; ground: number }> = {
@@ -20,37 +13,15 @@ export const CHARACTER_ART: Record<ClassId, { src: string; anchorX: number; grou
 };
 
 const characters = new Map<ClassId, Texture>();
-const armedStances = new Map<ClassId, Texture>();
-const wornFrames: [string, number, number][] = EQUIPMENT_SHAPES.map((shape, i) => [
-  `worn:${shape}`,
-  i % 5,
-  Math.floor(i / 5),
-]);
-const fallbackEquipment = new Map<string, Texture>();
-const frames: [string, number, number][] = EQUIPMENT_DROP_CATALOG.map(({ key }, index) => [
+const equipmentFrames: [string, number, number][] = EQUIPMENT_DROP_CATALOG.map(({ key }, index) => [
   key,
   index % EQUIPMENT_ATLAS.columns,
   Math.floor(index / EQUIPMENT_ATLAS.columns),
 ]);
 
-/** Await before creating a hero; Assets deduplicates concurrent preview/combat requests. */
-export async function preloadCharacterTextures(
-  classId: ClassId,
-  equipment: SaveData['equipment'] = {},
-): Promise<void> {
-  const wearingGear = Object.values(equipment).some(Boolean);
+/** Combat uses the class sprite for actors and the equipment atlas for ground drops. */
+export async function preloadCharacterTextures(classId: ClassId): Promise<void> {
   await Promise.all([
-    wearingGear && preloadAtlas('./assets/maps/equipment-shapes.png', 5, 5, wornFrames, 'nearest'),
-    equipment.weapon &&
-      classId !== 'druid' &&
-      Assets.load<Texture>(`./assets/characters/${classId}-armed.png`)
-        .then((stance) => {
-          stance.source.scaleMode = 'nearest';
-          armedStances.set(classId, stance);
-        })
-        .catch(() => {
-          /* Keep the normal stance when an alternate pose is unavailable. */
-        }),
     Assets.load<Texture>(CHARACTER_ART[classId].src).then((texture) => {
       texture.source.scaleMode = 'nearest';
       characters.set(classId, texture);
@@ -59,31 +30,12 @@ export async function preloadCharacterTextures(
       EQUIPMENT_ATLAS.src,
       EQUIPMENT_ATLAS.columns,
       EQUIPMENT_ATLAS.rows,
-      frames,
+      equipmentFrames,
       'nearest',
     ),
   ]);
-  await Promise.all(
-    Object.values(equipment).map(async (item) => {
-      if (!item || getEquipmentTexture(item)) return;
-      const texture = await Assets.load<Texture>(
-        `data:image/svg+xml;charset=utf-8,${encodeURIComponent(getItemSvg(item))}`,
-      );
-      texture.source.scaleMode = 'nearest';
-      fallbackEquipment.set(getItemAppearanceKey(item), texture);
-    }),
-  );
 }
 
-export function getCharacterTexture(classId: ClassId, armed = false): Texture | undefined {
-  return (armed && armedStances.get(classId)) || characters.get(classId);
-}
-
-export function getEquipmentTexture(item: Item): Texture | undefined {
-  const key = getItemAppearanceKey(item);
-  return (
-    getAtlasTexture(`worn:${getItemVisual(item).shape}`) ??
-    getAtlasTexture(key) ??
-    fallbackEquipment.get(key)
-  );
+export function getCharacterTexture(classId: ClassId): Texture | undefined {
+  return characters.get(classId);
 }

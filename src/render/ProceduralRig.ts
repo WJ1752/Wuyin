@@ -1,6 +1,6 @@
 import { Container, Graphics, Sprite } from 'pixi.js';
-import type { ClassId, Item, SaveData, SkillDef, Slot } from '../core/types';
-import { CHARACTER_ART, getCharacterTexture, getEquipmentTexture } from './CharacterTextures';
+import type { ClassId, SkillDef } from '../core/types';
+import { CHARACTER_ART, getCharacterTexture } from './CharacterTextures';
 import { getAtlasTexture } from './TextureAtlas';
 import { drawPixelCreature } from './MonsterRenderer';
 import { pixelEllipse, pixelStamp } from './PixelArt';
@@ -19,7 +19,7 @@ const MOTION = {
   dash: { reach: 10, lean: 0.19, lift: 1.5 },
 };
 
-/** Player art, summoned allies and every equipment mount share the upright pixel grid. */
+/** Player art and summoned allies share the upright pixel grid. */
 export class CharacterRig extends Container {
   private aura = new Graphics();
   private body = new Container();
@@ -33,7 +33,6 @@ export class CharacterRig extends Container {
     : 1;
   constructor(
     public classId: ClassId,
-    equipment: SaveData['equipment'] = {},
     options: { summon?: boolean } = {},
   ) {
     super();
@@ -47,7 +46,7 @@ export class CharacterRig extends Container {
     this.body.y = 12;
     const texture = options.summon
       ? getAtlasTexture(classId === 'sorcerer' ? 'monster:ice_shaman' : 'monster:skeleton')
-      : getCharacterTexture(classId, !!equipment.weapon);
+      : getCharacterTexture(classId);
     if (texture) {
       const art = CHARACTER_ART[classId];
       const portrait = new Sprite(texture);
@@ -58,7 +57,6 @@ export class CharacterRig extends Container {
       portrait.width = portrait.height = 88;
       portrait.y = 12;
       this.body.addChild(portrait);
-      if (!options.summon) this.addEquipmentLayers(equipment);
     } else {
       const ally = new Graphics();
       drawPixelCreature(
@@ -86,43 +84,6 @@ export class CharacterRig extends Container {
     this.actionHeading = Math.abs(dx) < 0.1 ? this.heading : Math.sign(dx);
     this.actionDuration = Math.max(0.09, Math.min(interval, this.pose === 'invoke' ? 0.42 : 0.3));
     this.attackTime = this.actionDuration;
-  }
-  private addEquipmentLayers(equipment: SaveData['equipment']) {
-    const art = CHARACTER_ART[this.classId];
-    // The ready poses use the same foot line. Attach armour to the body and grip weapons at their handles.
-    const hands: Record<ClassId, [number, number]> = {
-      barbarian: [0.76, 0.65],
-      ranger: [0.72, 0.64],
-      sorcerer: [0.65, 0.57],
-      necromancer: [0.68, 0.6],
-      druid: [0.7, 0.65],
-    };
-    const [gripX, gripY] = hands[this.classId];
-    const mounts: Record<Slot, [number, number, number]> = {
-      head: [0.51, 0.29, 14],
-      chest: [0.5, 0.63, 16],
-      hands: [gripX, gripY, 8],
-      legs: [0.5, 0.79, 11],
-      feet: [0.49, 0.88, 12],
-      jewelry: [0.51, 0.53, 6],
-      weapon: [gripX, gripY, 26],
-      offhand: [0.31, 0.63, 12],
-    };
-    for (const [slot, item] of Object.entries(equipment) as [Slot, Item][]) {
-      if (!item) continue;
-      const texture = getEquipmentTexture(item);
-      if (!texture) continue;
-      const [x, y, size] = mounts[slot];
-      const attachment = new Sprite(texture);
-      attachment.label = `equipment:${slot}`;
-      if (slot === 'weapon') attachment.anchor.set(0.24, 0.78);
-      else attachment.anchor.set(0.5);
-      attachment.width = size;
-      attachment.height = size;
-      attachment.position.set((x - art.anchorX) * 88, (y - art.ground) * 88 + 12);
-      // Every equipped slot has its own retained layer, including jewelry and boots.
-      this.body.addChild(attachment);
-    }
   }
   update(time: number, dt: number, moving: boolean, facing: number, empowered: boolean) {
     this.attackTime = Math.max(0, this.attackTime - dt);

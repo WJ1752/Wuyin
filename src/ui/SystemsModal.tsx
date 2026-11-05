@@ -512,7 +512,7 @@ function CharacterPanel() {
             ))}
           </div>
           <div className="dossier-emblem">
-            <CharacterPreview classId={save.classId} equipment={save.equipment} />
+            <CharacterPreview classId={save.classId} />
             <span className="sigil-ring" />
           </div>
           <h3>
