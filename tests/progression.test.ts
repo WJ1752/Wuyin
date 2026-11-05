@@ -404,3 +404,33 @@ test('character affix preference retains only matching rare bases during loot an
   state().salvageLow();
   assert.equal(state().save.inventory.length, 0);
 });
+
+test('summit mastery requires three settled solo wins, survives saves and restarts after an abandoned run', () => {
+  reset();
+  const state = useGameStore.getState;
+  const save = newSave();
+  save.selectedStage = save.highestStage = 150;
+  useGameStore.setState({ save });
+  const run = { won: true, stage: 150, seconds: 294, kills: 1, gold: 0, shards: 0, items: [] };
+  const win = () => {
+    state().beginSummit();
+    state().completeRun(run);
+  };
+  win();
+  state().completeRun({ ...run, stage: 99 });
+  state().completeRun({ ...run, partySize: 2 });
+  assert.equal(state().save.progression!.summit!.wins, 1);
+  state().beginSummit();
+  useGameStore.setState({ save: validateSave(JSON.parse(JSON.stringify(state().save))) });
+  win();
+  assert.equal(state().save.progression!.summit!.wins, 1);
+  state().beginSummit();
+  state().completeRun({ ...run, won: false });
+  assert.equal(state().save.progression!.summit!.wins, 0);
+  win();
+  win();
+  win();
+  state().beginSummit();
+  state().completeRun({ ...run, won: false });
+  assert.deepEqual(validateSave(state().save).progression!.summit, { wins: 3, pending: false });
+});

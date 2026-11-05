@@ -1058,7 +1058,10 @@ function CubePanel() {
 
 function GamblePanel() {
   const store = useGameStore();
-  const [slot, setSlot] = useState<Slot>('weapon');
+  const [slot, setSlot] = useState<Slot>(
+    () =>
+      LEGENDARIES.find((l) => l.id === store.save.progression?.hunt?.legendaryId)?.slot ?? 'weapon',
+  );
   const [selectedId, setSelectedId] = useState('');
   const selected = [
     ...store.save.inventory,

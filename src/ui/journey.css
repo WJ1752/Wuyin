@@ -101,6 +101,9 @@
   margin: 14px 0;
   color: #bcbba4;
 }
+.journey-endgame {
+  grid-column: 1 / -1;
+}
 .journey-milestones {
   grid-column: 1 / -1;
   display: grid;

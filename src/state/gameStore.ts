@@ -39,6 +39,7 @@ import type {
 } from '../core/types';
 import { SLOTS, SLOT_NAMES } from '../core/types';
 import { CLASSES } from '../data/classes';
+import { RIFT_RULES } from '../data/stages';
 import { SKILLS } from '../data/skillTrees';
 import { SETS } from '../data/sets';
 import { LEGENDARIES } from '../data/legendaries';
@@ -393,6 +394,7 @@ interface GameState {
   setInCombat: (value: boolean) => void;
   selectStage: (stage: number) => void;
   updateSettings: (settings: Partial<SaveData>) => void;
+  beginSummit: () => void;
   completeRun: (result: RunResult) => void;
   getStats: () => Stats;
   equip: (id: string) => void;
@@ -951,6 +953,25 @@ export const useGameStore = create<GameState>((set, get) => {
           if (settings[key] !== undefined) Object.assign(s, { [key]: settings[key] });
       });
     },
+    beginSummit() {
+      const { save, labBackup, cloudTransition } = get();
+      if (
+        labBackup ||
+        cloudTransition ||
+        save.selectedStage !== RIFT_RULES.maxLevel ||
+        !save.progression ||
+        save.progression.summit?.wins === 3
+      )
+        return;
+      mutate((s) => {
+        const previous = s.progression!.summit;
+        s.progression!.summit = {
+          wins: previous?.pending ? 0 : (previous?.wins ?? 0),
+          pending: true,
+        };
+      });
+      void get().persist();
+    },
     completeRun(result) {
       if (get().labBackup) {
         set({ notice: '演武结束。体验装备与奖励不会写入开荒存档。' });
@@ -959,6 +980,16 @@ export const useGameStore = create<GameState>((set, get) => {
       mutate((s) => {
         const priorLevel = s.level;
         const chapterNotices: string[] = [];
+        const summit = s.progression?.summit;
+        if (result.stage === RIFT_RULES.maxLevel && !result.partySize && summit?.pending) {
+          summit.wins = result.won ? summit.wins + 1 : 0;
+          summit.pending = false;
+          chapterNotices.push(
+            summit.wins === 3
+              ? '登峰试炼完成 · 角色已毕业'
+              : `登峰试炼 · 单人连胜 ${summit.wins}/3`,
+          );
+        }
         if (result.won && !result.partySize) {
           const { classId, level, equipment, cube, skills, autoSkills, petId, petLevels, forge } =
             s;

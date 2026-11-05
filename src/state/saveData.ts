@@ -278,6 +278,11 @@ export function validateSave(input: unknown, historical = false): SaveData {
             PROGRESSION_MILESTONES.some((m) => key === `${hero.id}:${m.stage}`),
           ),
       ) ||
+      (p.summit !== undefined &&
+        (!isRecord(p.summit) ||
+          !bounded(p.summit.wins, 0, 3, true) ||
+          typeof p.summit.pending !== 'boolean' ||
+          (p.summit.wins === 3 && p.summit.pending))) ||
       (p.campFocus !== undefined && p.campFocus !== 'crystals' && p.campFocus !== 'shards') ||
       (p.hunt !== undefined &&
         (Number(p.clearedStage) < 16 ||

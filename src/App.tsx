@@ -107,6 +107,7 @@ function App() {
       setNotice('正在切换云端档案，请稍候再开始远征。');
       return;
     }
+    if (!training) current.beginSummit();
     useGameStore.getState().setInCombat(true);
     setNotice('');
     audio.play('pylon');

@@ -9,7 +9,9 @@ import {
   RARITY_UNLOCK_STAGE,
   type LootSource,
 } from '../data/progression';
-import { MAX_INVENTORY, useGameStore } from '../state/gameStore';
+import { LEGENDARIES } from '../data/legendaries';
+import { BUILD_GUIDES } from '../data/buildGuides';
+import { BUILD_RELICS, MAX_INVENTORY, useGameStore } from '../state/gameStore';
 import { ItemIcon, SkillIcon } from './AssetIcon';
 import { Check, Lock } from './PixelIcons';
 import './journey.css';
@@ -50,6 +52,18 @@ export function JourneyPanel({ onNavigate }: { onNavigate?: (panel: string) => v
       .filter((item) => item?.setId === target.id)
       .map((item) => item!.slot),
   );
+  const items = [...Object.values(save.equipment), ...save.inventory, ...stash];
+  const relics = BUILD_RELICS[target.id];
+  const missing = [...relics.worn, ...relics.cube].find(
+    (id) =>
+      !items.some((item) => item?.legendaryId === id) &&
+      !(relics.cube.includes(id) && save.extracted.includes(id)),
+  );
+  const next = LEGENDARIES.find((item) => item.id === missing);
+  const hunt = save.progression?.hunt;
+  const tracked = LEGENDARIES.find((item) => item.id === hunt?.legendaryId);
+  const summit = save.progression?.summit;
+  const wins = summit?.pending ? 0 : (summit?.wins ?? 0);
   const worn = Object.values(save.equipment).filter((item) => item?.setId === target.id).length;
   return (
     <div className="journey-panel">
@@ -113,6 +127,42 @@ export function JourneyPanel({ onNavigate }: { onNavigate?: (panel: string) => v
           </div>
         )}
       </section>
+      {!labBackup && (save.progression?.clearedStage ?? 0) >= 16 && (
+        <section className="card journey-endgame">
+          <h3>{target.name} · 配装目标</h3>
+          <p>{BUILD_GUIDES[target.id].tip}</p>
+          <p>
+            {next
+              ? `推荐寻找「${next.name}」 · ${next.description}`
+              : '推荐传奇均已获得，可继续调整穿戴、共鸣与刻印。'}
+          </p>
+          {tracked && (
+            <p>
+              正在追踪「{tracked.name}」 · 已累计 {hunt!.misses} 抽
+            </p>
+          )}
+          {onNavigate && (next || tracked) && (
+            <button
+              className="ghost-button"
+              onClick={() => {
+                if (next && !hunt) useGameStore.getState().trackLegendary(next.id);
+                onNavigate('gamble');
+              }}
+            >
+              {tracked ? '继续当前秘藏追踪' : `追踪${next?.name}`}
+            </button>
+          )}
+          {(save.progression?.clearedStage ?? 0) >= 71 && (
+            <>
+              <h3>{wins === 3 ? '登峰试炼 · 已毕业' : `登峰试炼 · ${wins}/3`}</h3>
+              <p>
+                单人连续三次通关第 150
+                层即可毕业。挑战失败或中途离开会中断连胜，回刷低层和组队可穿插进行。
+              </p>
+            </>
+          )}
+        </section>
+      )}
       {hasPending && !labBackup && (
         <button
           className="gold-button"
