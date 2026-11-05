@@ -13,6 +13,7 @@ import {
 } from '../src/state/gameStore';
 import { generateLoot } from '../src/engine/LootGenerator';
 import { getActiveSkills } from '../src/engine/GameEngine';
+import { campRates, settleCamp, HUNT_LIMIT } from '../src/data/progression';
 import { SETS } from '../src/data/sets';
 import { LEGENDARIES } from '../src/data/legendaries';
 import { GEMS } from '../src/data/affixes';
@@ -284,4 +285,86 @@ test('season rewards fire once and fast victories unlock three stages', () => {
   });
   assert.equal(useGameStore.getState().save.gold, 2200);
   assert.equal(useGameStore.getState().save.highestStage, 4);
+});
+
+test('rare engraving preserves the base, refunds donor gems and protects finished gear', () => {
+  reset();
+  const save = newSave();
+  const base = generateLoot('ranger', 80, { slot: 'feet', rarity: 'rare' });
+  base.affixes = [
+    { id: 'moveSpeed', value: 0.07 },
+    { id: 'cooldown', value: 0.08 },
+  ];
+  const material = generateLoot('ranger', 80, { rarity: 'epic' });
+  material.affixes = [
+    { id: 'eliteDamage', value: 0.2 },
+    { id: 'moveSpeed', value: 0.08 },
+  ];
+  material.gem = { id: 'ruby', level: 1 };
+  const next = { ...material, id: 'second', gem: undefined, affixes: [{ id: 'armor', value: 80 }] };
+  save.inventory = [base, material, next];
+  save.gold = 5000;
+  save.crystals = 128;
+  useGameStore.setState({ save });
+  const state = useGameStore.getState;
+  state().craftRare(base.id, material.id, 'moveSpeed');
+  assert.equal(state().save.inventory.length, 3);
+  state().craftRare(base.id, material.id, 'eliteDamage');
+  state().craftRare(base.id, material.id, 'eliteDamage');
+  state().craftRare(base.id, next.id, 'armor');
+  state().salvageLow();
+  const result = validateSave(state().save);
+  assert.equal(result.inventory.length, 1);
+  assert.deepEqual(result.inventory[0].affixes.slice(0, 2), base.affixes);
+  assert.deepEqual(result.inventory[0].affixes.slice(2), [
+    { id: 'eliteDamage', value: 0.34 },
+    { id: 'armor', value: 120 },
+  ]);
+  assert.equal(result.gold, 600);
+  assert.equal(result.crystals, 0);
+  assert.equal(result.gems.ruby[0], save.gems.ruby[0] + 1);
+});
+
+test('targeted caches guarantee the tracked slot and settle each draw in order', () => {
+  reset();
+  const save = newSave();
+  save.progression!.clearedStage = 31;
+  save.shards = 550;
+  useGameStore.setState({ save });
+  const state = useGameStore.getState;
+  state().trackLegendary('dawn');
+  const p = structuredClone(state().save);
+  p.progression!.hunt!.misses = HUNT_LIMIT - 1;
+  useGameStore.setState({ save: p });
+  state().gamble('head', 1);
+  assert.equal(state().save.progression!.hunt!.misses, HUNT_LIMIT - 1);
+  state().gamble('weapon', 10);
+  assert.equal(state().lastGamble[0].legendaryId, 'dawn');
+  assert.ok(validateSave(state().save).progression!.hunt!.misses < 10);
+  assert.equal(state().save.shards, 0);
+});
+
+test('camp compares three solo victories and settles a capped interval only once', () => {
+  reset();
+  const state = useGameStore.getState;
+  for (const stage of [91, 101, 111])
+    state().completeRun({
+      won: true,
+      stage,
+      seconds: 260,
+      kills: 0,
+      gold: 0,
+      shards: 0,
+      items: [],
+    });
+  const save = validateSave(state().save);
+  assert.equal(campRates(save).stableStage, 91);
+  const now = Date.now();
+  save.lastSaved = now - 24 * 3600000;
+  save.progression!.campFocus = 'shards';
+  const before = save.shards;
+  settleCamp(save, now);
+  assert.equal(save.shards - before, 216);
+  assert.equal(settleCamp(save, now), '');
+  assert.equal(save.shards - before, 216);
 });

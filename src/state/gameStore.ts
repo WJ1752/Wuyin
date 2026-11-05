@@ -45,6 +45,8 @@ import { LEGENDARIES } from '../data/legendaries';
 import { AFFIXES, GEMS, PETS } from '../data/affixes';
 import { generateLoot } from '../engine/LootGenerator';
 import {
+  HUNT_LIMIT,
+  settleCamp,
   availableSkillPoints,
   isSkillAutoEnabled,
   getProgressionMilestones,
@@ -408,6 +410,9 @@ interface GameState {
   gamble: (slot: Slot, count: number) => void;
   salvage: (id: string) => void;
   salvageLow: () => void;
+  craftRare: (baseId: string, donorId: string, affixId: string) => void;
+  setCampFocus: (focus: 'crystals' | 'shards') => void;
+  trackLegendary: (id: string) => void;
   reforge: (id: string, index: number) => void;
   upgradeForge: (slot: Slot) => void;
   combineGems: (id: string) => void;
@@ -473,6 +478,30 @@ function equipFromInventory(s: SaveData, id: string) {
 function isPrecious(item: Item) {
   return ['legendary', 'set', 'primal'].includes(item.rarity);
 }
+export function bulkSalvageable(item: Item) {
+  return !isPrecious(item) && !(item.rarity === 'rare' && item.affixes.length > 2);
+}
+export function craftRecipe(base: Item, donor: Item, affixId: string) {
+  if (
+    base.id === donor.id ||
+    base.rarity !== 'rare' ||
+    base.affixes.length < 2 ||
+    base.affixes.length >= 4 ||
+    !['rare', 'epic'].includes(donor.rarity) ||
+    !bulkSalvageable(donor) ||
+    base.affixes.some((a) => a.id === affixId)
+  )
+    return;
+  const affix = donor.affixes.find((a) => a.id === affixId);
+  const def = AFFIXES.find((a) => a.id === affixId);
+  if (!affix || !def) return;
+  const final = base.affixes.length === 3;
+  return {
+    gold: final ? 3500 : 900,
+    crystals: final ? 96 : 32,
+    value: Number(Math.min(def.max * 1.3, def.max * 0.8 + affix.value * 0.5).toFixed(4)),
+  };
+}
 function materialValue(item: Item) {
   return isPrecious(item) ? { crystals: 12, souls: 2 } : { crystals: 4, souls: 0 };
 }
@@ -490,7 +519,7 @@ function addItems(save: SaveData, items: Item[]) {
   };
   for (const item of items) {
     const precious = isPrecious(item);
-    if (save.autoSalvage && !precious) {
+    if (save.autoSalvage && bulkSalvageable(item)) {
       receipt.autoSalvaged++;
     } else if (save.inventory.length >= MAX_INVENTORY) {
       receipt.overflow++;
@@ -676,14 +705,7 @@ export const useGameStore = create<GameState>((set, get) => {
           loaded = candidate.value;
           restored = true;
           save = activeSave(data);
-          const hours = Math.min(8, Math.max(0, (Date.now() - save.lastSaved) / 3600000));
-          if (hours >= 0.05) {
-            const gold = Math.floor(hours * (120 + (save.progression?.clearedStage ?? 0) * 20));
-            const crystals = Math.floor(hours * 4);
-            save.gold += gold;
-            save.crystals += crystals;
-            notice = `离线营地收益：${gold} 金币 · ${crystals} 奥术结晶（最多累计 8 小时）`;
-          }
+          notice = settleCamp(save) || notice;
           if (isRecord(loaded) && loaded.format === undefined)
             notice += ' 原角色已迁入本地账号的首个角色槽，背包与装备完整保留。';
           if (isRecord(loaded) && loaded.format === undefined && loaded.progression === undefined)
@@ -1138,19 +1160,30 @@ export const useGameStore = create<GameState>((set, get) => {
         return;
       }
       s.shards -= count * 50;
-      const items = Array.from({ length: count }, () =>
-        generateLoot(s.classId, Math.max(1, s.progression?.clearedStage ?? s.highestStage - 1), {
-          slot,
-          gambling: true,
-          ownedSetPieces: [
-            ...s.inventory,
-            ...Object.values(s.equipment).filter((i): i is Item => !!i),
-            ...get().accounts.find((account) => account.id === get().activeAccountId)!.stash,
-          ]
-            .filter((i) => i.setId)
-            .map((i) => `${i.setId}:${i.slot}`),
-        }),
-      );
+      const hunt = s.progression?.hunt;
+      const tracked = LEGENDARIES.find((l) => l.id === hunt?.legendaryId && l.slot === slot);
+      const items = Array.from({ length: count }, () => {
+        const item = generateLoot(
+          s.classId,
+          Math.max(1, s.progression?.clearedStage ?? s.highestStage - 1),
+          {
+            slot,
+            gambling: true,
+            ...(tracked && hunt && hunt.misses === HUNT_LIMIT - 1
+              ? { legendaryId: tracked.id }
+              : {}),
+            ownedSetPieces: [
+              ...s.inventory,
+              ...Object.values(s.equipment).filter((i): i is Item => !!i),
+              ...get().accounts.find((account) => account.id === get().activeAccountId)!.stash,
+            ]
+              .filter((i) => i.setId)
+              .map((i) => `${i.setId}:${i.slot}`),
+          },
+        );
+        if (tracked && hunt) hunt.misses = item.legendaryId === tracked.id ? 0 : hunt.misses + 1;
+        return item;
+      });
       addItems(s, items);
       set({
         save: s,
@@ -1173,11 +1206,43 @@ export const useGameStore = create<GameState>((set, get) => {
         return `已分解，获得 ${m.crystals} 结晶、${m.souls} 遗忘之魂`;
       });
     },
+    craftRare(baseId, donorId, affixId) {
+      if (get().inCombat) return;
+      mutate((s) => {
+        const base = [...s.inventory, ...Object.values(s.equipment)].find((i) => i?.id === baseId);
+        const donor = s.inventory.find((i) => i.id === donorId);
+        if (!base || !donor) return '底材或素材已离开行囊。';
+        const recipe = craftRecipe(base, donor, affixId);
+        if (!recipe) return '请选择未重复的素材词条。';
+        if (s.crystals < recipe.crystals || s.gold < recipe.gold) return '加工材料不足。';
+        s.crystals -= recipe.crystals;
+        s.gold -= recipe.gold;
+        refundGem(s, donor);
+        s.inventory = s.inventory.filter((i) => i.id !== donorId);
+        base.affixes.push({ id: affixId, value: recipe.value });
+        return `${base.name} 加工完成 · ${base.affixes.length}/4 条词条`;
+      });
+    },
+    setCampFocus(focus) {
+      mutate((s) => {
+        if (s.progression) s.progression.campFocus = focus;
+      });
+    },
+    trackLegendary(id) {
+      mutate((s) => {
+        const p = s.progression;
+        if (!p || p.clearedStage < 16 || p.hunt?.legendaryId === id) return;
+        if (id === '') {
+          delete p.hunt;
+          return;
+        }
+        if (LEGENDARIES.some((l) => l.id === id && (!l.classId || l.classId === s.classId)))
+          p.hunt = { legendaryId: id, misses: 0 };
+      });
+    },
     salvageLow() {
       mutate((s) => {
-        const items = s.inventory.filter((i) =>
-          ['common', 'uncommon', 'rare', 'epic'].includes(i.rarity),
-        );
+        const items = s.inventory.filter(bulkSalvageable);
         for (const i of items) {
           const m = materialValue(i);
           s.crystals += m.crystals;

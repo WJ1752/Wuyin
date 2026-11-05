@@ -7,6 +7,7 @@ import { LEGENDARIES } from '../data/legendaries';
 import { AFFIXES, GEMS, PETS } from '../data/affixes';
 import {
   PROGRESSION_MILESTONES,
+  HUNT_LIMIT,
   skillLearningStatus,
   skillUnlockLevel,
   starterSkills,
@@ -276,6 +277,16 @@ export function validateSave(input: unknown, historical = false): SaveData {
             PROGRESSION_MILESTONES.some((m) => key === `${hero.id}:${m.stage}`),
           ),
       ) ||
+      (p.campFocus !== undefined && p.campFocus !== 'crystals' && p.campFocus !== 'shards') ||
+      (p.hunt !== undefined &&
+        (Number(p.clearedStage) < 16 ||
+          !isRecord(p.hunt) ||
+          !bounded(p.hunt.misses, 0, HUNT_LIMIT - 1, true) ||
+          !LEGENDARIES.some(
+            (l) =>
+              l.id === (p.hunt as Record<string, unknown>).legendaryId &&
+              (!l.classId || l.classId === s.classId),
+          ))) ||
       (p.targetSetId !== undefined && !SETS.some((set) => set.id === p.targetSetId))
     )
       throw new Error('成长旅程记录无效。');

@@ -1,3 +1,4 @@
+import { settleCamp } from '../data/progression';
 import { create } from 'zustand';
 import type { AccountData, AccountSave } from '../core/types';
 import {
@@ -247,23 +248,27 @@ function backupOnExit() {
 }
 function install(data: LocalCloudSave) {
   const account = accountData(data.account, data.user);
+  const save = account.characters.find((c) => c.id === account.activeCharacterId)!.save;
+  const reward = settleCamp(save);
   suppressChanges = true;
   useCloudStore.setState({
     localUser: data.user,
-    dirty: data.dirty,
+    dirty: data.dirty || !!reward,
     revision: data.revision,
     updatedAt: data.updatedAt,
   });
   useGameStore.setState({
     accounts: [account],
     activeAccountId: account.id,
-    save: account.characters.find((character) => character.id === account.activeCharacterId)!.save,
+    save,
+    ...(reward ? { notice: reward } : {}),
     cloudUserId: data.user.id,
     labBackup: null,
     lastGamble: [],
   });
   signature = fingerprint(account);
   suppressChanges = false;
+  if (reward) backupOnExit();
 }
 function canReplace() {
   const game = useGameStore.getState();

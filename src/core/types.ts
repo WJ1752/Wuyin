@@ -185,6 +185,8 @@ export interface SaveData {
     clearedStage: number;
     claimedMilestones: string[];
     targetSetId?: string;
+    hunt?: { legendaryId: string; misses: number };
+    campFocus?: 'crystals' | 'shards';
   };
   runRecords?: RunRecord[];
 }

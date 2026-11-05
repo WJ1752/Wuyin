@@ -39,6 +39,8 @@ import { SETS } from '../data/sets';
 import { LEGENDARIES } from '../data/legendaries';
 import { AFFIXES, GEMS, PETS } from '../data/affixes';
 import {
+  bulkSalvageable,
+  craftRecipe,
   computeStats,
   emptySlotItems,
   itemClass,
@@ -56,7 +58,13 @@ import { CharacterPreview } from './CharacterPreview';
 import { ItemIcon, PetIcon, SkillIcon } from './AssetIcon';
 import { JourneyPanel, LootChances } from './JourneyPanel';
 import { CampWallet } from './TownHud';
-import { isSkillAutoEnabled, skillLearningStatus, skillUnlockLevel } from '../data/progression';
+import {
+  campRates,
+  HUNT_LIMIT,
+  isSkillAutoEnabled,
+  skillLearningStatus,
+  skillUnlockLevel,
+} from '../data/progression';
 import { BUILD_GUIDES } from '../data/buildGuides';
 import { useDialog } from './useDialog';
 import { apiRequest } from '../state/cloudStore';
@@ -147,7 +155,7 @@ function SalvageButton({ item }: { item: Item }) {
         <button
           className={confirm ? 'danger-button' : 'ghost-button'}
           onClick={() => {
-            if (precious && !confirm) setConfirm(true);
+            if (!bulkSalvageable(item) && !confirm) setConfirm(true);
             else salvage(item.id);
           }}
         >
@@ -303,6 +311,12 @@ function ItemDetails({
         <ItemIcon item={item} size={54} />
         <h3>{item.name}</h3>
       </div>
+      {item.rarity === 'rare' && (
+        <p className="muted">
+          铁匠底材 · {item.affixes.length}/4 词条
+          {item.affixes.length < 4 && ' · 可保留原词条追加刻印'}
+        </p>
+      )}
       <div className="item-base-stats">
         {item.attack > 0 && (
           <strong>
@@ -1071,6 +1085,33 @@ function GamblePanel() {
           </button>
         ))}
       </div>
+      {(store.save.progression?.clearedStage ?? 0) >= 16 && (
+        <label>
+          追踪传奇
+          <select
+            className="system-select"
+            value={store.save.progression?.hunt?.legendaryId ?? ''}
+            onChange={(e) => {
+              const target = LEGENDARIES.find((l) => l.id === e.target.value);
+              store.trackLegendary(e.target.value);
+              if (target) setSlot(target.slot);
+            }}
+          >
+            <option value="">自由寻宝</option>
+            {LEGENDARIES.filter((l) => !l.classId || l.classId === store.save.classId).map((l) => (
+              <option key={l.id} value={l.id}>
+                {SLOT_NAMES[l.slot]} · {l.name}
+              </option>
+            ))}
+          </select>
+          {store.save.progression?.hunt && (
+            <small>
+              对应部位秘藏进度 {store.save.progression.hunt.misses}/{HUNT_LIMIT} · 第 {HUNT_LIMIT}{' '}
+              抽必出，更换目标重置进度。
+            </small>
+          )}
+        </label>
+      )}
       <div className="gamble-actions">
         <span>
           持有 <b>{costLabel(store.save.shards)}</b> 神秘碎片
@@ -1109,7 +1150,7 @@ function GamblePanel() {
       </div>
       <p className={spaces < 10 ? 'negative system-hint' : 'muted system-hint'}>
         背包剩余 {spaces} 格 · 单抽需 1 格，十连需 10 格。
-        {store.save.autoSalvage ? '已开启自动分解，史诗及以下结果会转为材料。' : ''}
+        {store.save.autoSalvage ? '自动分解已开启，稀有底材也会转为材料。' : ''}
       </p>
       <p className="muted system-hint">
         秘藏跟随已通关难度成长；低层不会提前产出传奇、套装或太古。指定部位若没有对应传奇，则转为该阶段可产出的装备。装备留在行囊中。
@@ -1164,6 +1205,135 @@ function GamblePanel() {
   );
 }
 
+function RareCraftPanel() {
+  const { save, craftRare } = useGameStore();
+  const [baseId, setBase] = useState('');
+  const [donorId, setDonor] = useState('');
+  const [affixId, setAffix] = useState('');
+  const bases = [...Object.values(save.equipment), ...save.inventory].filter(
+    (i): i is Item => !!i && i.rarity === 'rare' && i.affixes.length >= 2 && i.affixes.length < 4,
+  );
+  const base = bases.find((i) => i.id === baseId);
+  const donors = base
+    ? save.inventory.filter((i) => i.affixes.some((a) => craftRecipe(base, i, a.id)))
+    : [];
+  const donor = donors.find((i) => i.id === donorId);
+  const recipe = base && donor && craftRecipe(base, donor, affixId);
+  const options = (items: Item[]) =>
+    items.map((i) => (
+      <option key={i.id} value={i.id}>
+        {i.name} Lv.{i.level} · {i.affixes.map((a) => affixLabel(a.id, a.value)).join(' / ')}
+      </option>
+    ));
+  return (
+    <div className="system-columns">
+      <section>
+        <h3>选择稀有底材</h3>
+        <p>保留已有词条，为黄装追加至四条。加工过的底材会在一键分解时保留。</p>
+        <select
+          className="system-select"
+          aria-label="稀有底材"
+          value={base?.id ?? ''}
+          onChange={(e) => {
+            setBase(e.target.value);
+            setDonor('');
+            setAffix('');
+          }}
+        >
+          <option value="">
+            {bases.length ? '选择要加工的装备' : '行囊或身上需要一件稀有装备'}
+          </option>
+          {options(bases)}
+        </select>
+        {base && <ItemDetails item={base} />}
+      </section>
+      {base && (
+        <section>
+          <h3>选取素材词条</h3>
+          <p>消耗一件行囊里的稀有或史诗散件，刻入一种新属性。素材数值越高，刻印越强。</p>
+          <select
+            className="system-select"
+            aria-label="刻印素材"
+            value={donor?.id ?? ''}
+            onChange={(e) => {
+              setDonor(e.target.value);
+              setAffix('');
+            }}
+          >
+            <option value="">
+              {donors.length ? '选择消耗的装备' : '需要一件带有不同词条的素材'}
+            </option>
+            {options(donors)}
+          </select>
+          {donor && (
+            <select
+              className="system-select"
+              aria-label="刻印词条"
+              value={affixId}
+              onChange={(e) => setAffix(e.target.value)}
+            >
+              <option value="">选择要追加的词条</option>
+              {donor.affixes.map((a) => {
+                const r = craftRecipe(base, donor, a.id);
+                return (
+                  r && (
+                    <option key={a.id} value={a.id}>
+                      {affixLabel(a.id, r.value)}
+                    </option>
+                  )
+                );
+              })}
+            </select>
+          )}
+          {recipe && donor && (
+            <div className="operation-review">
+              <p>
+                消耗「{donor.name}」，向「{base.name}」追加 {affixLabel(affixId, recipe.value)}
+                。素材上的宝石会返还。
+              </p>
+              <button
+                className="gold-button"
+                disabled={save.gold < recipe.gold || save.crystals < recipe.crystals}
+                onClick={() => {
+                  craftRare(base.id, donor.id, affixId);
+                  setDonor('');
+                  setAffix('');
+                }}
+              >
+                确认刻印 · {recipe.gold} 金 + {recipe.crystals} 结晶
+              </button>
+            </div>
+          )}
+        </section>
+      )}
+    </div>
+  );
+}
+
+function CampWorkshop() {
+  const { save, setCampFocus } = useGameStore();
+  const rates = campRates(save);
+  return (
+    <section>
+      <h3>离线备料</h3>
+      <p>
+        单人三次通关的最高共同层数为 {rates.stableStage} 层，每十层提升产率。离线最多累计八小时。
+      </p>
+      <select
+        className="system-select"
+        aria-label="离线备料方向"
+        value={save.progression?.campFocus ?? 'crystals'}
+        onChange={(e) => setCampFocus(e.target.value === 'shards' ? 'shards' : 'crystals')}
+      >
+        <option value="crystals">备结晶 · 铁匠加工</option>
+        <option value="shards">备碎片 · 部位秘藏</option>
+      </select>
+      <p>
+        每小时 {rates.gold} 金币 · {rates.crystals} 结晶 · {rates.shards} 碎片
+      </p>
+    </section>
+  );
+}
 function ForgePanel() {
   const store = useGameStore();
   const { save } = store;
@@ -1189,6 +1359,8 @@ function ForgePanel() {
       <div className="panel-tabs">
         {[
           ['forge', '神铸强化'],
+          ['craft', '稀有刻印'],
+          ['camp', '离线备料'],
           ['reforge', '词条洗练'],
           ['salvage', '装备分解'],
           ['gems', '宝石工坊'],
@@ -1246,6 +1418,8 @@ function ForgePanel() {
           </div>
         </>
       )}
+      {tab === 'craft' && <RareCraftPanel />}
+      {tab === 'camp' && <CampWorkshop />}
       {tab === 'reforge' && (
         <div className="system-columns">
           <section>
@@ -1345,20 +1519,10 @@ function ForgePanel() {
             <span className="muted">镶嵌宝石会无损返还。</span>
             <button
               className="gold-button"
-              disabled={
-                !save.inventory.some((item) =>
-                  ['common', 'uncommon', 'rare', 'epic'].includes(item.rarity),
-                )
-              }
+              disabled={!save.inventory.some(bulkSalvageable)}
               onClick={store.salvageLow}
             >
-              一键分解史诗及以下 ·{' '}
-              {
-                save.inventory.filter((item) =>
-                  ['common', 'uncommon', 'rare', 'epic'].includes(item.rarity),
-                ).length
-              }{' '}
-              件
+              分解史诗及以下（保留刻印装备） · {save.inventory.filter(bulkSalvageable).length} 件
             </button>
           </div>
           <div className="relic-grid">
@@ -2081,7 +2245,7 @@ function SettingsPanel() {
           </select>
         </label>
         <label className="setting-row">
-          <span>自动分解史诗及以下掉落</span>
+          <span>自动分解史诗及以下掉落（寻找稀有底材时请关闭）</span>
           <input
             type="checkbox"
             checked={store.save.autoSalvage}

@@ -2,6 +2,34 @@ import type { ClassId, Rarity, SaveData, SkillDef } from '../core/types';
 import { SKILLS } from './skillTrees';
 import { SETS } from './sets';
 
+export const HUNT_LIMIT = 30;
+
+export function campRates(save: SaveData) {
+  // Records contain solo victories, sorted by stage. Three clears at or above a tier prove it.
+  const stableStage = save.runRecords?.[2]?.stage ?? 0;
+  const tier = Math.floor(stableStage / 10);
+  const shards = save.progression?.campFocus === 'shards';
+  return {
+    stableStage,
+    gold: 120 + 20 * (save.progression?.clearedStage ?? 0),
+    crystals: shards ? 4 : 4 + tier * 2,
+    shards: shards ? tier * 3 : 0,
+  };
+}
+export function settleCamp(save: SaveData, now = Date.now()) {
+  const hours = Math.max(0, Math.min(8, (now - save.lastSaved) / 3600000));
+  save.lastSaved = now;
+  if (hours < 0.05) return '';
+  const rates = campRates(save);
+  const gold = Math.floor(hours * rates.gold);
+  const crystals = Math.floor(hours * rates.crystals);
+  const shards = Math.floor(hours * rates.shards);
+  save.gold += gold;
+  save.crystals += crystals;
+  save.shards += shards;
+  return `离线营地收益：${gold} 金币 · ${crystals} 结晶 · ${shards} 碎片（最多 8 小时）`;
+}
+
 export type LootSource = 'world' | 'boss' | 'goblin' | 'gamble';
 // Class-specific world loot uses this split; universal items remain usable by all.
 export const SMART_LOOT_CURRENT_CLASS_CHANCE = 0.8;
