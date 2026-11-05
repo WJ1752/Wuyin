@@ -1,4 +1,4 @@
-import type { CombatConfig, CombatSnapshot, Rarity, RunResult } from './types';
+import type { CombatConfig, CombatSnapshot, Rarity, RunResult, Slot } from './types';
 
 /** Host runs the shared simulation; peers only send controls and render host frames. */
 export interface CoopInput {
@@ -72,7 +72,14 @@ export interface CoopFrame {
     scale?: number;
   }[];
   zones: { x: number; y: number; radius: number; color: number; skillId?: string }[];
-  orbs: { x: number; y: number; kind: string; rarity?: Rarity }[];
+  orbs: {
+    x: number;
+    y: number;
+    kind: string;
+    rarity?: Rarity;
+    slot?: Slot;
+    appearanceKey?: string;
+  }[];
   warnings: {
     id: number;
     x: number;

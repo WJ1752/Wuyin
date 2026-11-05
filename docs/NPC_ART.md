@@ -1,5 +1,8 @@
 # NPC 第二版素材
 
+当前版本采用[暮铁守望总美术方案](ART_DIRECTION.md)。下文为早期素材制作记录。
+
+
 使用内置 imagegen，以已有 ranger.png、sorcerer.png 为画风参照生成透明图集，正式文件为 `public/assets/npcs/watchers-v2.png`，实际尺寸 1774×887 RGBA。浏览器按四列两行等分显示，避免运行时导出裁切及重复下载七份图片；最末一格留空。每个格子的绘图内容、剪影和功能道具不同。
 
 `src/data/npcVisuals.ts` 定义列与行，`NpcHall.tsx` 只定位对应格。NPC盒子统一正方形，姓名和服务牌绝对定位，不再改变脚底的地面坐标。没有改动职业贴图。

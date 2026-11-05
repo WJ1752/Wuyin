@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32" shape-rendering="crispEdges">
+  <defs>
+    <g id="edge">
+      <path fill="#0c121c" d="M0 0h32v5H0z"/>
+      <path fill="#ac905b" d="M0 1h32v1H0z"/>
+      <path fill="#4f4953" d="M0 2h32v2H0z"/>
+      <path fill="#192b32" d="M0 4h32v1H0z"/>
+    </g>
+    <g id="clasp">
+      <path fill="#0c121c" d="M0 0h11v3H8v3H6v2H3v3H0z"/>
+      <path fill="#816944" d="M1 1h9v1H7v3H5v2H2v3H1z"/>
+      <path fill="#cfb783" d="M1 1h6v1H2v5H1z"/>
+      <path fill="#82b6ae" d="M3 3h2v2H3z"/>
+    </g>
+  </defs>
+  <use href="#edge"/><use href="#edge" transform="rotate(90 16 16)"/><use href="#edge" transform="rotate(180 16 16)"/><use href="#edge" transform="rotate(270 16 16)"/>
+  <use href="#clasp"/><use href="#clasp" transform="rotate(90 16 16)"/><use href="#clasp" transform="rotate(180 16 16)"/><use href="#clasp" transform="rotate(270 16 16)"/>
+</svg>

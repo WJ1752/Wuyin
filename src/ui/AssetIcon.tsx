@@ -1,5 +1,10 @@
 import type { AssetVisual, ItemVisualIdentity } from '../data/visuals';
-import { getItemVisual, SKILL_VISUALS } from '../data/visuals';
+import {
+  EQUIPMENT_ATLAS,
+  EQUIPMENT_DROP_INDEX,
+  getItemVisual,
+  SKILL_VISUALS,
+} from '../data/visuals';
 import { PET_ART } from '../data/petVisuals';
 import { useState } from 'react';
 import { SKILL_ART } from '../data/skillArt';
@@ -31,7 +36,32 @@ export function AssetIcon({ visual, size = 32 }: { visual: AssetVisual; size?: n
 }
 
 export function ItemIcon({ item, size = 32 }: { item: ItemVisualIdentity; size?: number }) {
-  return <AssetIcon visual={getItemVisual(item)} size={size} />;
+  const visual = getItemVisual(item);
+  const index = EQUIPMENT_DROP_INDEX.get(visual.key);
+  const [unavailable, setUnavailable] = useState(false);
+  if (unavailable || index === undefined) return <AssetIcon visual={visual} size={size} />;
+  const { columns, rows, src } = EQUIPMENT_ATLAS;
+  return (
+    <span
+      className="watch-item-icon"
+      aria-hidden="true"
+      data-visual={visual.key}
+      style={{ width: size, height: size }}
+    >
+      <img
+        src={src}
+        alt=""
+        draggable={false}
+        onError={() => setUnavailable(true)}
+        style={{
+          width: `${columns * 100}%`,
+          height: `${rows * 100}%`,
+          left: `${-(index % columns) * 100}%`,
+          top: `${-Math.floor(index / columns) * 100}%`,
+        }}
+      />
+    </span>
+  );
 }
 
 export function SkillIcon({ skillId, size = 32 }: { skillId: string; size?: number }) {

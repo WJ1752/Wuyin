@@ -231,6 +231,42 @@ type GearShape =
   | 'branch'
   | 'claw';
 
+export const EQUIPMENT_SHAPES: readonly GearShape[] = [
+  'weapon',
+  'offhand',
+  'head',
+  'chest',
+  'hands',
+  'legs',
+  'feet',
+  'jewelry',
+  'winged_boots',
+  'bow',
+  'crossbow',
+  'quiver',
+  'blade',
+  'dual',
+  'hammer',
+  'staff',
+  'scythe',
+  'orb',
+  'mirror',
+  'pendant',
+  'feather',
+  'lantern',
+  'totem',
+  'branch',
+  'claw',
+];
+interface EquipmentVisual extends AssetVisual {
+  shape: GearShape;
+  motif: string;
+}
+
+export function equipmentCrestSvg({ motif, color }: EquipmentVisual) {
+  return visualToSvg({ key: motif, color, layers: skillPixels(motif).layers(color) });
+}
+
 function gearPixels(shape: GearShape): PixelArt {
   const p = new PixelArt();
   switch (shape) {
@@ -407,7 +443,7 @@ const LEGENDARY_ART: Record<string, [GearShape, string]> = {
   earthward: ['totem', 'earthen_bulwark'],
 };
 
-function gearVisual(key: string, shape: GearShape, motif: string, color: string): AssetVisual {
+function gearVisual(key: string, shape: GearShape, motif: string, color: string): EquipmentVisual {
   const art = gearPixels(shape);
   if (key.startsWith('legendary:')) {
     art.rect(11, 11, 12, 2, 4).rect(11, 13, 2, 9, 4).rect(13, 21, 10, 2, 4);
@@ -415,10 +451,10 @@ function gearVisual(key: string, shape: GearShape, motif: string, color: string)
   // A readable 9px crest and offset silhouette preserve each named item's
   // identity. This also remains visible on small inventory cards.
   art.stamp(skillPixels(motif), 12, 12, 11);
-  return { key, color, layers: art.layers(color) };
+  return { key, color, shape, motif, layers: art.layers(color) };
 }
 
-export const LEGENDARY_VISUALS: Record<string, AssetVisual> = Object.fromEntries(
+export const LEGENDARY_VISUALS: Record<string, EquipmentVisual> = Object.fromEntries(
   LEGENDARIES.map((legend) => {
     const [shape, motif] = LEGENDARY_ART[legend.id];
     return [legend.id, gearVisual(`legendary:${legend.id}`, shape, motif, '#e8bf79')];
@@ -443,7 +479,7 @@ const SET_CRESTS: Record<string, string> = {
   storm_wolf: 'thunder_wolf',
 };
 
-export const SET_VISUALS: Record<string, AssetVisual> = Object.fromEntries(
+export const SET_VISUALS: Record<string, EquipmentVisual> = Object.fromEntries(
   SETS.flatMap((set) =>
     SLOTS.map((slot) => {
       const art = gearPixels(slot);
@@ -451,7 +487,13 @@ export const SET_VISUALS: Record<string, AssetVisual> = Object.fromEntries(
       art.stamp(skillPixels(SET_CRESTS[set.id]), 12, 12, 11);
       return [
         `${set.id}:${slot}`,
-        { key: `set:${set.id}:${slot}`, color: set.color, layers: art.layers(set.color) },
+        {
+          key: `set:${set.id}:${slot}`,
+          color: set.color,
+          shape: slot,
+          motif: SET_CRESTS[set.id],
+          layers: art.layers(set.color),
+        },
       ];
     }),
   ),
@@ -467,7 +509,7 @@ const ORDINARY_SERIES = {
   primal: ['永恒', 'overwhelming_essence'],
 } as const;
 
-export const ORDINARY_VISUALS: Record<string, AssetVisual> = Object.fromEntries(
+export const ORDINARY_VISUALS: Record<string, EquipmentVisual> = Object.fromEntries(
   Object.entries(ORDINARY_SERIES).flatMap(([rarity, [name, motif]]) =>
     SLOTS.map((slot) => [
       `${name}:${slot}`,
@@ -476,10 +518,26 @@ export const ORDINARY_VISUALS: Record<string, AssetVisual> = Object.fromEntries(
   ),
 );
 
+/** Stable, shared index for generated world-drop art and runtime rendering. */
+export const EQUIPMENT_DROP_CATALOG = [
+  ...Object.values(ORDINARY_VISUALS),
+  ...Object.values(SET_VISUALS),
+  ...Object.values(LEGENDARY_VISUALS),
+].sort((a, b) => (a.key < b.key ? -1 : a.key > b.key ? 1 : 0));
+export const EQUIPMENT_DROP_INDEX = new Map(
+  EQUIPMENT_DROP_CATALOG.map((visual, index) => [visual.key, index]),
+);
+export const EQUIPMENT_ATLAS = {
+  src: './assets/maps/equipment-drops.webp',
+  columns: 16,
+  rows: Math.ceil(EQUIPMENT_DROP_CATALOG.length / 16),
+  cell: 48,
+};
+
 export type ItemVisualIdentity = Pick<Item, 'slot'> &
   Partial<Pick<Item, 'name' | 'rarity' | 'legendaryId' | 'setId'>>;
 
-export function getItemVisual(item: ItemVisualIdentity): AssetVisual {
+export function getItemVisual(item: ItemVisualIdentity): EquipmentVisual {
   if (item.legendaryId && LEGENDARY_VISUALS[item.legendaryId])
     return LEGENDARY_VISUALS[item.legendaryId];
   if (item.setId && SET_VISUALS[`${item.setId}:${item.slot}`])

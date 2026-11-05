@@ -1,5 +1,8 @@
 # 伙伴贴图（2026-11-01）
 
+当前版本采用[暮铁守望总美术方案](ART_DIRECTION.md)。下文为早期素材制作记录。
+
+
 六种伙伴使用内置 `imagegen` 工具生成，参考现有 `public/assets/characters/sorcerer.png` 的精细 Q 版像素风、明暗层次与轮廓精度。没有使用旧版几何头像或同色换皮。原始透明图集保留在 `public/assets/pets/companions-atlas.png`；三个等宽列、两个等高行，每格 512 × 512 像素。第一行为 goblin / dragon / owl，第二行为 imp / fox / wisp。
 
 各格原样裁切为同目录下六张 PNG，保留生成器提供的 RGBA 透明度，不擦除发光边缘。所有六格的主体均未越过边界。`src/data/petVisuals.ts` 声明路径与地面锚点；横向锚点按脚爪/悬浮主体中心配置，纵向锚点参考 alpha ≥ 128 的主体下缘。背包伙伴页的 `PetIcon` 与战场 `PetTextures` / `createPet` 共用这些资源，避免界面与战斗显示不同形象。

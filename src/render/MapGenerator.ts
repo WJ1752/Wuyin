@@ -54,7 +54,8 @@ export function preloadMapTextures(theme: number) {
 
 /** The material repeats at the same world scale across atlases of different resolutions. */
 function tileGround(texture: Texture, size: number) {
-  const scale = 280 / texture.width;
+  // Each authored material has a mirrored repeat in both axes.
+  const scale = 560 / texture.width;
   const tiles = new TilingSprite({
     texture,
     width: size,

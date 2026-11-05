@@ -7,8 +7,10 @@ import type {
   Item,
   MonsterDef,
   SkillDef,
+  Slot,
 } from '../core/types';
 import { RARITY_COLORS } from '../core/types';
+import { getItemAppearanceKey } from '../data/visuals';
 import { CLASSES } from '../data/classes';
 import { SKILLS } from '../data/skillTrees';
 import { SETS } from '../data/sets';
@@ -180,6 +182,10 @@ interface Orb {
   view: Container;
   item?: Item;
   value: number;
+}
+function getDropTexture(key?: string, slot?: Slot): Texture | undefined {
+  const appearance = key ?? (slot && getItemAppearanceKey({ slot, rarity: 'common' }));
+  return (appearance && getAtlasTexture(appearance)) || getAtlasTexture('loot:item');
 }
 interface Zone {
   art?: Sprite;
@@ -742,7 +748,14 @@ export class GameEngine {
           skillId: z.skill.id,
         })),
       ),
-      orbs: this.orbs.map((o) => ({ x: o.x, y: o.y, kind: o.kind, rarity: o.item?.rarity })),
+      orbs: this.orbs.map((o) => ({
+        x: o.x,
+        y: o.y,
+        kind: o.kind,
+        rarity: o.item?.rarity,
+        slot: o.item?.slot,
+        appearanceKey: o.item ? getItemAppearanceKey(o.item) : undefined,
+      })),
       warnings: [...this.warningAnimations].map(([id, w]) => ({
         id,
         x: w.event.x,
@@ -948,11 +961,11 @@ export class GameEngine {
       const color = o.kind === 'health' ? 0xdd5269 : o.kind === 'progress' ? 0xb49be7 : 0xd7bb76;
       if (o.kind === 'gold' || o.kind === 'item') {
         const size = o.kind === 'gold' ? 25 : 32;
-        const tint =
-          o.rarity && RARITY_COLORS[o.rarity]
-            ? Number.parseInt(RARITY_COLORS[o.rarity].slice(1), 16)
-            : 0xffffff;
-        if (stamp(getAtlasTexture(`loot:${o.kind}`), o.x, o.y, size, size, 0, tint, 1)) continue;
+        const texture =
+          o.kind === 'item'
+            ? getDropTexture(o.appearanceKey, o.slot)
+            : getAtlasTexture('loot:gold');
+        if (stamp(texture, o.x, o.y, size, size, 0, 0xffffff, 1)) continue;
       }
       if (
         (o.kind === 'health' || o.kind === 'progress') &&
@@ -3161,7 +3174,11 @@ export class GameEngine {
     let color = kind === 'health' ? 0xdd5269 : kind === 'progress' ? 0xb49be7 : 0xd7bb76;
     if (item) color = Number.parseInt(RARITY_COLORS[item.rarity].slice(1), 16);
     const texture =
-      kind === 'item' || kind === 'gold' ? getAtlasTexture(`loot:${kind}`) : undefined;
+      kind === 'item' && item
+        ? getDropTexture(getItemAppearanceKey(item), item.slot)
+        : kind === 'gold'
+          ? getAtlasTexture('loot:gold')
+          : undefined;
     if (kind === 'item') {
       if (!texture)
         pixelStamp(
@@ -3230,7 +3247,6 @@ export class GameEngine {
       const loot = new Sprite(texture);
       loot.anchor.set(0.5);
       loot.width = loot.height = kind === 'gold' ? 25 : 32;
-      if (item) loot.tint = color;
       view.addChild(loot);
     }
     view.position.set(x, y);

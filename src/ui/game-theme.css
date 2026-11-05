@@ -1,13 +1,18 @@
-/* Shared forged bronze, smoked iron and vellum treatment for every game menu. */
+/* Shared slate, muted violet and worn gold skin for game surfaces. */
 :root {
   color-scheme: dark;
-  --gold: #c7ab76;
-  --muted: #a9aa9b;
-  --line: #77684b;
-  --panel: #192126;
-  --pixel-bevel: inset 0 1px 0 #e5ce971a, inset 0 -1px 0 #0006, 0 3px 10px #0003;
+  --gold: #c6aa70;
+  --muted: #aaa8b1;
+  --line: #5d596b;
+  --panel: #1a202b;
+  --pixel-bevel: inset 1px 1px 0 #e3d5b018, inset -2px -2px 0 #070a10aa, 3px 3px 0 #070a10;
+  --ui-slate: #17282e;
+  --watch-frame: url('./art/watch-frame.svg') 11 / 11px stretch;
+  --ui-violet: #282634;
+  --ui-bone: #e0dac9;
   --ui-mono: 'Consolas', 'Courier New', monospace;
 }
+
 html,
 body,
 #root {
@@ -85,10 +90,7 @@ select:focus-visible,
   color: #ded7c3;
   border: 1px solid #ad8f5f;
   border-radius: 3px;
-  background:
-    radial-gradient(ellipse at 0 0, #5e5b3e24, transparent 55%),
-    radial-gradient(ellipse at 100% 100%, #4a535122, transparent 65%),
-    repeating-linear-gradient(112deg, #d9ca9e02 0 1px, transparent 1px 5px), #151e24;
+  background: linear-gradient(135deg, var(--ui-slate), var(--ui-violet));
   box-shadow:
     0 0 0 3px #080e13,
     0 0 0 4px #736144b3,
@@ -101,24 +103,14 @@ select:focus-visible,
   content: '';
   position: absolute;
   z-index: 2;
-  inset: 7px;
+  inset: 0;
   pointer-events: none;
-  background:
-    linear-gradient(#bc9c65, #bc9c65) left top / 19px 1px no-repeat,
-    linear-gradient(#bc9c65, #bc9c65) left top / 1px 19px no-repeat,
-    linear-gradient(#bc9c65, #bc9c65) right top / 19px 1px no-repeat,
-    linear-gradient(#bc9c65, #bc9c65) right top / 1px 19px no-repeat,
-    linear-gradient(#bc9c65, #bc9c65) left bottom / 19px 1px no-repeat,
-    linear-gradient(#bc9c65, #bc9c65) left bottom / 1px 19px no-repeat,
-    linear-gradient(#bc9c65, #bc9c65) right bottom / 19px 1px no-repeat,
-    linear-gradient(#bc9c65, #bc9c65) right bottom / 1px 19px no-repeat;
-  opacity: 0.7;
+  border: 1px solid transparent;
+  border-image: var(--watch-frame);
 }
 .app .modal-header {
   padding: 25px 30px 21px;
-  background:
-    radial-gradient(ellipse at 50% 0, #bba16e12, transparent 70%),
-    linear-gradient(#10191ee6, #141d23b3);
+  background: linear-gradient(90deg, #22333a, #222b34 64%, #302e3a);
   border-bottom: 1px solid #9c825966;
   box-shadow: 0 1px #0006;
 }
@@ -201,7 +193,7 @@ select:focus-visible,
 .app .enter-button {
   border-color: #ceb078b3;
   color: #eee0b9;
-  background: linear-gradient(115deg, #6a5938, #4d4a36 50%, #36443a);
+  background: linear-gradient(#665737 0 13%, #4d4431 13% 83%, #352e29 83%);
   text-shadow: 0 1px 3px #000;
 }
 .app .ghost-button {
@@ -719,4 +711,87 @@ select:focus-visible,
   .app.orientation-portrait .combat-screen {
     max-width: 100%;
   }
+}
+
+/* The camp, paper doll and combat controls use the same brass corner castings. */
+.app .hall-depart,
+.app .expedition-destination,
+.app .traveler-profile,
+.app .hall-wallet,
+.app .skill-cast,
+.app .paperdoll-slot,
+.app .gold-button,
+.app .enter-button {
+  border: 1px solid var(--line);
+  border-image: var(--watch-frame);
+  border-radius: 0;
+}
+.app .traveler-profile,
+.app .hall-wallet,
+.app .expedition-destination {
+  background: linear-gradient(105deg, #15252bec, #211e2bea);
+}
+.app .hall-depart {
+  background: linear-gradient(90deg, #3b3b32, #555035 46%, #303431);
+}
+.app .hall-depart:hover:not(:disabled),
+.app .gold-button:hover:not(:disabled),
+.app .enter-button:hover:not(:disabled) {
+  background: linear-gradient(90deg, #514c38, #75613e 55%, #444536);
+  color: #fff0cb;
+}
+.app .paperdoll-slot,
+.app .item-card {
+  background: linear-gradient(145deg, var(--ui-slate), #151a26 65%, var(--ui-violet));
+}
+.app .item-card {
+  border-radius: 0;
+  box-shadow:
+    inset 0 -2px var(--rarity),
+    inset 1px 1px #d7c99823;
+}
+.app .item-card.selected,
+.app .paperdoll-slot:focus-visible {
+  outline: 2px solid #d9bf85;
+  outline-offset: -3px;
+}
+.app .combat-bottom {
+  border-top: 2px solid #746345;
+  box-shadow: inset 0 1px #132026;
+}
+.app .skill-illustration img,
+.app .traveler-avatar img {
+  image-rendering: pixelated;
+}
+
+.watch-item-icon {
+  display: inline-block;
+  position: relative;
+  flex: 0 0 auto;
+  overflow: hidden;
+  vertical-align: middle;
+}
+.watch-item-icon > img {
+  position: absolute;
+  max-width: none;
+  max-height: none;
+  image-rendering: pixelated;
+  pointer-events: none;
+}
+.app .hall-depart,
+.app .gold-button,
+.app .enter-button {
+  border-image: url('./art/brass-button.png') 9 fill / 9px stretch;
+  color: #fff2cf;
+  text-shadow:
+    1px 1px #362718,
+    -1px -1px #67461d;
+}
+.app .outline-button,
+.app .modal-close,
+.app .combat-tools .icon-button {
+  border-image: url('./art/iron-button.png') 9 fill / 8px stretch;
+}
+.app :is(.hall-depart, .gold-button, .enter-button, .outline-button):hover:not(:disabled) {
+  filter: brightness(1.12);
 }

@@ -12,6 +12,7 @@ export async function preloadSkillTextures(ids: string[]): Promise<void> {
       Object.entries(CAST_ART)
         .filter(([, frame]) => frame.src === src)
         .map(([id, f]) => [id, f.column, f.row]),
+      'nearest',
     ),
   );
   sheets.push(
@@ -20,12 +21,14 @@ export async function preloadSkillTextures(ids: string[]): Promise<void> {
       4,
       2,
       GROUND_CELLS.map((id, i) => [`fx:${id}`, i % 4, Math.floor(i / 4)]),
+      'nearest',
     ),
     preloadAtlas(
       './assets/skills/effects.webp',
       4,
       3,
       EFFECT_CELLS.map((id, i) => [`fx:${id}`, i % 4, Math.floor(i / 4)]),
+      'nearest',
     ),
   );
   await Promise.all(sheets);

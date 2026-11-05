@@ -34,6 +34,7 @@
     "@types/react-dom": "^19.2.0",
     "@vitejs/plugin-react": "^5.0.0",
     "prettier": "^3.9.10",
+    "sharp": "^0.35.5",
     "tailwindcss": "^4.1.0",
     "terser": "^5.51.2",
     "typescript": "~5.9.3",

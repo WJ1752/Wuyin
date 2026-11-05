@@ -10,6 +10,8 @@ import { SETS } from '../src/data/sets';
 import { generateLoot } from '../src/engine/LootGenerator';
 import {
   getItemVisual,
+  EQUIPMENT_DROP_CATALOG,
+  EQUIPMENT_ATLAS,
   getSkillSvg,
   LEGENDARY_VISUALS,
   ORDINARY_VISUALS,
@@ -17,11 +19,22 @@ import {
   SKILL_VISUALS,
   type AssetVisual,
 } from '../src/data/visuals';
+import sharp from 'sharp';
 
 // Ignore color and identity when checking uniqueness: recolored copies do not
 // meet the requirement for individually recognizable equipment and skills.
 const geometry = (visual: AssetVisual) =>
   JSON.stringify(visual.layers.map(({ path, transform }) => ({ path, transform })));
+
+test('equipment drop atlas matches the stable visual catalog', async () => {
+  assert.equal(EQUIPMENT_DROP_CATALOG.length, 221);
+  const metadata = await sharp(
+    readFileSync(new URL('../public/assets/maps/equipment-drops.webp', import.meta.url)),
+  ).metadata();
+  assert.equal(metadata.format, 'webp');
+  assert.equal(metadata.width, EQUIPMENT_ATLAS.columns * EQUIPMENT_ATLAS.cell);
+  assert.equal(metadata.height, EQUIPMENT_ATLAS.rows * EQUIPMENT_ATLAS.cell);
+});
 
 test('all seven hall residents resolve to distinct cells of a bundled high resolution RGBA atlas', () => {
   assert.deepEqual(Object.keys(NPC_ART).sort(), HALL_NPCS.map((npc) => npc.id).sort());

@@ -4,7 +4,8 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type { CoopFrame, CoopInput } from '../src/core/coop';
 import type { CoopRoom, CoopRoomMember } from '../src/core/coopRoom';
 import type { AccountData, CombatSnapshot, RunResult } from '../src/core/types';
-import { RARITY_COLORS } from '../src/core/types';
+import { RARITY_COLORS, SLOTS } from '../src/core/types';
+import { EQUIPMENT_DROP_INDEX } from '../src/data/visuals';
 import { createCombatConfig } from '../src/state/gameStore';
 import { newSave, validateSave } from '../src/state/saveData';
 import { SKILLS } from '../src/data/skillTrees';
@@ -287,6 +288,9 @@ function validFrame(value: unknown, room: Room): value is CoopFrame {
         position(orb.y) &&
         (orb.rarity === undefined ||
           (typeof orb.rarity === 'string' && Object.hasOwn(RARITY_COLORS, orb.rarity))) &&
+        (orb.slot === undefined || SLOTS.includes(orb.slot as (typeof SLOTS)[number])) &&
+        (orb.appearanceKey === undefined ||
+          (typeof orb.appearanceKey === 'string' && EQUIPMENT_DROP_INDEX.has(orb.appearanceKey))) &&
         ['health', 'progress', 'gold', 'item'].includes(String(orb.kind)),
     ) ||
     !array(
