@@ -1,0 +1,32 @@
+.floating-joystick {
+  position: fixed;
+  z-index: 1200;
+  width: 76px;
+  height: 76px;
+  box-sizing: border-box;
+  border: 2px solid #e6d29a80;
+  border-radius: 50%;
+  background: #e9ddb018;
+  box-shadow:
+    inset 0 0 0 1px #111b1b80,
+    0 2px 12px #0006;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  touch-action: none;
+}
+.floating-joystick-thumb {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: #e7d29a;
+  border: 2px solid #fff0c9;
+  box-shadow:
+    0 2px 8px #0008,
+    inset 0 0 0 2px #987a45;
+  transform-origin: center;
+  pointer-events: none;
+  margin: -14px;
+}

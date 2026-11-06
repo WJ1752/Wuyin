@@ -1,0 +1,292 @@
+.camp-floating-hud {
+  position: fixed;
+  z-index: 120;
+  inset: 0;
+  pointer-events: none;
+  color: #f0dfb9;
+  font-family: var(--ui-sans, system-ui, sans-serif);
+}
+
+.camp-floating-hud button {
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  touch-action: manipulation;
+  pointer-events: auto;
+}
+
+.camp-floating-hud button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.camp-hud-topbar {
+  position: absolute;
+  top: env(safe-area-inset-top);
+  left: 0;
+  right: 0;
+  display: flex;
+  height: 56px;
+  align-items: center;
+  gap: 8px;
+  padding: 5px max(8px, env(safe-area-inset-right)) 5px max(8px, env(safe-area-inset-left));
+  background: linear-gradient(180deg, #071116d9, #07111686 78%, transparent);
+}
+
+.camp-hud-traveler {
+  display: flex;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 44px;
+  align-items: center;
+  gap: 8px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  text-align: left;
+}
+
+.camp-hud-traveler > img {
+  flex: 0 0 40px;
+  width: 40px;
+  height: 40px;
+  object-fit: contain;
+  image-rendering: pixelated;
+  border: 1px solid #c3a66b;
+  background: #111e20ad;
+}
+
+.camp-hud-traveler > span {
+  display: grid;
+  min-width: 0;
+  gap: 1px;
+}
+
+.camp-hud-traveler strong {
+  overflow: hidden;
+  color: #f1e2be;
+  font: 15px var(--serif, Georgia, serif);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.camp-hud-traveler small {
+  color: #c3b998;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.camp-hud-top-actions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 6px;
+}
+
+.camp-hud-resource-anchor {
+  position: relative;
+}
+
+.camp-hud-button {
+  display: grid;
+  width: 44px;
+  height: 44px;
+  place-items: center;
+  padding: 0;
+  border: 1px solid #d1b575;
+  background: #172321e8;
+  color: #e5cd92;
+}
+
+.camp-hud-resource-popover {
+  position: absolute;
+  top: 50px;
+  right: 0;
+  display: grid;
+  min-width: 156px;
+  gap: 4px;
+  padding: 8px;
+  border: 1px solid #c7a96b;
+  background: #10191af5;
+  box-shadow: 0 8px 24px #0009;
+  pointer-events: auto;
+}
+
+.camp-hud-resource-popover > span {
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr) auto;
+  min-height: 32px;
+  align-items: center;
+  gap: 7px;
+  color: #ddc891;
+}
+
+.camp-hud-resource-popover > span:nth-child(2) {
+  color: #d0b1e5;
+}
+
+.camp-hud-resource-popover > span:nth-child(3) {
+  color: #a4d2ce;
+}
+
+.camp-hud-resource-popover b {
+  overflow: hidden;
+  color: #f1e3bf;
+  font: 13px var(--ui-mono, monospace);
+  text-overflow: ellipsis;
+}
+
+.camp-hud-resource-popover small {
+  color: #b6b19e;
+  font-size: 11px;
+}
+
+.camp-hud-lab-exit {
+  position: absolute;
+  top: calc(56px + env(safe-area-inset-top));
+  left: max(8px, env(safe-area-inset-left));
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0 10px;
+  border: 1px solid #d2b577;
+  background: #111b1dda;
+  color: #e4cf9d;
+  font-size: 12px !important;
+}
+
+.camp-hud-bottom {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  width: min(100%, 560px);
+  min-height: calc(64px + env(safe-area-inset-bottom));
+  align-items: center;
+  margin-inline: auto;
+  padding: 4px max(4px, env(safe-area-inset-right)) env(safe-area-inset-bottom)
+    max(4px, env(safe-area-inset-left));
+  border-top: 1px solid #b69a5a85;
+  background: linear-gradient(0deg, #081116f0, #0b1718d9 70%, #0b171899);
+  pointer-events: auto;
+}
+
+.camp-hud-bottom > button {
+  display: flex;
+  grid-column: span 1;
+  min-width: 0;
+  min-height: 52px;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 2px;
+  border: 0;
+  background: transparent;
+  color: #ead9ae;
+}
+
+.camp-hud-bottom > button:nth-child(3) {
+  grid-column: span 2;
+}
+
+.camp-hud-bottom > button:not(.camp-hud-depart) {
+  border-inline: 1px solid #b89c5824;
+}
+
+.camp-hud-bottom > button > svg {
+  width: 24px;
+  height: 24px;
+}
+
+.camp-hud-bottom > button > span {
+  max-width: 100%;
+  overflow: hidden;
+  font: 13px var(--serif, Georgia, serif);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.camp-hud-bottom .camp-hud-depart {
+  display: flex;
+  min-height: 52px;
+  flex-direction: row;
+  gap: 7px;
+  padding: 4px 8px;
+  border: 1px solid #f0d592;
+  background: linear-gradient(110deg, #d7bf82, #94784b);
+  color: #18201d;
+}
+
+.camp-hud-depart > span {
+  display: flex;
+  align-items: baseline;
+  gap: 5px;
+  font: 15px var(--serif, Georgia, serif) !important;
+}
+
+.camp-hud-depart small {
+  font: 11px var(--ui-mono, monospace);
+  white-space: nowrap;
+}
+
+@media (max-width: 360px) {
+  .camp-hud-traveler {
+    gap: 6px;
+  }
+
+  .camp-hud-traveler > img {
+    flex-basis: 36px;
+    width: 36px;
+    height: 36px;
+  }
+
+  .camp-hud-traveler strong {
+    font-size: 14px;
+  }
+
+  .camp-hud-button {
+    width: 44px;
+    height: 44px;
+  }
+
+  .camp-hud-top-actions {
+    gap: 4px;
+  }
+
+  .camp-hud-bottom > button > span {
+    font-size: 12px;
+  }
+
+  .camp-hud-depart > span {
+    gap: 3px;
+    font-size: 14px !important;
+  }
+
+  .camp-hud-depart small {
+    font-size: 10px;
+  }
+}
+
+@media (min-width: 761px) {
+  .camp-hud-topbar {
+    top: 10px;
+    left: 10px;
+    right: 10px;
+    width: min(560px, calc(100% - 20px));
+    margin-inline: auto;
+    padding-inline: 8px;
+    border: 1px solid #b59a5a3d;
+    background: linear-gradient(90deg, #071116e6, #071116a6 82%, transparent);
+  }
+
+  .camp-hud-bottom {
+    bottom: 12px;
+    border: 1px solid #b69a5a85;
+  }
+
+  .camp-hud-lab-exit {
+    top: 66px;
+    left: max(calc((100% - 560px) / 2), 10px);
+  }
+}

@@ -299,8 +299,8 @@
   filter: saturate(0.82) drop-shadow(1px 2px 0 #101d26);
 }
 .hall-character {
-  --sprite-width: 66px;
-  --sprite-height: 66px;
+  --sprite-width: 88px;
+  --sprite-height: 88px;
 }
 .hall-map .hall-npc {
   --sprite-width: 68px;
@@ -315,7 +315,7 @@
   height: 200%;
   max-width: none;
   object-fit: fill;
-  image-rendering: auto;
+  image-rendering: pixelated;
 }
 .hall-character .hall-sprite img {
   position: absolute;

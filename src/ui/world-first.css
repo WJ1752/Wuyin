@@ -1,0 +1,480 @@
+/* The world is the main screen. Panels appear only after an explicit action. */
+.app .game-hall .npc-hall {
+  inset: 0;
+  height: 100%;
+}
+.app .hall-map .hall-character {
+  --sprite-width: var(--hall-character-size, 88px);
+  --sprite-height: var(--hall-character-size, 88px);
+}
+.app .hall-map .hall-npc {
+  --sprite-width: var(--hall-npc-size, 68px);
+  --sprite-height: var(--hall-npc-size, 68px);
+}
+.app .hall-map .hall-actor {
+  width: var(--sprite-width);
+  height: var(--sprite-height);
+}
+.app .hall-map .hall-nameplate {
+  font-size: calc(12px * var(--hall-label-factor, 1));
+}
+.app .hall-map .hall-actor-name {
+  font-size: calc(12px * var(--hall-label-factor, 1));
+}
+.app .hall-map .hall-portal-label {
+  font-size: calc(13px * var(--hall-label-factor, 1));
+}
+.app.layout-compact .combat-screen {
+  width: 100%;
+  max-width: none;
+  height: var(--app-height, 100dvh);
+  margin: 0;
+  border: 0;
+}
+.app .hall-npc:not(.selected):not(.in-reach) .hall-nameplate {
+  opacity: 0;
+}
+.app .hall-npc:hover .hall-nameplate,
+.app .hall-npc:focus-visible .hall-nameplate {
+  opacity: 1;
+}
+.app .game-hall::after,
+.app .hall-header,
+.app .hall-network-note,
+.app .hall-dialogue,
+.app .hall-lab-status {
+  display: none;
+}
+.app .hall-visitors {
+  top: 66px;
+  right: 12px;
+  max-width: 160px;
+}
+.app .npc-hall .hall-touch-controls .hall-interact {
+  bottom: calc(86px + env(safe-area-inset-bottom));
+  min-height: 44px;
+  padding: 6px 12px;
+  max-width: min(250px, calc(100% - 160px));
+  gap: 6px;
+}
+.app .hall-touch-controls .hall-interact small {
+  display: none;
+}
+.app .camp-hud-bottom {
+  border: 0;
+  background: linear-gradient(0deg, #07111dd9, #0a1a2588 68%, transparent);
+}
+.app .camp-hud-bottom .camp-hud-depart {
+  border: 8px solid transparent;
+  border-image: url('/assets/ui/pixel-primary.webp') 64 90 fill / 10px stretch;
+  background: transparent;
+  color: #f5dc9b;
+  padding: 4px 8px;
+}
+.app .camp-hud-depart > span {
+  flex-direction: column;
+  align-items: center;
+  gap: 0;
+  line-height: 18px !important;
+  overflow: visible;
+}
+.app .camp-hud-depart > svg {
+  flex-shrink: 0;
+}
+.app .camp-hud-bottom > button:not(.camp-hud-depart) {
+  border: 0;
+}
+.app .camp-hud-bottom .pixel-ui-icon {
+  width: 24px !important;
+  height: 24px !important;
+}
+.app .camp-hud-topbar {
+  background: linear-gradient(#07111dbb, #07111d55 70%, transparent);
+}
+.app .camp-hud-traveler {
+  flex: 0 1 auto;
+  min-width: 0;
+  margin-right: auto;
+}
+.app .camp-hud-button {
+  background: #10253699;
+  border: 1px solid #8da49b77;
+}
+.app .camp-hud-traveler > img {
+  border: 0;
+  background: transparent;
+}
+.app .toast {
+  bottom: calc(88px + env(safe-area-inset-bottom));
+  max-width: min(430px, calc(100% - 28px));
+  background: #0c1d2ddd;
+  padding: 8px 12px;
+  font-size: 13px;
+}
+.app .toast > span {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.app .combat-screen {
+  width: 100%;
+  max-width: none;
+  height: var(--app-height, 100dvh);
+  margin: 0;
+  border: 0;
+}
+.app.layout-desktop.orientation-portrait .combat-screen {
+  width: 100%;
+  max-width: none;
+  box-shadow: none;
+}
+.app .combat-screen .combat-top {
+  height: 54px;
+  padding: 6px 10px;
+  gap: 10px;
+  border: 0;
+  background: linear-gradient(#07111dde, #07111d70 80%, transparent);
+}
+.app .combat-screen .combat-top .icon-button {
+  width: 40px;
+  height: 40px;
+  min-width: 40px;
+  min-height: 40px;
+  padding: 9px;
+  border-width: 1px;
+  background: #10253688;
+}
+.app .combat-screen .rift-progress {
+  min-width: 0;
+  flex: 1;
+}
+.app .combat-screen .rift-progress > div:first-child {
+  font-size: 13px;
+  gap: 8px;
+}
+.app .combat-screen .progress-track {
+  height: 4px;
+  margin: 4px 0;
+  border: 0;
+  border-radius: 0;
+}
+.app .combat-screen .rift-progress small {
+  display: none;
+}
+.app .combat-screen .combat-vitals {
+  position: absolute;
+  top: 56px;
+  left: 12px;
+  z-index: 7;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  width: min(460px, calc(100% - 24px));
+  gap: 8px;
+}
+.app .combat-screen .combat-vitals > div {
+  position: relative;
+  height: 23px;
+  padding: 1px 5px 4px;
+  border: 0;
+  background: #081724aa;
+  overflow: hidden;
+}
+.app .combat-screen .combat-vitals span {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 11px;
+  line-height: 16px;
+  color: #ede7d2;
+}
+.app .combat-screen .combat-vitals b {
+  font-size: 11px;
+}
+.app .combat-screen .combat-vitals i {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  height: 3px;
+  background: #b55067;
+}
+.app .combat-screen .combat-vitals .vital-energy i {
+  background: #3f9bae;
+}
+.app .combat-screen .combat-bottom {
+  position: absolute;
+  inset: auto auto max(6px, env(safe-area-inset-bottom)) 50%;
+  transform: translateX(-50%);
+  display: block;
+  width: max-content;
+  max-width: calc(100% - 16px);
+  height: auto;
+  padding: 4px;
+  border: 0;
+  background: linear-gradient(transparent, #07131c8c);
+  box-shadow: none;
+  z-index: 8;
+}
+.app .combat-screen .combat-bottom .resource-orb,
+.app .combat-screen .combat-skill .auto-toggle,
+.app .combat-screen .unlearned-skill {
+  display: none;
+}
+.app .combat-screen .combat-bottom .skills-bar {
+  display: grid;
+  grid-template-columns: repeat(var(--skill-count), minmax(0, 60px));
+  width: auto;
+  min-width: 0;
+  height: auto;
+  gap: 4px;
+  padding: 0;
+  margin: 0;
+  justify-content: center;
+}
+.app .combat-screen .combat-skill {
+  position: relative;
+  display: grid;
+  grid-template-rows: 54px 17px;
+  gap: 1px;
+  width: 60px;
+  max-width: 100%;
+  min-width: 0;
+}
+.app .combat-screen .combat-skill .skill-cast {
+  width: 100%;
+  height: 54px;
+  min-height: 44px;
+  min-width: 0;
+  padding: 5px;
+  background-size: 100% 100%;
+}
+.app .combat-screen .combat-skill .skill-name {
+  margin: 0;
+  min-height: 0;
+  font-size: 11px;
+  line-height: 17px;
+  text-align: center;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.skill-mode {
+  position: absolute;
+  right: 4px;
+  top: 3px;
+  padding: 0 2px;
+  font: 9px/13px sans-serif;
+  color: #c9e7cf;
+  background: #09131ed9;
+}
+.app .combat-screen .keybind {
+  left: 4px;
+  bottom: 3px;
+  top: auto;
+  right: auto;
+  min-width: 12px;
+  font-size: 10px;
+}
+.app .combat-screen .combat-tools {
+  display: none;
+}
+.app .combat-screen .buff-list {
+  top: 86px;
+  left: 12px;
+  right: 110px;
+  max-width: min(680px, calc(100% - 120px));
+  height: 20px;
+  display: flex;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  gap: 4px;
+}
+.app .combat-screen .buff-list span {
+  padding: 1px 5px;
+  font-size: 10px;
+  line-height: 16px;
+  background: #0b1d2a99;
+}
+.app .combat-screen .boss-health {
+  top: 86px;
+  left: 50%;
+  right: auto;
+  width: min(620px, calc(100% - 32px));
+  transform: translateX(-50%);
+  padding: 5px 10px;
+  border: 0;
+  background: #211c2bbd;
+}
+.app .combat-screen .boss-health > span {
+  font-size: 13px;
+}
+.app .combat-screen .boss-health > small {
+  display: none;
+}
+.app .combat-screen:has(.boss-health) .buff-list {
+  display: none;
+}
+.app .combat-screen .pylon-list {
+  top: auto;
+  right: 14px;
+  bottom: calc(98px + env(safe-area-inset-bottom));
+  width: 130px;
+}
+.app .combat-screen .pylon-list button {
+  width: 100%;
+  min-height: 44px;
+  padding: 6px;
+  font-size: 12px;
+  background: #183531c9;
+}
+.app .combat-screen .pylon-list button:not([data-in-reach='true']),
+.app .combat-screen .pylon-list button:disabled {
+  display: none;
+}
+.app .combat-screen .combat-help,
+.app .paused-layout-control,
+.app .desktop-layout-setting {
+  display: none;
+}
+.combat-auto-settings {
+  width: min(480px, 100%);
+  text-align: left;
+  border-top: 1px solid #557181;
+}
+.combat-auto-settings summary {
+  cursor: pointer;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.combat-auto-settings > div {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  padding: 6px;
+  max-height: 36vh;
+  overflow: auto;
+}
+.combat-auto-settings button {
+  display: flex;
+  justify-content: space-between;
+  padding: 8px;
+  min-height: 44px;
+  font-size: 13px;
+}
+.combat-auto-settings button span {
+  color: #89dbc4;
+}
+.combat-auto-settings button[aria-pressed='false'] span {
+  color: #edbe8b;
+}
+@media (max-width: 960px) {
+  .app .hall-visitors {
+    display: none;
+  }
+  .app .combat-screen .combat-vitals {
+    right: 10px;
+    left: 10px;
+    width: auto;
+  }
+  .app .combat-screen .combat-bottom .skills-bar {
+    grid-template-columns: repeat(var(--skill-count), minmax(0, 54px));
+  }
+  .app .combat-screen .combat-skill {
+    width: 54px;
+  }
+  .app .combat-screen .combat-skill .keybind {
+    display: none;
+  }
+  .app .combat-screen .boss-health {
+    top: 84px;
+    width: calc(100% - 24px);
+  }
+  .app .combat-screen .coop-team-hud {
+    top: 84px;
+    left: 8px;
+    right: 8px;
+    display: flex;
+    gap: 4px;
+  }
+  .app .combat-screen .coop-team-hud > div {
+    flex: 1;
+    min-width: 0;
+    padding: 3px;
+    background: #112536bb;
+  }
+  .app .combat-screen .coop-team-hud strong {
+    font-size: 10px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .app .coop-combat .boss-health {
+    top: 130px;
+  }
+}
+@media (max-width: 960px) and (orientation: landscape) {
+  .app .camp-hud-bottom {
+    width: min(470px, calc(100% - 200px));
+    min-height: 56px;
+  }
+  .app .camp-hud-bottom > button {
+    min-height: 48px;
+  }
+  .app .npc-hall .hall-touch-controls .hall-interact {
+    bottom: 76px;
+  }
+  .app .combat-screen .combat-top {
+    right: 120px;
+  }
+  .app .combat-screen .combat-vitals {
+    right: 130px;
+  }
+  .app .combat-screen .combat-bottom {
+    inset: 0 0 0 auto;
+    transform: none;
+    width: 120px;
+    max-width: 120px;
+    height: 100%;
+    padding: 8px 4px;
+    display: flex;
+    align-items: center;
+    border: 0;
+    background: linear-gradient(90deg, transparent, #08162588 35%, #081625c9);
+  }
+  .app .combat-screen .combat-bottom .skills-bar {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    width: 100%;
+    gap: 6px;
+  }
+  .app .combat-screen .combat-skill {
+    width: 100%;
+    grid-template-rows: 50px 16px;
+  }
+  .app .combat-screen .combat-skill .skill-cast {
+    height: 50px;
+  }
+  .app .combat-screen .boss-health {
+    left: 14px;
+    right: 132px;
+    width: auto;
+    transform: none;
+  }
+  .app .combat-screen .buff-list {
+    right: 130px;
+  }
+  .app .combat-screen .pylon-list {
+    right: 134px;
+    bottom: 18px;
+  }
+}
+@media (max-width: 370px) and (orientation: portrait) {
+  .app .combat-screen .combat-bottom .skills-bar {
+    grid-template-columns: repeat(var(--skill-count), minmax(0, 48px));
+    gap: 3px;
+  }
+  .app .combat-screen .combat-skill {
+    width: 48px;
+  }
+}

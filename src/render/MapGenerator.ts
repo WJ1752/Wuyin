@@ -44,7 +44,7 @@ const groundId = (theme: number, material: number) => `ground:${theme}:${materia
 
 export function preloadMapTextures(theme: number) {
   return preloadAtlas(
-    `assets/maps/${groundSheets[theme]}-floors.webp`,
+    `assets/maps/hd/${groundSheets[theme]}-floors.webp`,
     3,
     1,
     [0, 1, 2].map((material) => [groundId(theme, material), material, 0]),

@@ -5,11 +5,11 @@ import { preloadAtlas } from './TextureAtlas';
 
 /** Shared by the town portrait, inventory preview and combat rig. */
 export const CHARACTER_ART: Record<ClassId, { src: string; anchorX: number; ground: number }> = {
-  ranger: { src: './assets/characters/ranger.png', anchorX: 0.46, ground: 83 / 88 },
-  barbarian: { src: './assets/characters/barbarian.png', anchorX: 0.47, ground: 83 / 88 },
-  sorcerer: { src: './assets/characters/sorcerer.png', anchorX: 0.49, ground: 83 / 88 },
-  necromancer: { src: './assets/characters/necromancer.png', anchorX: 0.43, ground: 83 / 88 },
-  druid: { src: './assets/characters/druid.png', anchorX: 0.5, ground: 83 / 88 },
+  ranger: { src: './assets/characters/hd/ranger.webp', anchorX: 0.5, ground: 496 / 512 },
+  barbarian: { src: './assets/characters/hd/barbarian.webp', anchorX: 0.5, ground: 496 / 512 },
+  sorcerer: { src: './assets/characters/hd/sorcerer.webp', anchorX: 0.5, ground: 496 / 512 },
+  necromancer: { src: './assets/characters/hd/necromancer.webp', anchorX: 0.5, ground: 496 / 512 },
+  druid: { src: './assets/characters/hd/druid.webp', anchorX: 0.5, ground: 496 / 512 },
 };
 
 const characters = new Map<ClassId, Texture>();

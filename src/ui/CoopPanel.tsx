@@ -26,6 +26,8 @@ export function CoopPanel({
   const cloud = useCloudStore();
   const save = useGameStore((state) => state.save);
   const lab = useGameStore((state) => state.labBackup);
+  const cloudTransition = useGameStore((state) => state.cloudTransition);
+  const selectStage = useGameStore((state) => state.selectStage);
   const [room, setRoom] = useState<CoopRoom | null>(null);
   const [rewards, setRewards] = useState<CoopReward[]>([]);
   const [code, setCode] = useState('');
@@ -305,6 +307,43 @@ export function CoopPanel({
           </>
         ) : (
           <>
+            {expedition && (
+              <div className="coop-stage-picker">
+                <label htmlFor="coop-expedition-stage">挑战层数</label>
+                <div>
+                  <button
+                    type="button"
+                    aria-label="降低挑战层数"
+                    disabled={cloudTransition || !!lab || busy || save.selectedStage <= 1}
+                    onClick={() => selectStage(save.selectedStage - 1)}
+                  >
+                    −
+                  </button>
+                  <input
+                    id="coop-expedition-stage"
+                    aria-label="选择已解锁挑战层数"
+                    type="number"
+                    inputMode="numeric"
+                    min={1}
+                    max={save.highestStage}
+                    value={save.selectedStage}
+                    disabled={cloudTransition || !!lab || busy}
+                    onChange={(event) => selectStage(Number(event.target.value))}
+                  />
+                  <span>层</span>
+                  <button
+                    type="button"
+                    aria-label="提高挑战层数"
+                    disabled={
+                      cloudTransition || !!lab || busy || save.selectedStage >= save.highestStage
+                    }
+                    onClick={() => selectStage(save.selectedStage + 1)}
+                  >
+                    ＋
+                  </button>
+                </div>
+              </div>
+            )}
             {expedition && (
               <button className="coop-solo" disabled={busy} onClick={() => void leave(onSolo)}>
                 <Compass size={28} />

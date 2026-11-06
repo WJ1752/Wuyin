@@ -238,6 +238,59 @@
   letter-spacing: 0;
 }
 
+.app .coop-backdrop .coop-panel .coop-stage-picker {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  margin-top: 8px;
+  padding: 8px 12px;
+  border: 2px solid #405a70;
+  background: #0b192a;
+}
+
+.app .coop-backdrop .coop-panel .coop-stage-picker > label {
+  color: #ecd295;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.app .coop-backdrop .coop-panel .coop-stage-picker > div {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.app .coop-backdrop .coop-panel .coop-stage-picker button {
+  width: 44px;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0;
+  border: 2px solid #607c91;
+  background: #182b41;
+  color: #f1dfb0;
+  font-size: 21px;
+}
+
+.app .coop-backdrop .coop-panel .coop-stage-picker input {
+  width: 76px;
+  min-width: 64px;
+  min-height: 44px;
+  padding: 6px;
+  border: 2px solid #607c91;
+  background: #081322;
+  color: #fff1cd;
+  font-size: 16px;
+  text-align: center;
+}
+
+.app .coop-backdrop .coop-panel .coop-stage-picker input::-webkit-inner-spin-button,
+.app .coop-backdrop .coop-panel .coop-stage-picker input::-webkit-outer-spin-button {
+  margin: 0;
+  appearance: none;
+}
+
 @media (max-width: 600px) {
   .app .coop-backdrop .coop-panel.coop-panel {
     width: 100%;
@@ -271,6 +324,16 @@
   .app .coop-backdrop .coop-panel .coop-solo {
     gap: 10px;
     padding: 10px 8px;
+  }
+
+  .app .coop-backdrop .coop-panel .coop-stage-picker {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 6px;
+    margin-top: 0;
+  }
+
+  .app .coop-backdrop .coop-panel .coop-stage-picker > div {
+    justify-content: space-between;
   }
 
   .app .coop-backdrop .coop-panel .coop-solo > svg {

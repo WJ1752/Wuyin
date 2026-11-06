@@ -10,7 +10,7 @@ export function useDialog(open: boolean, onClose: () => void) {
     const previous = document.activeElement as HTMLElement | null;
     const overflow = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
-    ref.current?.focus();
+    ref.current?.focus({ preventScroll: true });
     const key = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
         event.preventDefault();
@@ -47,7 +47,7 @@ export function useDialog(open: boolean, onClose: () => void) {
     return () => {
       document.removeEventListener('keydown', key, true);
       document.body.style.overflow = overflow;
-      if (previous?.isConnected) previous.focus();
+      if (previous?.isConnected) previous.focus({ preventScroll: true });
     };
   }, [open]);
   return ref;

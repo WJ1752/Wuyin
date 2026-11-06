@@ -22,7 +22,6 @@ import { SKILLS } from './data/skillTrees';
 import { useGameStore, createCombatConfig, emptySlotItems } from './state/gameStore';
 import { useCloudStore } from './state/cloudStore';
 import { SystemsModal } from './ui/SystemsModal';
-import { TownHud } from './ui/TownHud';
 import { NpcHall } from './ui/NpcHall';
 import { VirtualJoystick } from './ui/VirtualJoystick';
 import { ItemIcon, SkillIcon } from './ui/AssetIcon';
@@ -49,12 +48,17 @@ import { TrialPanel } from './ui/TrialPanel';
 import { reportClientEvent } from './state/telemetry';
 import { CharacterCreation } from './ui/CharacterCreation';
 import { StoryGuide } from './ui/StoryGuide';
+import { MobileCamp } from './ui/MobileCamp';
+import { useCompactLayout } from './ui/useCompactLayout';
 import './styles.css';
 import './ui/town-hud.css';
 import './ui/game-theme.css';
 import './ui/pixel-fantasy.css';
+import './ui/responsive-layout.css';
+import './ui/world-first.css';
 
 function App() {
+  const compact = useCompactLayout();
   const {
     save,
     ready,
@@ -235,7 +239,7 @@ function App() {
   if (save.characterCreated === false && !labBackup)
     return (
       <div
-        className="app character-entry"
+        className={`app character-entry ${compact ? 'layout-compact' : 'layout-desktop'}`}
         style={{ '--font-scale': preferences.fontScale } as CSSProperties}
       >
         <CharacterCreation
@@ -270,19 +274,14 @@ function App() {
   const visibleStory = storyReview ?? automaticStory;
   return (
     <div
-      className={`app ${config ? 'in-combat' : 'in-town'} orientation-${save.orientation}`}
+      className={`app ${compact ? 'layout-compact' : 'layout-desktop'} ${config ? 'in-combat' : 'in-town'} orientation-${save.orientation}`}
       style={{ '--font-scale': preferences.fontScale } as CSSProperties}
       data-color-assist={preferences.colorAssist}
     >
       {!config && (
-        <main className="game-hall" aria-label="游戏大厅">
-          <NpcHall onNavigate={open} active={!panel && !showGuide} />
-          <TownHud
-            onNavigate={open}
-            onGuide={() => setShowGuide(true)}
-            onTrain={() => enter(true)}
-            onSolo={() => enter()}
-          />
+        <main className="game-hall" aria-label="守望者营地">
+          <NpcHall onNavigate={open} active={!panel && !showGuide && !visibleStory} />
+          <MobileCamp onNavigate={open} onGuide={() => setShowGuide(true)} />
         </main>
       )}
       {config && <CombatView config={config} coop={coop} onLeave={leave} onFinish={finish} />}
@@ -906,6 +905,9 @@ function CombatView({
                   <span className="skill-symbol">
                     <SkillIcon skillId={s.id} size={38} />
                   </span>
+                  <span className="skill-mode" aria-hidden="true">
+                    {automatic ? '自' : '手'}
+                  </span>
                   {cd > 0 && <span className="cooldown-overlay">{cd.toFixed(1)}</span>}
                   {!cd && lacksResource && (
                     <span className="cooldown-overlay resource-warning">缺能</span>
@@ -918,19 +920,6 @@ function CombatView({
               </div>
             );
           })}
-          {Array.from({ length: Math.max(0, 6 - skills.length) }, (_, i) => (
-            <div
-              className="combat-skill unlearned-skill"
-              key={`unlearned-${i}`}
-              title="升级后在营地技能之书学习，学习后加入战斗栏"
-            >
-              <span className="auto-toggle">未学习</span>
-              <span className="skill-cast">
-                <BookOpen size={28} />
-              </span>
-              <span className="skill-name">营地学习</span>
-            </div>
-          ))}
         </div>
         <div className="resource-orb energy-orb">
           <div
@@ -948,7 +937,6 @@ function CombatView({
       </div>
       <VirtualJoystick
         disabled={!snapshot || snapshot.paused || snapshot.finished || leaveDialog}
-        onMove={(x, y) => engine.current?.setMovement(x, y)}
       />
       <div className="combat-help">
         {(['up', 'left', 'down', 'right'] as InputAction[])
@@ -997,6 +985,22 @@ function CombatView({
             </div>
           )}
           {snapshot.stats && <CombatReport stats={snapshot.stats} />}
+          <details className="combat-auto-settings">
+            <summary>自动施法设置</summary>
+            <div>
+              {skills.map((skill) => (
+                <button
+                  key={skill.id}
+                  className="ghost-button"
+                  aria-pressed={isSkillAutoEnabled(auto, skill)}
+                  onClick={() => toggleAuto(skill.id)}
+                >
+                  {skill.name}
+                  <span>{isSkillAutoEnabled(auto, skill) ? '自动' : '手动'}</span>
+                </button>
+              ))}
+            </div>
+          </details>
           <button className="gold-button" onClick={() => engine.current?.togglePause()}>
             继续征途 <Play size={16} />
           </button>

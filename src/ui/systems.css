@@ -2524,3 +2524,265 @@
     padding-block: 5px;
   }
 }
+
+/* Mobile-first equipment and skill layouts stay isolated from legacy panel rules. */
+.mobile-character-summary {
+  display: none;
+}
+
+.mobile-character-dossier > summary,
+.mobile-skill-close {
+  display: none;
+}
+
+.mobile-skill-toolbar {
+  display: contents;
+}
+
+@media (max-width: 960px) {
+  .app .system-screen.panel-character .system-columns {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  .app .system-screen.panel-character .system-columns > section:first-child {
+    display: contents;
+    width: 100%;
+    max-width: none;
+    margin: 0;
+  }
+
+  .app .system-screen.panel-character .mobile-character-summary {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    min-width: 0;
+    padding: 12px;
+    border: 2px solid #405a70;
+    background: #101f32;
+  }
+
+  .mobile-character-summary .character-rig-preview {
+    flex: 0 0 76px;
+    width: 76px;
+    height: 96px;
+    overflow: hidden;
+  }
+
+  .mobile-character-summary > div {
+    display: grid;
+    min-width: 0;
+    gap: 5px;
+  }
+
+  .mobile-character-summary strong {
+    color: #f0d89e;
+    font-size: 16px;
+  }
+
+  .mobile-character-summary span,
+  .mobile-character-summary small {
+    overflow-wrap: anywhere;
+    line-height: 1.5;
+  }
+
+  .app .system-screen.panel-character .mobile-character-dossier {
+    order: 1;
+    min-width: 0;
+  }
+
+  .app .system-screen.panel-character .mobile-character-dossier > summary {
+    display: flex;
+    align-items: center;
+    min-height: 48px;
+    padding: 10px 12px;
+    border: 2px solid #405a70;
+    color: #ecd295;
+    background: #101f32;
+    cursor: pointer;
+  }
+
+  .app .system-screen.panel-character .mobile-character-dossier[open] > summary {
+    margin-bottom: 10px;
+  }
+
+  .app .system-screen.panel-character .character-dossier {
+    min-height: 0;
+    padding: 12px;
+    border-radius: 0;
+  }
+
+  .app .system-screen.panel-character .dossier-emblem {
+    top: 126px;
+  }
+
+  .app .system-screen.panel-character .mobile-character-dossier .wide {
+    width: 100%;
+    margin-top: 10px;
+  }
+
+  .app .system-screen.panel-character .stats-grid {
+    margin-top: 10px;
+  }
+
+  .app .system-screen.panel-character .system-columns > section:last-child {
+    order: 2;
+    width: 100%;
+    min-width: 0;
+  }
+
+  .app .system-screen.panel-character .inventory-filters {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+
+  .app .system-screen.panel-character .inventory-filters > input:first-child,
+  .app .system-screen.panel-character .inventory-filters label {
+    grid-column: 1 / -1;
+  }
+
+  .app .system-screen.panel-character .inventory-filters label {
+    min-height: 44px;
+  }
+
+  .app .system-screen.panel-character .item-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .app .system-screen.panel-skills .system-content {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .mobile-skill-toolbar {
+    display: grid;
+    order: 0;
+    gap: 8px;
+    min-width: 0;
+  }
+
+  .mobile-skill-toolbar .system-toolbar {
+    flex-wrap: wrap;
+    gap: 8px;
+    margin: 0;
+  }
+
+  .mobile-skill-toolbar > .panel-tabs {
+    display: flex;
+    overflow-x: auto;
+    max-width: 100%;
+    padding-bottom: 4px;
+  }
+
+  .mobile-skill-toolbar > .system-hint {
+    display: none;
+  }
+
+  .app .system-screen.panel-skills .mobile-skill-tree {
+    order: 1;
+    min-width: 0;
+    margin: 0;
+  }
+
+  .app .system-screen.panel-skills .mobile-skill-tree .skill-learning-rules {
+    margin-bottom: 12px;
+  }
+
+  .app .system-screen.panel-skills .mobile-skill-tree .skill-tier {
+    gap: 8px;
+    margin-bottom: 14px;
+  }
+
+  .app .system-screen.panel-skills .mobile-skill-tree .skill-tier-label {
+    width: 34px;
+  }
+
+  .app .system-screen.panel-skills .mobile-skill-tree .skill-tier:before {
+    left: 38px;
+  }
+
+  .app .system-screen.panel-skills .mobile-skill-tree .skill-tier-nodes {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+    min-width: 0;
+  }
+
+  .app .system-screen.panel-skills .mobile-skill-tree .skill-node {
+    min-width: 0;
+    max-width: none;
+    padding: 10px 4px;
+    overflow-wrap: anywhere;
+    border: 2px solid #405a70;
+    background: #101f32;
+  }
+
+  .app .system-screen.panel-skills .mobile-skill-tree .skill-node .skill-symbol {
+    width: 52px;
+    height: 52px;
+    border-radius: 0;
+  }
+
+  .app .system-screen.panel-skills .mobile-skill-tree .skill-node strong,
+  .app .system-screen.panel-skills .mobile-skill-tree .skill-node small {
+    text-align: center;
+    line-height: 1.4;
+  }
+
+  .app .system-screen.panel-skills .mobile-skill-detail:not(.mobile-open) {
+    display: none;
+  }
+
+  .app .system-screen.panel-skills .mobile-skill-detail.mobile-open {
+    position: sticky;
+    order: 2;
+    bottom: 8px;
+    z-index: 4;
+    display: grid;
+    gap: 10px;
+    max-height: min(48dvh, 410px);
+    overflow: auto;
+    margin: 0;
+    padding: 14px;
+    border: 2px solid #6a8b91;
+    background: #101f32;
+    box-shadow: 0 -6px 24px #000a;
+  }
+
+  .app .system-screen.panel-skills .mobile-skill-detail .mobile-skill-close {
+    display: inline-flex;
+    justify-self: end;
+    min-height: 44px;
+  }
+
+  .app .system-screen.panel-skills .mobile-skill-detail .skill-actions {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .app .system-screen.panel-skills .mobile-skill-detail .skill-actions button {
+    width: 100%;
+  }
+}
+
+@media (min-width: 961px) {
+  .app .system-screen.panel-character .mobile-character-summary,
+  .app .system-screen.panel-character .mobile-character-dossier > summary,
+  .app .system-screen.panel-skills .mobile-skill-detail .mobile-skill-close {
+    display: none;
+  }
+}
+
+@media (max-width: 380px) {
+  .app .system-screen.panel-character .item-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 960px) and (orientation: landscape) {
+  .app .system-screen.panel-skills .mobile-skill-detail.mobile-open {
+    max-height: 58dvh;
+  }
+}

@@ -1,92 +1,84 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
-import type { PointerEvent } from 'react';
-export function VirtualJoystick({
-  onMove,
-  disabled = false,
-}: {
-  onMove: (x: number, y: number) => void;
-  disabled?: boolean;
-}) {
-  const [offset, setOffset] = useState({ x: 0, y: 0 });
-  const pointer = useRef<number | null>(null);
-  const surface = useRef<HTMLDivElement>(null);
-  const moveCallback = useRef(onMove);
-  moveCallback.current = onMove;
-  const stop = useCallback(() => {
-    const id = pointer.current;
-    pointer.current = null;
-    if (id !== null && surface.current?.hasPointerCapture(id))
-      surface.current.releasePointerCapture(id);
-    setOffset({ x: 0, y: 0 });
-    moveCallback.current(0, 0);
-  }, []);
+import { useEffect, useState } from 'react';
+import { TOUCH_DRAG_RADIUS } from '../core/pointerMovement';
+import './floating-joystick.css';
+
+interface TouchStick {
+  pointerId: number;
+  x: number;
+  y: number;
+  dx: number;
+  dy: number;
+}
+
+export function VirtualJoystick({ disabled = false }: { disabled?: boolean }) {
+  const [stick, setStick] = useState<TouchStick | null>(null);
+
   useEffect(() => {
-    if (disabled) stop();
-  }, [disabled, stop]);
-  useEffect(() => {
-    const onVisibility = () => {
-      if (document.hidden) stop();
-    };
-    window.addEventListener('blur', stop);
-    document.addEventListener('visibilitychange', onVisibility);
-    return () => {
-      window.removeEventListener('blur', stop);
-      document.removeEventListener('visibilitychange', onVisibility);
-      moveCallback.current(0, 0);
-    };
-  }, [stop]);
-  const move = (e: PointerEvent<HTMLDivElement>) => {
-    if (disabled || pointer.current !== e.pointerId) return;
-    const box = e.currentTarget.getBoundingClientRect();
-    let x = e.clientX - box.left - box.width / 2,
-      y = e.clientY - box.top - box.height / 2;
-    const length = Math.hypot(x, y),
-      radius = Math.max(1, box.width * 0.3);
-    if (length > radius) {
-      x = (x / length) * radius;
-      y = (y / length) * radius;
+    if (disabled) {
+      setStick(null);
+      return;
     }
-    setOffset({ x, y });
-    // A small resting dead zone prevents a light touch from causing continuous drift.
-    const strength = Math.min(1, length / radius);
-    const scaled = Math.max(0, (strength - 0.12) / 0.88);
-    moveCallback.current(
-      length ? (x / Math.max(1, Math.hypot(x, y))) * scaled : 0,
-      length ? (y / Math.max(1, Math.hypot(x, y))) * scaled : 0,
-    );
-  };
+    let activePointer: number | null = null;
+    const clear = () => {
+      activePointer = null;
+      setStick(null);
+    };
+    const start = (event: PointerEvent) => {
+      if (event.pointerType !== 'touch' || !event.isPrimary || activePointer !== null) return;
+      const target = event.target;
+      if (
+        !(target instanceof Element) ||
+        target.closest('button,input,select,summary,dialog,[role="dialog"]')
+      )
+        return;
+      if (!target.closest('.hall-map,.combat-canvas')) return;
+      activePointer = event.pointerId;
+      setStick({ pointerId: event.pointerId, x: event.clientX, y: event.clientY, dx: 0, dy: 0 });
+    };
+    const move = (event: PointerEvent) => {
+      if (event.pointerId !== activePointer) return;
+      setStick((current) => {
+        if (!current || current.pointerId !== event.pointerId) return current;
+        let dx = event.clientX - current.x;
+        let dy = event.clientY - current.y;
+        const distance = Math.hypot(dx, dy);
+        if (distance > TOUCH_DRAG_RADIUS) {
+          dx = (dx / distance) * TOUCH_DRAG_RADIUS;
+          dy = (dy / distance) * TOUCH_DRAG_RADIUS;
+        }
+        return { ...current, dx, dy };
+      });
+    };
+    const end = (event: PointerEvent) => {
+      if (event.pointerId === activePointer) clear();
+    };
+    const onVisibilityChange = () => {
+      if (document.visibilityState !== 'visible') clear();
+    };
+    window.addEventListener('pointerdown', start);
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', end);
+    window.addEventListener('pointercancel', end);
+    window.addEventListener('blur', clear);
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    return () => {
+      window.removeEventListener('pointerdown', start);
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', end);
+      window.removeEventListener('pointercancel', end);
+      window.removeEventListener('blur', clear);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+      activePointer = null;
+    };
+  }, [disabled]);
+
+  if (!stick) return null;
   return (
-    <div
-      ref={surface}
-      className="virtual-joystick"
-      role="group"
-      aria-label="虚拟摇杆，拖动控制移动"
-      aria-disabled={disabled}
-      onPointerDown={(e) => {
-        if (disabled || e.button !== 0 || pointer.current !== null) return;
-        pointer.current = e.pointerId;
-        e.currentTarget.setPointerCapture(e.pointerId);
-        move(e);
-      }}
-      onPointerMove={move}
-      onPointerUp={(e) => {
-        if (pointer.current === e.pointerId) stop();
-      }}
-      onPointerCancel={(e) => {
-        if (pointer.current === e.pointerId) stop();
-      }}
-      onLostPointerCapture={(e) => {
-        if (pointer.current === e.pointerId) stop();
-      }}
-    >
-      <div className="joystick-ring" />
+    <div className="floating-joystick" style={{ left: stick.x, top: stick.y }} aria-hidden="true">
       <span
-        className="joystick-thumb"
-        style={{ transform: `translate(${offset.x}px,${offset.y}px)` }}
-      >
-        ✥
-      </span>
-      <small>移动</small>
+        className="floating-joystick-thumb"
+        style={{ transform: `translate(${stick.dx}px, ${stick.dy}px)` }}
+      />
     </div>
   );
 }

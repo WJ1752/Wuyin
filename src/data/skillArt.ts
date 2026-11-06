@@ -165,7 +165,7 @@ export const CAST_ART = Object.fromEntries(
         [
           id,
           {
-            src: `./assets/skills/${classId}-casts.webp`,
+            src: `./assets/skills/hd/cast-${classId}.webp`,
             column: index % 4,
             row: Math.floor(index / 4),
           },

@@ -14,6 +14,7 @@ import {
   Sparkles,
   ArrowUp,
   ArrowDown,
+  ArrowLeft,
   Check,
   FlaskConical,
   WandSparkles,
@@ -459,6 +460,9 @@ function CharacterPanel() {
   const [search, setSearch] = useState('');
   const [usableOnly, setUsableOnly] = useState(false);
   const [showStats, setShowStats] = useState(false);
+  const [dossierOpen, setDossierOpen] = useState(
+    () => !window.matchMedia('(max-width: 960px)').matches,
+  );
   const detail = useRef<HTMLDivElement>(null);
   const selectItem = (id: string) => {
     setSelected(id);
@@ -484,90 +488,132 @@ function CharacterPanel() {
   );
   const hero = CLASSES.find((c) => c.id === save.classId)!;
   const stats = computeStats(save);
+  useEffect(() => {
+    const media = window.matchMedia('(max-width: 960px)');
+    const sync = () => setDossierOpen(!media.matches);
+    sync();
+    media.addEventListener('change', sync);
+    return () => media.removeEventListener('change', sync);
+  }, []);
   return (
     <div className="system-columns">
       <section>
-        <div className="character-dossier" style={{ '--class-color': hero.color } as CSSProperties}>
-          <div className="dossier-top">
-            <span className="eyebrow">THE WANDERER</span>
-            <span>Lv. {save.level}</span>
-          </div>
-          <div className="paperdoll-slots">
-            {SLOTS.map((slot) => (
-              <button
-                key={slot}
-                className={`paperdoll-slot ${save.equipment[slot] ? 'occupied' : ''}`}
-                style={{
-                  color: save.equipment[slot]
-                    ? RARITY_COLORS[save.equipment[slot]!.rarity]
-                    : undefined,
-                }}
-                onClick={() => selectItem(save.equipment[slot]?.id ?? '')}
-                title={SLOT_NAMES[slot]}
-              >
-                {save.equipment[slot] ? (
-                  <ItemIcon item={save.equipment[slot]!} size={34} />
-                ) : (
-                  <EquipmentIcon slot={slot} />
-                )}
-                <small>{SLOT_NAMES[slot]}</small>
-                {save.forge[slot] > 0 && <b>+{save.forge[slot]}</b>}
-              </button>
-            ))}
-          </div>
-          <div className="dossier-emblem">
-            <CharacterPreview classId={save.classId} />
-            <span className="sigil-ring" />
-          </div>
-          <h3>
-            {hero.name} <small>{hero.mainStat}</small>
-          </h3>
-          <p className="muted">{hero.title}</p>
-          <div className="dossier-numbers">
+        <div className="mobile-character-summary">
+          <CharacterPreview classId={save.classId} />
+          <div>
+            <strong>
+              {hero.name} · Lv. {save.level}
+            </strong>
             <span>
-              <Sword size={15} />
-              {formatBigNumber(stats.attack)}
-              <small>攻击</small>
+              {hero.mainStat} · {hero.title}
             </span>
-            <span>
-              <Shield size={15} />
-              {formatBigNumber(stats.armor)}
-              <small>护甲</small>
-            </span>
-            <span>
-              <CircleDot size={15} />
+            <small>
+              攻击 {formatBigNumber(stats.attack)} · 护甲 {formatBigNumber(stats.armor)} · 生命{' '}
               {formatBigNumber(stats.hp)}
-              <small>生命</small>
-            </span>
+            </small>
           </div>
         </div>
-        <button
-          className="ghost-button wide"
-          aria-expanded={showStats}
-          onClick={() => setShowStats(!showStats)}
-        >
-          {showStats ? '收起' : '查看'}完整属性面板 <ChevronRight size={14} />
-        </button>
-        {showStats && (
-          <div className="stats-grid">
-            {Object.entries(stats).map(([key, value]) => (
-              <div className="stat" key={key}>
-                <span>{statNames[key as keyof Stats]}</span>
-                <b>
-                  {Array.isArray(value)
-                    ? `×${value.reduce((n, v) => n * (1 + v), 1).toFixed(2)}`
-                    : percentStats.includes(key)
-                      ? `${(value * 100).toFixed(1)}%`
-                      : typeof value === 'number'
-                        ? value.toFixed(key === 'attackSpeed' ? 2 : 0)
-                        : value}
-                </b>
-              </div>
-            ))}
+        <details className="mobile-character-dossier" open={dossierOpen}>
+          <summary
+            onClick={(event) => {
+              event.preventDefault();
+              setDossierOpen((value) => !value);
+            }}
+          >
+            {dossierOpen ? '收起纸娃娃与完整属性' : '查看纸娃娃与完整属性'}
+          </summary>
+          <div
+            className="character-dossier"
+            style={{ '--class-color': hero.color } as CSSProperties}
+          >
+            <div className="dossier-top">
+              <span className="eyebrow">THE WANDERER</span>
+              <span>Lv. {save.level}</span>
+            </div>
+            <div className="paperdoll-slots">
+              {SLOTS.map((slot) => (
+                <button
+                  key={slot}
+                  className={`paperdoll-slot ${save.equipment[slot] ? 'occupied' : ''}`}
+                  style={{
+                    color: save.equipment[slot]
+                      ? RARITY_COLORS[save.equipment[slot]!.rarity]
+                      : undefined,
+                  }}
+                  onClick={() => selectItem(save.equipment[slot]?.id ?? '')}
+                  title={SLOT_NAMES[slot]}
+                >
+                  {save.equipment[slot] ? (
+                    <ItemIcon item={save.equipment[slot]!} size={34} />
+                  ) : (
+                    <EquipmentIcon slot={slot} />
+                  )}
+                  <small>{SLOT_NAMES[slot]}</small>
+                  {save.forge[slot] > 0 && <b>+{save.forge[slot]}</b>}
+                </button>
+              ))}
+            </div>
+            <div className="dossier-emblem">
+              <CharacterPreview classId={save.classId} />
+              <span className="sigil-ring" />
+            </div>
+            <h3>
+              {hero.name} <small>{hero.mainStat}</small>
+            </h3>
+            <p className="muted">{hero.title}</p>
+            <div className="dossier-numbers">
+              <span>
+                <Sword size={15} />
+                {formatBigNumber(stats.attack)}
+                <small>攻击</small>
+              </span>
+              <span>
+                <Shield size={15} />
+                {formatBigNumber(stats.armor)}
+                <small>护甲</small>
+              </span>
+              <span>
+                <CircleDot size={15} />
+                {formatBigNumber(stats.hp)}
+                <small>生命</small>
+              </span>
+            </div>
           </div>
-        )}
+          <button
+            className="ghost-button wide"
+            aria-expanded={showStats}
+            onClick={() => setShowStats(!showStats)}
+          >
+            {showStats ? '收起' : '查看'}完整属性面板 <ChevronRight size={14} />
+          </button>
+          {showStats && (
+            <div className="stats-grid">
+              {Object.entries(stats).map(([key, value]) => (
+                <div className="stat" key={key}>
+                  <span>{statNames[key as keyof Stats]}</span>
+                  <b>
+                    {Array.isArray(value)
+                      ? `×${value.reduce((n, v) => n * (1 + v), 1).toFixed(2)}`
+                      : percentStats.includes(key)
+                        ? `${(value * 100).toFixed(1)}%`
+                        : typeof value === 'number'
+                          ? value.toFixed(key === 'attackSpeed' ? 2 : 0)
+                          : value}
+                  </b>
+                </div>
+              ))}
+            </div>
+          )}
+        </details>
         {item && (
-          <div ref={detail}>
+          <div ref={detail} className="mobile-item-inspector" role="region" aria-label="装备详情">
+            <button
+              className="mobile-item-close ghost-button"
+              aria-label="关闭装备详情"
+              onClick={() => setSelected('')}
+            >
+              <X size={16} /> 关闭详情
+            </button>
             <ItemDetails item={item} compare={equipped ? undefined : save.equipment[item.slot]}>
               <div className="button-row">
                 <button
@@ -776,7 +822,14 @@ function StashPanel() {
         </section>
       </div>
       {item && (
-        <div ref={detail}>
+        <div ref={detail} className="mobile-item-inspector" role="region" aria-label="仓库装备详情">
+          <button
+            className="mobile-item-close ghost-button"
+            aria-label="关闭装备详情"
+            onClick={() => setSelected('')}
+          >
+            <X size={16} /> 关闭详情
+          </button>
           <ItemDetails item={item} compare={store.save.equipment[item.slot]}>
             <button
               className="gold-button"
@@ -817,52 +870,81 @@ function SkillsPanel() {
     () => nodes.find((n) => skillLearningStatus(save, n).canLearn)?.id ?? nodes[0]?.id ?? '',
   );
   const [recommended, setRecommended] = useState('');
+  const [mobileDetailOpen, setMobileDetailOpen] = useState(false);
   const description = useRef<HTMLDivElement>(null);
   const node = nodes.find((n) => n.id === selected);
+  const recommend = (setId: string) => {
+    const build = SETS.find((entry) => entry.id === setId && entry.classId === save.classId);
+    if (!build) return;
+    store.recommendSkills(build.id);
+    setRecommended(build.id);
+    setSelected(build.skillId);
+  };
   return (
     <>
-      <div className="system-toolbar">
-        <span className="skill-points">
-          <Sparkles size={17} />
-          可用技能点 <b>{skillPoints(save)}</b>
-        </span>
-        <button
-          className="ghost-button"
-          onClick={() => {
-            store.resetSkills();
-            setRecommended('');
-          }}
-        >
-          <RotateCcw size={14} />
-          免费洗点
-        </button>
-      </div>
-      <div className="panel-tabs">
-        {SETS.filter((t) => t.classId === save.classId).map((t) => (
+      <div className="mobile-skill-toolbar">
+        <div className="system-toolbar">
+          <span className="skill-points">
+            <Sparkles size={17} />
+            可用技能点 <b>{skillPoints(save)}</b>
+          </span>
           <button
-            key={t.id}
-            className={recommended === t.id ? 'active' : ''}
-            aria-pressed={recommended === t.id}
+            className="ghost-button"
             onClick={() => {
-              store.recommendSkills(t.id);
-              setRecommended(t.id);
-              setSelected(t.skillId);
+              store.resetSkills();
+              setRecommended('');
             }}
           >
-            {t.name} · 推荐加点
+            <RotateCcw size={14} />
+            免费洗点
           </button>
-        ))}
+        </div>
+        <div className="panel-tabs">
+          {SETS.filter((t) => t.classId === save.classId).map((t) => (
+            <button
+              key={t.id}
+              className={recommended === t.id ? 'active' : ''}
+              aria-pressed={recommended === t.id}
+              onClick={() => recommend(t.id)}
+            >
+              {t.name} · 推荐加点
+            </button>
+          ))}
+        </div>
+        <select
+          className="mobile-build-recommend"
+          aria-label="流派推荐加点"
+          value={recommended}
+          onChange={(event) => recommend(event.target.value)}
+        >
+          <option value="">选择推荐加点（可选）</option>
+          {SETS.filter((entry) => entry.classId === save.classId).map((entry) => (
+            <option key={entry.id} value={entry.id}>
+              {entry.name}
+            </option>
+          ))}
+        </select>
+        <p className="muted system-hint">
+          已分配 {skillPointBudget(save.level) - skillPoints(save)} / {skillPointBudget(save.level)}{' '}
+          点， 满级总预算 {skillPointBudget(100)} 点。
+          {nextSkillPointLevel(save.level)
+            ? `下一点在 Lv.${nextSkillPointLevel(save.level)} 获得。`
+            : '已获得全部技能点。'}
+          核心强化、辅助分支与备用技能需要取舍；选择流派可推荐加点，仍可免费洗点调整。
+        </p>
       </div>
-      <p className="muted system-hint">
-        已分配 {skillPointBudget(save.level) - skillPoints(save)} / {skillPointBudget(save.level)}{' '}
-        点， 满级总预算 {skillPointBudget(100)} 点。
-        {nextSkillPointLevel(save.level)
-          ? `下一点在 Lv.${nextSkillPointLevel(save.level)} 获得。`
-          : '已获得全部技能点。'}
-        核心强化、辅助分支与备用技能需要取舍；选择流派可推荐加点，仍可免费洗点调整。
-      </p>
       {node && (
-        <div ref={description} className="card skill-description">
+        <div
+          ref={description}
+          className={`card skill-description mobile-skill-detail ${mobileDetailOpen ? 'mobile-open' : ''}`}
+        >
+          <button
+            className="mobile-skill-close ghost-button"
+            onClick={() => setMobileDetailOpen(false)}
+            aria-label="关闭技能说明"
+          >
+            <X size={18} /> 关闭说明
+          </button>
           <div>
             <span className="eyebrow">
               {node.kind === 'passive' ? '被动常驻' : '主动技能'} · 等级 {save.skills[node.id] ?? 0}{' '}
@@ -907,7 +989,7 @@ function SkillsPanel() {
           </div>
         </div>
       )}
-      <div className="skill-tree">
+      <div className="skill-tree mobile-skill-tree">
         <details className="skill-learning-rules">
           <summary>技能学习规则</summary>
           <p className="muted system-hint">
@@ -937,6 +1019,7 @@ function SkillsPanel() {
                     aria-pressed={selected === n.id}
                     onClick={() => {
                       setSelected(n.id);
+                      setMobileDetailOpen(true);
                     }}
                   >
                     <span className="skill-symbol">
@@ -2488,13 +2571,13 @@ export function SystemsModal({
         tabIndex={-1}
       >
         <header className="modal-header">
-          {onNavigate && panel !== 'services' && (
+          {onNavigate && (
             <button
               className="camp-back"
-              onClick={() => onNavigate('services')}
-              aria-label="返回营地服务"
+              onClick={() => (panel === 'services' ? onClose() : onNavigate('services'))}
+              aria-label={panel === 'services' ? '返回营地' : '返回营地服务'}
             >
-              <ChevronRight size={20} />
+              <ArrowLeft size={20} />
             </button>
           )}
           <span className="modal-heading-icon">
@@ -2506,6 +2589,26 @@ export function SystemsModal({
             </span>
             <h2 id="system-modal-title">{title[0]}</h2>
           </div>
+          {onNavigate && (
+            <label className="compact-system-switcher">
+              <span className="sr-only">营地手册</span>
+              <select
+                aria-label="切换营地系统"
+                value={panel}
+                onChange={(event) => onNavigate(event.target.value)}
+              >
+                {SYSTEM_GROUPS.map((entry) => (
+                  <optgroup key={entry.label} label={entry.label}>
+                    {entry.panels.map((id) => (
+                      <option key={id} value={id}>
+                        {SYSTEM_LINKS[id]}
+                      </option>
+                    ))}
+                  </optgroup>
+                ))}
+              </select>
+            </label>
+          )}
           <button className="modal-close ghost-button" aria-label="关闭面板" onClick={onClose}>
             <X size={21} />
           </button>

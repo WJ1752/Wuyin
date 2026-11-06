@@ -53,7 +53,7 @@ test('all seven hall residents resolve to distinct cells of a bundled high resol
   assert.equal(new Set(cells).size, HALL_NPCS.length, 'NPCs must use their own atlas cells');
 });
 
-test('every skill has an illustrated tile and every active skill has a distinct cast sprite', () => {
+test('every skill has an illustrated tile and every active skill has a distinct cast sprite', async () => {
   const active = SKILLS.filter((skill) => skill.kind !== 'passive');
   assert.deepEqual(Object.keys(SKILL_ART).sort(), SKILLS.map((s) => s.id).sort());
   for (const frame of Object.values(SKILL_ART))
@@ -66,6 +66,28 @@ test('every skill has an illustrated tile and every active skill has a distinct 
       const file = readFileSync(new URL(`../public/${src}`, import.meta.url));
       assert.equal(file.toString('ascii', 8, 12), 'WEBP');
     }
+  }
+  // A semi-opaque matte on cell corners draws a visible rectangle during attacks.
+  for (const src of new Set(Object.values(CAST_ART).map((frame) => frame.src))) {
+    const { data, info } = await sharp(readFileSync(new URL(`../public/${src}`, import.meta.url)))
+      .ensureAlpha()
+      .raw()
+      .toBuffer({ resolveWithObject: true });
+    const cellWidth = info.width / 4,
+      cellHeight = info.height / 2;
+    for (let row = 0; row < 2; row++)
+      for (let column = 0; column < 4; column++) {
+        for (const [dx, dy] of [
+          [0, 0],
+          [cellWidth - 1, 0],
+          [0, cellHeight - 1],
+          [cellWidth - 1, cellHeight - 1],
+        ]) {
+          const alpha =
+            data[((row * cellHeight + dy) * info.width + column * cellWidth + dx) * 4 + 3];
+          assert.ok(alpha <= 4, `${src} cell ${column}/${row} has a rectangular matte (${alpha})`);
+        }
+      }
   }
   assert.equal(new Set(EFFECT_CELLS).size, 12);
 });

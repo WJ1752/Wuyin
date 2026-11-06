@@ -11,6 +11,26 @@ function controls() {
   return engine;
 }
 
+test('touch dragging reaches full movement at the floating thumb radius and releases cleanly', () => {
+  const engine = controls();
+  engine.onPointerDown({
+    button: 0,
+    isPrimary: true,
+    pointerType: 'touch',
+    clientX: 100,
+    clientY: 200,
+    pointerId: 1,
+  });
+  engine.onPointerMove({ clientX: 114, clientY: 200, pointerId: 1 });
+  assert.deepEqual(engine.dragMovement, { x: 0.5, y: 0 });
+  engine.onPointerMove({ clientX: 128, clientY: 200, pointerId: 1 });
+  assert.deepEqual(engine.dragMovement, { x: 1, y: 0 });
+  engine.onPointerMove({ clientX: 200, clientY: 300, pointerId: 1 });
+  assert.ok(Math.abs(Math.hypot(engine.dragMovement.x, engine.dragMovement.y) - 1) < 1e-10);
+  engine.onPointerUp({ pointerId: 1 });
+  assert.deepEqual(engine.dragMovement, { x: 0, y: 0 });
+});
+
 test('pausing and losing focus clear every movement source and wait for fresh gamepad input', () => {
   const engine = controls();
   engine.keys.add('w');

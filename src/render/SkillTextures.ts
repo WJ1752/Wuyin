@@ -24,7 +24,7 @@ export async function preloadSkillTextures(ids: string[]): Promise<void> {
       'nearest',
     ),
     preloadAtlas(
-      './assets/skills/effects.webp',
+      './assets/skills/hd/effects.webp',
       4,
       3,
       EFFECT_CELLS.map((id, i) => [`fx:${id}`, i % 4, Math.floor(i / 4)]),

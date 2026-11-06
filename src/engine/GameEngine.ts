@@ -1,4 +1,5 @@
 import { Application, Container, Graphics, Sprite, Text, type Texture } from 'pixi.js';
+import { pointerDragRadius } from '../core/pointerMovement';
 import type {
   BossDef,
   CombatConfig,
@@ -66,6 +67,7 @@ import { preloadPetTexture, getPetTexture } from '../render/PetTextures';
 import type { RunResult } from '../core/types';
 import { DEFAULT_KEYS, getPreferences } from '../core/preferences';
 import { CHALLENGES } from '../data/challenges';
+import { combatFraming } from '../render/viewport';
 import { isSkillAutoEnabled } from '../data/progression';
 
 /** Rendering-free actors keep the production simulation usable by the server. */
@@ -271,7 +273,7 @@ export class GameEngine {
   private movement = { x: 0, y: 0 };
   private dragMovement = { x: 0, y: 0 };
   private keys = new Set<string>();
-  private drag?: { x: number; y: number; pointerId: number };
+  private drag?: { x: number; y: number; pointerId: number; radius: number };
   private hp = 1;
   private resource = 100;
   private shield = 0;
@@ -333,6 +335,7 @@ export class GameEngine {
   private resizeObserver?: ResizeObserver;
   private minimap = new Graphics();
   private portraitHud?: MediaQueryList;
+  private compactViewport?: MediaQueryList;
   private mapClock = 0;
   private gamepadHeld = new Set<number>();
   private gamepadBlocked = false;
@@ -459,6 +462,7 @@ export class GameEngine {
   async init(host: HTMLElement, config: CombatConfig, callbacks: GameCallbacks): Promise<void> {
     this.host = host;
     this.portraitHud = window.matchMedia('(max-width: 760px) and (orientation: portrait)');
+    this.compactViewport = window.matchMedia('(max-width: 960px)');
     this.setupCharacter(config, callbacks);
     if (this.coop?.seed !== undefined || config.seed !== undefined)
       this.random = createRng(this.coop?.seed ?? config.seed!);
@@ -1338,12 +1342,17 @@ export class GameEngine {
       this.drag
     )
       return;
-    this.drag = { x: e.clientX, y: e.clientY, pointerId: e.pointerId };
+    this.drag = {
+      x: e.clientX,
+      y: e.clientY,
+      pointerId: e.pointerId,
+      radius: pointerDragRadius(e.pointerType),
+    };
   };
   private onPointerMove = (e: PointerEvent) => {
     if (!this.drag || e.pointerId !== this.drag.pointerId) return;
-    const x = (e.clientX - this.drag.x) / 65;
-    const y = (e.clientY - this.drag.y) / 65;
+    const x = (e.clientX - this.drag.x) / this.drag.radius;
+    const y = (e.clientY - this.drag.y) / this.drag.radius;
     const len = Math.max(1, Math.hypot(x, y));
     this.dragMovement = { x: x / len, y: y / len };
   };
@@ -1692,7 +1701,8 @@ export class GameEngine {
     }
     const w = this.app.screen.width,
       h = this.app.screen.height;
-    const scale = Math.min(1.2, Math.max(0.72, Math.min(w / 700, h / 660)));
+    const framing = combatFraming(w, h, this.compactViewport?.matches ?? false);
+    const scale = framing.scale;
     this.world.scale.set(scale);
     this.shake = Math.max(0, this.shake - dt * 22);
     const shake =
@@ -1701,18 +1711,19 @@ export class GameEngine {
         ? this.shake
         : 0;
     this.world.position.set(
-      w / 2 - this.x * scale + (Math.random() - 0.5) * shake,
-      h * 0.52 - this.y * scale + (Math.random() - 0.5) * shake,
+      framing.x - this.x * scale + (Math.random() - 0.5) * shake,
+      framing.y - this.y * scale + (Math.random() - 0.5) * shake,
     );
   }
   private drawMinimap() {
     if (!this.app) return;
     const g = this.minimap;
-    const compact = this.portraitHud?.matches;
-    g.scale.set(compact ? 0.6 : 1);
-    g.position.set(this.app.screen.width - (compact ? 73 : 120), compact ? 90 : 16);
+    const compact = this.compactViewport?.matches ?? false;
+    g.visible = !compact;
+    g.scale.set(compact ? 0.65 : 1);
+    g.position.set(this.app.screen.width - (compact ? 76 : 120), compact ? 112 : 84);
     g.clear()
-      .rect(0, 0, 104, 104)
+      .circle(52, 52, 51)
       .fill({ color: 0x101e23, alpha: 0.82 })
       .stroke({ color: 0x9b997e, alpha: 0.5, width: 1 });
     const point = (x: number, y: number) => ({
@@ -1722,7 +1733,7 @@ export class GameEngine {
     for (const e of this.enemies) {
       if (e.hp <= 0) continue;
       const p = point(e.x, e.y);
-      if (p.x < 4 || p.x > 100 || p.y < 4 || p.y > 100) continue;
+      if (Math.hypot(p.x - 52, p.y - 52) > 47) continue;
       g.rect(p.x - 1, p.y - 1, e.boss ? 5 : 2, e.boss ? 5 : 2).fill(
         e.boss ? 0xf78f9d : e.elite ? 0xe4c785 : 0x9f8b83,
       );
@@ -1730,7 +1741,7 @@ export class GameEngine {
     for (const o of this.orbs) {
       if (!o.item && o.kind !== 'progress') continue;
       const p = point(o.x, o.y);
-      if (p.x < 4 || p.x > 100 || p.y < 4 || p.y > 100) continue;
+      if (Math.hypot(p.x - 52, p.y - 52) > 47) continue;
       g.poly([p.x, p.y - 3, p.x + 3, p.y, p.x, p.y + 3, p.x - 3, p.y]).fill(
         o.item ? RARITY_COLORS[o.item.rarity] : 0xc5a5ef,
       );
@@ -1738,8 +1749,7 @@ export class GameEngine {
     for (const pylon of this.pylons) {
       if (pylon.used) continue;
       const p = point(pylon.x, pylon.y);
-      if (p.x > 4 && p.x < 100 && p.y > 4 && p.y < 100)
-        g.rect(p.x - 2, p.y - 2, 4, 4).fill(0xb5a3e0);
+      if (Math.hypot(p.x - 52, p.y - 52) <= 47) g.rect(p.x - 2, p.y - 2, 4, 4).fill(0xb5a3e0);
     }
     g.poly([52, 46, 56, 56, 52, 54, 48, 56]).fill(0xd5efcf);
   }

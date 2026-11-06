@@ -27,6 +27,7 @@ import { useDialog } from './useDialog';
 import './npc-hall.css';
 import { DEFAULT_KEYS } from '../core/preferences';
 import { actionKey } from './inputLabels';
+import { pointerDragRadius } from '../core/pointerMovement';
 
 const NPC_ICONS: Record<string, typeof Hammer> = {
   forge: Hammer,
@@ -89,9 +90,10 @@ export function NpcHall({
   const [facing, setFacing] = useState(1);
   const [target, setTarget] = useState<{ x: number; y: number } | null>(null);
   const targetRef = useRef(target);
-  const joystick = useRef({ x: 0, y: 0 });
   const dragMove = useRef({ x: 0, y: 0 });
-  const drag = useRef<{ id: number; x: number; y: number; moved: boolean } | null>(null);
+  const drag = useRef<{ id: number; x: number; y: number; radius: number; moved: boolean } | null>(
+    null,
+  );
   const keys = useRef(new Set<string>());
   const [selectedNpcId, setSelectedNpcId] = useState<string | null>(null);
   const [players, setPlayers] = useState<LobbyPlayer[]>([]);
@@ -117,9 +119,11 @@ export function NpcHall({
   const canPublish = cloudStatus === 'online' && !!userId && !labBackup;
   const movingEnabled = active && !inspectedPlayer;
   // Move the entire shared ground plane so artwork, actors and pointer coordinates stay aligned.
-  const worldWidth = Math.max(viewSize.width, viewSize.height * HALL_ASPECT, 720);
+  const worldWidth = Math.max(viewSize.width, viewSize.height * HALL_ASPECT);
   const worldHeight = worldWidth / HALL_ASPECT;
   const worldScale = worldWidth / HALL_LAYOUT.world.width;
+  const compact = viewSize.width <= 960;
+  const actorSize = Math.max(58, Math.min(72, Math.min(viewSize.width, viewSize.height) * 0.18));
   const cameraX = Math.min(
     0,
     Math.max(viewSize.width - worldWidth, viewSize.width / 2 - position.x * worldWidth),
@@ -243,7 +247,6 @@ export function NpcHall({
   useEffect(() => {
     const reset = () => {
       keys.current.clear();
-      joystick.current = { x: 0, y: 0 };
       dragMove.current = { x: 0, y: 0 };
       drag.current = null;
       targetRef.current = null;
@@ -309,12 +312,10 @@ export function NpcHall({
       if (!document.hidden) {
         const currentBindings = bindingRef.current;
         let x =
-          joystick.current.x +
           dragMove.current.x +
           (keys.current.has(currentBindings.right) || keys.current.has('ArrowRight') ? 1 : 0) -
           (keys.current.has(currentBindings.left) || keys.current.has('ArrowLeft') ? 1 : 0);
         let y =
-          joystick.current.y +
           dragMove.current.y +
           (keys.current.has(currentBindings.down) || keys.current.has('ArrowDown') ? 1 : 0) -
           (keys.current.has(currentBindings.up) || keys.current.has('ArrowUp') ? 1 : 0);
@@ -438,11 +439,16 @@ export function NpcHall({
       <div
         ref={board}
         className={`hall-map ${walking ? 'is-walking' : ''} ${waitingForArt && !failedArt ? 'awaiting-art' : ''}`}
-        style={{
-          width: HALL_LAYOUT.world.width,
-          height: HALL_LAYOUT.world.height,
-          transform: `translate3d(${cameraX}px, ${cameraY}px, 0) scale(${worldScale})`,
-        }}
+        style={
+          {
+            width: HALL_LAYOUT.world.width,
+            height: HALL_LAYOUT.world.height,
+            transform: `translate3d(${cameraX}px, ${cameraY}px, 0) scale(${worldScale})`,
+            '--hall-character-size': compact ? `${actorSize / worldScale}px` : '88px',
+            '--hall-npc-size': compact ? `${(actorSize * 0.9) / worldScale}px` : '68px',
+            '--hall-label-factor': compact ? 1 / worldScale : 1,
+          } as CSSProperties
+        }
         role="group"
         aria-label={`营地地图，${(['up', 'left', 'down', 'right'] as const).map((action) => actionKey(save.preferences, action)).join(' ')}或方向键移动，点击地面前往，靠近居民后${keyboardInteract ? '按E或点击' : '点击'}交互`}
         aria-describedby="hall-controls-help"
@@ -453,10 +459,16 @@ export function NpcHall({
             event.button !== 0 ||
             !event.isPrimary ||
             drag.current ||
-            (event.target as HTMLElement).closest('button,.virtual-joystick')
+            (event.target as HTMLElement).closest('button')
           )
             return;
-          drag.current = { id: event.pointerId, x: event.clientX, y: event.clientY, moved: false };
+          drag.current = {
+            id: event.pointerId,
+            x: event.clientX,
+            y: event.clientY,
+            radius: pointerDragRadius(event.pointerType),
+            moved: false,
+          };
           event.currentTarget.setPointerCapture(event.pointerId);
           event.currentTarget.focus({ preventScroll: true });
         }}
@@ -469,7 +481,7 @@ export function NpcHall({
             held.moved = true;
             setTarget(null);
             setSelectedNpcId(null);
-            const length = Math.max(65, Math.hypot(x, y));
+            const length = Math.max(held.radius, Math.hypot(x, y));
             dragMove.current = { x: x / length, y: y / length };
           }
         }}
@@ -630,16 +642,7 @@ export function NpcHall({
         </div>
       )}
       <div className="hall-touch-controls">
-        <VirtualJoystick
-          disabled={!movingEnabled}
-          onMove={(x, y) => {
-            joystick.current = { x, y };
-            if (Math.hypot(x, y) > 0.05) {
-              setTarget(null);
-              setSelectedNpcId(null);
-            }
-          }}
-        />
+        <VirtualJoystick disabled={!movingEnabled} />
         {(inReach || selectedNpc) && (
           <button
             className="hall-interact"

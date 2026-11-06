@@ -44,7 +44,7 @@
   opacity: 0.48;
 }
 .app button:active:not(:disabled) {
-  transform: translateY(2px);
+  translate: 0 2px;
   filter: brightness(0.92);
 }
 .app button:hover:not(:disabled) {
