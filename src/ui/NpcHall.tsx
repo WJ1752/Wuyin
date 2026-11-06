@@ -50,6 +50,7 @@ const ACTIVITIES: Record<string, string> = {
 };
 const START: { x: number; y: number } = HALL_LAYOUT.spawn;
 const INTERACTION_DISTANCE = 82;
+const ART_LOAD_TIMEOUT = 15000;
 const HALL_ASPECT = HALL_LAYOUT.world.width / HALL_LAYOUT.world.height;
 // CSS and Pixi use the same image origin: the actor's coordinate is its ground contact.
 const characterOrigin = (classId: keyof typeof CHARACTER_ART): CSSProperties =>
@@ -172,6 +173,25 @@ export function NpcHall({
   useEffect(() => {
     if (active) activity.current = 'town';
   }, [active]);
+  useEffect(() => {
+    const sources = [mapArt, npcArt, heroArt];
+    // Cached images can finish before React receives their load event.
+    const completed: Record<string, 'ready' | 'error'> = {};
+    board.current?.querySelectorAll('img').forEach((image) => {
+      const src = image.getAttribute('src');
+      if (src && sources.includes(src) && image.complete)
+        completed[src] = image.naturalWidth > 0 ? 'ready' : 'error';
+    });
+    if (Object.keys(completed).length) setArtStatus((old) => ({ ...old, ...completed }));
+    const timeout = setTimeout(() => {
+      setArtStatus((old) => {
+        const pending = sources.filter((src) => !old[src]);
+        if (!pending.length) return old;
+        return { ...old, ...Object.fromEntries(pending.map((src) => [src, 'error' as const])) };
+      });
+    }, ART_LOAD_TIMEOUT);
+    return () => clearTimeout(timeout);
+  }, [mapArt, npcArt, heroArt]);
   useEffect(() => {
     const element = viewport.current;
     if (!element) return;
