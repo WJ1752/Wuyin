@@ -47,6 +47,9 @@ import { AFFIXES, GEMS, PETS } from '../data/affixes';
 import { generateLoot } from '../engine/LootGenerator';
 import {
   HUNT_LIMIT,
+  skillPointBudget,
+  nextSkillPointLevel,
+  recommendedSkills,
   settleCamp,
   availableSkillPoints,
   isSkillAutoEnabled,
@@ -55,6 +58,8 @@ import {
   skillLearningStatus,
   starterSkills,
 } from '../data/progression';
+import { CHALLENGES, getChallengeOffer, type ChallengeId } from '../data/challenges';
+import { getPreferences, validatePreferences } from '../core/preferences';
 
 const SAVE_KEY = 'mist-continent-save-v1';
 const RECOVERY_KEY = 'mist-continent-recovery-v1';
@@ -219,6 +224,11 @@ export function createCombatConfig(save: SaveData, stash: Item[] = []): CombatCo
     classId: save.classId,
     level: save.level,
     stage: save.selectedStage,
+    preferences: getPreferences(save.preferences),
+    challenge:
+      save.progression?.challenges?.pending?.stage === save.selectedStage
+        ? save.progression.challenges.pending
+        : undefined,
     stats: computeStats(save),
     equipment: clone(save.equipment),
     skills: { ...save.skills },
@@ -388,13 +398,17 @@ interface GameState {
   createAccount: (name: string) => void;
   switchAccount: (id: string) => void;
   createCharacter: (name: string, classId: ClassId) => void;
+  createFirstCharacter: (name: string, classId: ClassId) => boolean;
   switchCharacter: (id: string) => void;
+  deleteCharacter: (id: string) => void;
   depositItem: (id: string) => void;
   withdrawItem: (id: string) => void;
   setInCombat: (value: boolean) => void;
   selectStage: (stage: number) => void;
   updateSettings: (settings: Partial<SaveData>) => void;
   beginSummit: () => void;
+  beginChallenge: (id: ChallengeId) => boolean;
+  cancelChallenge: () => void;
   completeRun: (result: RunResult) => void;
   getStats: () => Stats;
   equip: (id: string) => void;
@@ -597,6 +611,126 @@ function chapterRewards(
   }
   return earned;
 }
+/** Shared settlement for local runs and transactional server reward claims. */
+export function applyRunResult(s: SaveData, result: RunResult, stash: Item[] = []): string {
+  const priorLevel = s.level;
+  const chapterNotices: string[] = [];
+  if (result.challenge) {
+    const pending = s.progression?.challenges?.pending;
+    if (
+      result.partySize ||
+      !pending ||
+      pending.id !== result.challenge.id ||
+      pending.key !== result.challenge.key ||
+      pending.stage !== result.stage
+    )
+      return '挑战结算已处理或与当前远征不符，未重复发放收益。';
+    const challenge = CHALLENGES.find((entry) => entry.id === pending.id)!;
+    const journey = s.progression!.challenges!;
+    if (result.won && result.challenge.completed) {
+      const previous = journey.best[challenge.id];
+      journey.best[challenge.id] =
+        previous === undefined ? result.seconds : Math.min(previous, result.seconds);
+      if (!journey.claimed.includes(pending.key)) {
+        s.gold += challenge.reward.gold;
+        s.shards += challenge.reward.shards;
+        s.crystals += challenge.reward.crystals;
+        journey.claimed = [...journey.claimed, pending.key].sort().slice(-90);
+        chapterNotices.push(
+          `${challenge.name}首胜：${challenge.reward.gold} 金币、${challenge.reward.shards} 碎片、${challenge.reward.crystals} 结晶`,
+        );
+      } else chapterNotices.push('本轮挑战首胜奖励已领取，本次仅结算战场收获');
+    }
+    delete journey.pending;
+  }
+  const summit = s.progression?.summit;
+  if (
+    result.stage === RIFT_RULES.maxLevel &&
+    !result.partySize &&
+    !result.challenge &&
+    summit?.pending
+  ) {
+    summit.wins = result.won ? summit.wins + 1 : 0;
+    summit.pending = false;
+    chapterNotices.push(
+      summit.wins === 3 ? '登峰试炼完成 · 角色已毕业' : `登峰试炼 · 单人连胜 ${summit.wins}/3`,
+    );
+  }
+  if (result.won && !result.partySize && !result.challenge) {
+    const { classId, level, equipment, cube, skills, autoSkills, petId, petLevels, forge } = s;
+    const record: RunRecord = {
+      id:
+        globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+      stage: result.stage,
+      seconds: result.seconds,
+      kills: result.kills,
+      date: Date.now(),
+      build: clone({
+        classId,
+        level,
+        equipment,
+        cube,
+        skills,
+        autoSkills,
+        petId,
+        petLevels,
+        forge,
+      }),
+    };
+    s.runRecords = [...(s.runRecords ?? []), record]
+      .sort((a, b) => b.stage - a.stage || a.seconds - b.seconds || b.date - a.date)
+      .slice(0, 20);
+  }
+  const priorKills = s.kills,
+    priorClears = s.clears,
+    priorStage = s.highestStage;
+  s.gold += result.gold;
+  s.shards += result.shards;
+  s.kills += result.kills;
+  s.xp += result.kills * 12 + (result.won ? 250 : 0);
+  while (s.level < 100 && s.xp >= s.level * 180) {
+    s.xp -= s.level * 180;
+    s.level++;
+  }
+  if (result.won) {
+    if (!result.challenge)
+      chapterNotices.push(...chapterRewards(s, result.stage, result.items, stash));
+    s.clears++;
+    s.bestTime = s.bestTime ? Math.min(s.bestTime, result.seconds) : result.seconds;
+    if (!result.challenge && result.stage >= s.highestStage)
+      s.highestStage = Math.min(150, result.stage + (result.seconds < 100 ? 3 : 1));
+    const gem = GEMS[Math.floor(Math.random() * GEMS.length)];
+    s.gems[gem.id][Math.min(9, Math.floor(result.stage / 20))]++;
+  }
+  const receipt = addItems(s, result.items);
+  if (result.items.length) {
+    const loot = [`战场装备入包 ${receipt.stored} 件`];
+    if (receipt.autoSalvaged) loot.push(`按设置分解 ${receipt.autoSalvaged} 件`);
+    if (receipt.overflow) {
+      const precious = receipt.preciousOverflow
+        ? `（其中传奇及以上 ${receipt.preciousOverflow} 件）`
+        : '';
+      loot.push(`背包满额分解 ${receipt.overflow} 件${precious}`);
+    }
+    if (receipt.crystals)
+      loot.push(
+        `分解所得 ${receipt.crystals} 结晶${receipt.souls ? `、${receipt.souls} 遗忘之魂` : ''}`,
+      );
+    chapterNotices.push(loot.join('，'));
+  }
+  if (priorKills < 100 && s.kills >= 100) s.gold += 500;
+  if (priorClears < 5 && s.clears >= 5) s.shards += 250;
+  if (priorStage < 15 && s.highestStage >= 15) s.crystals += 50;
+  const summary = result.won
+    ? `秘境已肃清 · 获得 ${result.gold} 金币与 ${result.shards} 神秘碎片`
+    : '远征结束，已带回本次收获。';
+  if (s.level > priorLevel)
+    chapterNotices.push(
+      `升至 Lv.${s.level}，获得 ${skillPointBudget(s.level) - skillPointBudget(priorLevel)} 技能点${nextSkillPointLevel(s.level) ? `；下一点在 Lv.${nextSkillPointLevel(s.level)}` : '；已获得全部技能点，可免费洗点调整'}`,
+    );
+  return [summary, ...chapterNotices].join(' · ');
+}
+
 export const useGameStore = create<GameState>((set, get) => {
   const mutate = (fn: (save: SaveData) => string | void) => {
     if (get().cloudTransition) return;
@@ -864,7 +998,11 @@ export const useGameStore = create<GameState>((set, get) => {
         set({ notice: '本账号内已存在同名角色。' });
         return;
       }
-      const character = { id: identity(), name, save: newSave(classId) };
+      const characterSave = newSave(classId);
+      characterSave.characterCreated = true;
+      characterSave.storyChapter = 'arrival';
+      characterSave.storySkipped = false;
+      const character = { id: identity(), name, save: characterSave };
       account.characters.push(character);
       account.activeCharacterId = character.id;
       set({
@@ -874,6 +1012,44 @@ export const useGameStore = create<GameState>((set, get) => {
         notice: `角色「${name}」已创建。背包、成长与资源独立；装备可通过账号仓库转交。`,
       });
       void get().persist();
+    },
+    createFirstCharacter(name, classId) {
+      if (!requireCamp() || !CLASSES.some((hero) => hero.id === classId)) return false;
+      name = name.trim();
+      if (!validName(name)) {
+        set({ notice: '角色名称需为 1–24 个字符，不能包含控制字符。' });
+        return false;
+      }
+      const data = snapshotAccounts(get());
+      const account = data.accounts.find((entry) => entry.id === data.activeAccountId)!;
+      const placeholder = account.characters.find((character) => !character.save.characterCreated);
+      if (!placeholder) {
+        set({ notice: '当前账号没有待创建角色。' });
+        return false;
+      }
+      if (
+        account.characters.some(
+          (character) =>
+            character.id !== placeholder.id && nameKey(character.name) === nameKey(name),
+        )
+      ) {
+        set({ notice: '本账号内已存在同名角色。' });
+        return false;
+      }
+      const save = newSave(classId);
+      save.characterCreated = true;
+      save.storyChapter = 'arrival';
+      save.storySkipped = false;
+      Object.assign(placeholder, { name, save });
+      account.activeCharacterId = placeholder.id;
+      set({
+        accounts: data.accounts,
+        save: clone(save),
+        lastGamble: [],
+        notice: `欢迎，${name}。迷雾营地的故事从此刻开始。`,
+      });
+      void get().persist();
+      return true;
     },
     switchCharacter(id) {
       if (!requireCamp()) return;
@@ -888,6 +1064,46 @@ export const useGameStore = create<GameState>((set, get) => {
         lastGamble: [],
         notice: `已切换角色「${character.name}」。`,
       });
+      void get().persist();
+    },
+    deleteCharacter(id) {
+      if (!requireCamp()) return;
+      const data = snapshotAccounts(get());
+      const account = data.accounts.find((entry) => entry.id === data.activeAccountId)!;
+      const removed = account.characters.find((entry) => entry.id === id);
+      if (!removed) return;
+      if (account.characters.length === 1) {
+        const save = newSave();
+        save.characterCreated = false;
+        save.storyChapter = 'arrival';
+        save.storySkipped = false;
+        const replacement = { id: identity(), name: '待命旅人', save };
+        account.characters = [replacement];
+        account.activeCharacterId = replacement.id;
+        set({
+          accounts: data.accounts,
+          save: clone(save),
+          lastGamble: [],
+          notice: `已删除「${removed.name}」的全部角色进度，账号共享仓库保留。请创建新角色继续。`,
+        });
+        void get().persist();
+        return;
+      }
+      account.characters = account.characters.filter((entry) => entry.id !== id);
+      if (account.activeCharacterId === id) {
+        account.activeCharacterId = account.characters[0].id;
+        set({
+          accounts: data.accounts,
+          save: clone(account.characters[0].save),
+          lastGamble: [],
+          notice: `已删除角色「${removed.name}」，现已切换至「${account.characters[0].name}」。共享仓库与账号未受影响。`,
+        });
+      } else {
+        set({
+          accounts: data.accounts,
+          notice: `已删除角色「${removed.name}」。共享仓库与账号未受影响。`,
+        });
+      }
       void get().persist();
     },
     depositItem(id) {
@@ -938,6 +1154,13 @@ export const useGameStore = create<GameState>((set, get) => {
     },
     updateSettings(settings) {
       mutate((s) => {
+        if (settings.preferences !== undefined) {
+          try {
+            s.preferences = validatePreferences(settings.preferences);
+          } catch (error) {
+            return error instanceof Error ? error.message : '偏好设置无效。';
+          }
+        }
         if ('keepRareAffix' in settings) {
           if (!settings.keepRareAffix) delete s.keepRareAffix;
           else if (AFFIXES.some((a) => a.id === settings.keepRareAffix))
@@ -951,6 +1174,30 @@ export const useGameStore = create<GameState>((set, get) => {
           'tutorialSeen',
         ] as const)
           if (settings[key] !== undefined) Object.assign(s, { [key]: settings[key] });
+        if (settings.characterCreated !== undefined) s.characterCreated = settings.characterCreated;
+        if (settings.storyChapter !== undefined) s.storyChapter = settings.storyChapter;
+        if (settings.storySkipped !== undefined) s.storySkipped = settings.storySkipped;
+      });
+    },
+    beginChallenge(id) {
+      if (!requireCamp()) return false;
+      const offer = getChallengeOffer(get().save);
+      if (!offer.available || id !== offer.id) {
+        set({ notice: offer.reason || '该挑战本轮尚未开放。' });
+        return false;
+      }
+      mutate((s) => {
+        s.progression!.challenges ??= { claimed: [], best: {} };
+        s.progression!.challenges.pending = { id, key: offer.key, stage: offer.stage };
+        s.selectedStage = offer.stage;
+        return `已准备${offer.name} · 第 ${offer.stage} 层`;
+      });
+      return true;
+    },
+    cancelChallenge() {
+      if (!get().save.progression?.challenges?.pending) return;
+      mutate((s) => {
+        delete s.progression!.challenges!.pending;
       });
     },
     beginSummit() {
@@ -959,6 +1206,7 @@ export const useGameStore = create<GameState>((set, get) => {
         labBackup ||
         cloudTransition ||
         save.selectedStage !== RIFT_RULES.maxLevel ||
+        save.progression?.challenges?.pending ||
         !save.progression ||
         save.progression.summit?.wins === 3
       )
@@ -977,101 +1225,13 @@ export const useGameStore = create<GameState>((set, get) => {
         set({ notice: '演武结束。体验装备与奖励不会写入开荒存档。' });
         return;
       }
-      mutate((s) => {
-        const priorLevel = s.level;
-        const chapterNotices: string[] = [];
-        const summit = s.progression?.summit;
-        if (result.stage === RIFT_RULES.maxLevel && !result.partySize && summit?.pending) {
-          summit.wins = result.won ? summit.wins + 1 : 0;
-          summit.pending = false;
-          chapterNotices.push(
-            summit.wins === 3
-              ? '登峰试炼完成 · 角色已毕业'
-              : `登峰试炼 · 单人连胜 ${summit.wins}/3`,
-          );
-        }
-        if (result.won && !result.partySize) {
-          const { classId, level, equipment, cube, skills, autoSkills, petId, petLevels, forge } =
-            s;
-          const record: RunRecord = {
-            id:
-              globalThis.crypto?.randomUUID?.() ??
-              `${Date.now()}-${Math.random().toString(36).slice(2)}`,
-            stage: result.stage,
-            seconds: result.seconds,
-            kills: result.kills,
-            date: Date.now(),
-            build: clone({
-              classId,
-              level,
-              equipment,
-              cube,
-              skills,
-              autoSkills,
-              petId,
-              petLevels,
-              forge,
-            }),
-          };
-          s.runRecords = [...(s.runRecords ?? []), record]
-            .sort((a, b) => b.stage - a.stage || a.seconds - b.seconds || b.date - a.date)
-            .slice(0, 20);
-        }
-        const priorKills = s.kills,
-          priorClears = s.clears,
-          priorStage = s.highestStage;
-        s.gold += result.gold;
-        s.shards += result.shards;
-        s.kills += result.kills;
-        s.xp += result.kills * 12 + (result.won ? 250 : 0);
-        while (s.level < 100 && s.xp >= s.level * 180) {
-          s.xp -= s.level * 180;
-          s.level++;
-        }
-        if (result.won) {
-          chapterNotices.push(
-            ...chapterRewards(
-              s,
-              result.stage,
-              result.items,
-              get().accounts.find((account) => account.id === get().activeAccountId)!.stash,
-            ),
-          );
-          s.clears++;
-          s.bestTime = s.bestTime ? Math.min(s.bestTime, result.seconds) : result.seconds;
-          if (result.stage >= s.highestStage)
-            s.highestStage = Math.min(150, result.stage + (result.seconds < 100 ? 3 : 1));
-          const gem = GEMS[Math.floor(Math.random() * GEMS.length)];
-          s.gems[gem.id][Math.min(9, Math.floor(result.stage / 20))]++;
-        }
-        const receipt = addItems(s, result.items);
-        if (result.items.length) {
-          const loot = [`战场装备入包 ${receipt.stored} 件`];
-          if (receipt.autoSalvaged) loot.push(`按设置分解 ${receipt.autoSalvaged} 件`);
-          if (receipt.overflow) {
-            const precious = receipt.preciousOverflow
-              ? `（其中传奇及以上 ${receipt.preciousOverflow} 件）`
-              : '';
-            loot.push(`背包满额分解 ${receipt.overflow} 件${precious}`);
-          }
-          if (receipt.crystals)
-            loot.push(
-              `分解所得 ${receipt.crystals} 结晶${receipt.souls ? `、${receipt.souls} 遗忘之魂` : ''}`,
-            );
-          chapterNotices.push(loot.join('，'));
-        }
-        if (priorKills < 100 && s.kills >= 100) s.gold += 500;
-        if (priorClears < 5 && s.clears >= 5) s.shards += 250;
-        if (priorStage < 15 && s.highestStage >= 15) s.crystals += 50;
-        const summary = result.won
-          ? `秘境已肃清 · 获得 ${result.gold} 金币与 ${result.shards} 神秘碎片`
-          : '远征结束，已带回本次收获。';
-        if (s.level > priorLevel)
-          chapterNotices.push(
-            `升至 Lv.${s.level}，获得 ${(s.level - priorLevel) * 2} 技能点，前往技能之书学习`,
-          );
-        return [summary, ...chapterNotices].join(' · ');
-      });
+      mutate((s) =>
+        applyRunResult(
+          s,
+          result,
+          get().accounts.find((account) => account.id === get().activeAccountId)!.stash,
+        ),
+      );
     },
     getStats: () => computeStats(get().save),
     equip(id) {
@@ -1127,12 +1287,10 @@ export const useGameStore = create<GameState>((set, get) => {
         if (!setDef) return;
         for (const n of SKILLS.filter((n) => n.classId === s.classId)) delete s.skills[n.id];
         Object.assign(s.skills, starters(s.classId));
-        const nodes = SKILLS.filter((n) => n.classId === s.classId).sort((a, b) =>
-          a.id === setDef.skillId ? -1 : b.id === setDef.skillId ? 1 : a.tier - b.tier,
-        );
-        for (let pass = 0; pass < 5; pass++)
-          for (const n of nodes)
-            if (skillLearningStatus(s, n).canLearn) s.skills[n.id] = (s.skills[n.id] ?? 0) + 1;
+        s.skills = {
+          ...s.skills,
+          ...recommendedSkills({ ...s, progression: { ...s.progression!, targetSetId: setId } }),
+        };
         preferBuildSkills(s, setDef.skillId);
         const remaining = skillLearningStatus(
           s,
@@ -1390,9 +1548,8 @@ export const useGameStore = create<GameState>((set, get) => {
       s.level = 100;
       s.highestStage = 150;
       s.selectedStage = 30;
-      s.skills = Object.fromEntries(
-        SKILLS.filter((n) => n.classId === def.classId).map((n) => [n.id, 5]),
-      );
+      s.progression = { ...s.progression!, skillBudgetVersion: 2, targetSetId: setId };
+      s.skills = recommendedSkills(s);
       preferBuildSkills(s, def.skillId);
       s.equipment = {};
       for (const id of build.worn) {
@@ -1429,6 +1586,8 @@ export const useGameStore = create<GameState>((set, get) => {
       }
       const save = clone(backup);
       Object.assign(save, clone(record.build));
+      save.skills = recommendedSkills(save, save.skills);
+      save.progression!.skillBudgetVersion = 2;
       save.inventory = [];
       save.highestStage = Math.max(save.highestStage, record.stage);
       save.selectedStage = record.stage;

@@ -5,6 +5,7 @@ import { MAX_CHARACTERS, useGameStore } from '../state/gameStore';
 import { HeroArt } from './SceneArt';
 import { Check, Lock } from './PixelIcons';
 import { CloudAccountPanel } from './CloudAccountPanel';
+import './character-story.css';
 
 export function AccountPanel({ onEnterHall }: { onEnterHall?: () => void }) {
   const store = useGameStore();
@@ -12,6 +13,8 @@ export function AccountPanel({ onEnterHall }: { onEnterHall?: () => void }) {
   const [accountName, setAccountName] = useState('');
   const [characterName, setCharacterName] = useState('');
   const [classId, setClassId] = useState<ClassId>('ranger');
+  const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null);
+  const [deleteName, setDeleteName] = useState('');
   const nameInput = useRef<HTMLInputElement>(null);
   const selectedClass = CLASSES.find((hero) => hero.id === classId)!;
   const locked = !!store.labBackup || store.inCombat || store.cloudTransition;
@@ -89,30 +92,88 @@ export function AccountPanel({ onEnterHall }: { onEnterHall?: () => void }) {
             const save = active ? (store.labBackup ?? store.save) : character.save;
             const hero = CLASSES.find((entry) => entry.id === save.classId)!;
             return (
-              <button
+              <div
                 key={character.id}
-                className={`account-character ${active ? 'active' : ''}`}
-                aria-pressed={active}
-                disabled={locked}
-                onClick={() => store.switchCharacter(character.id)}
+                className={`account-character-wrap ${active ? 'active' : ''}`}
               >
-                <div className="account-portrait">
-                  <HeroArt classId={save.classId} />
-                </div>
-                <strong>{character.name}</strong>
-                <span>
-                  {hero.name} · Lv.{save.level}
-                </span>
-                <small>
-                  {active ? (
-                    <>
-                      <Check size={12} /> 当前角色
-                    </>
-                  ) : (
-                    `秘境 ${save.highestStage} 层`
-                  )}
-                </small>
-              </button>
+                <button
+                  type="button"
+                  className={`account-character ${active ? 'active' : ''}`}
+                  aria-pressed={active}
+                  disabled={locked}
+                  onClick={() => store.switchCharacter(character.id)}
+                >
+                  <div className="account-portrait">
+                    <HeroArt classId={save.classId} />
+                  </div>
+                  <strong>{character.name}</strong>
+                  <span>
+                    {hero.name} · Lv.{save.level}
+                  </span>
+                  <small>
+                    {active ? (
+                      <>
+                        <Check size={12} /> 当前角色
+                      </>
+                    ) : (
+                      `秘境 ${save.highestStage} 层`
+                    )}
+                  </small>
+                  <small>
+                    已通关 {save.clears} 场 · 最高秘境 {save.highestStage} 层
+                  </small>
+                </button>
+                <button
+                  type="button"
+                  className="ghost-button character-delete"
+                  disabled={locked}
+                  title={`删除 ${character.name}`}
+                  onClick={() => {
+                    setDeleteTarget({ id: character.id, name: character.name });
+                    setDeleteName('');
+                  }}
+                >
+                  删除角色
+                </button>
+                {deleteTarget?.id === character.id && (
+                  <div className="character-delete-confirm">
+                    <strong>确认删除「{character.name}」</strong>
+                    <span>
+                      {hero.name} · Lv.{save.level} · 已通关 {save.clears} 场 · 最高{' '}
+                      {save.highestStage} 层
+                    </span>
+                    <p>该角色背包、装备和成长将删除；账号与共享仓库保留。输入角色名确认。</p>
+                    <input
+                      aria-label="输入角色名确认删除"
+                      value={deleteName}
+                      onChange={(event) => setDeleteName(event.target.value)}
+                      placeholder={character.name}
+                    />
+                    <button
+                      className="danger-button"
+                      disabled={locked || deleteName.trim() !== character.name}
+                      onClick={() => {
+                        store.deleteCharacter(character.id);
+                        setDeleteTarget(null);
+                        setDeleteName('');
+                        if (useGameStore.getState().save.characterCreated === false)
+                          onEnterHall?.();
+                      }}
+                    >
+                      永久删除角色
+                    </button>
+                    <button
+                      className="ghost-button"
+                      onClick={() => {
+                        setDeleteTarget(null);
+                        setDeleteName('');
+                      }}
+                    >
+                      取消
+                    </button>
+                  </div>
+                )}
+              </div>
             );
           })}
           {Array.from({ length: MAX_CHARACTERS - account.characters.length }, (_, index) => (

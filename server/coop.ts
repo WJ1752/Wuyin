@@ -6,15 +6,17 @@ import type { CoopRoom, CoopRoomMember } from '../src/core/coopRoom';
 import type { AccountData, CombatSnapshot, RunResult } from '../src/core/types';
 import { RARITY_COLORS, SLOTS } from '../src/core/types';
 import { EQUIPMENT_DROP_INDEX } from '../src/data/visuals';
-import { createCombatConfig } from '../src/state/gameStore';
+import { applyRunResult, createCombatConfig } from '../src/state/gameStore';
 import { newSave, validateSave } from '../src/state/saveData';
 import { SKILLS } from '../src/data/skillTrees';
 import { BOSSES, MONSTERS } from '../src/data/monsters';
 import { PYLONS } from '../src/engine/BuffAndPylon';
 import { RIFT_RULES } from '../src/data/stages';
+import { GameEngine } from '../src/engine/GameEngine';
 
 const WAIT_TTL = 45000;
-const HOST_TTL = 15000;
+const HOST_TTL = 30000;
+const FRAME_TTL = 20000;
 const RETAIN_MS = 120000;
 const object = (value: unknown): value is Record<string, unknown> =>
   value !== null && typeof value === 'object' && !Array.isArray(value);
@@ -28,6 +30,30 @@ const pylons = new Set<string>(PYLONS.map((pylon) => pylon.id));
 const skillIds = new Set(SKILLS.map((skill) => skill.id));
 const monsters = new Set([...MONSTERS, ...BOSSES].map((monster) => monster.id));
 monsters.add('treasure_goblin');
+function validStats(value: unknown) {
+  if (value === undefined) return true;
+  if (
+    !object(value) ||
+    !['seconds', 'damageDealt', 'damageTaken', 'casts', 'criticalHits', 'kills'].every((key) =>
+      nonnegative(value[key]),
+    )
+  )
+    return false;
+  for (const key of ['damageBySkill', 'damageBySource']) {
+    const damage = value[key];
+    if (
+      !object(damage) ||
+      Object.keys(damage).length > 300 ||
+      !Object.values(damage).every(nonnegative)
+    )
+      return false;
+  }
+  return (
+    (value.bossRemaining === undefined ||
+      (nonnegative(value.bossRemaining) && value.bossRemaining <= 1)) &&
+    (value.resourceStarvedSeconds === undefined || nonnegative(value.resourceStarvedSeconds))
+  );
+}
 interface Member extends CoopRoomMember {
   userId: string;
   session: string;
@@ -36,6 +62,11 @@ interface Member extends CoopRoomMember {
   input: CoopInput;
 }
 interface Room {
+  runId: string;
+  authority?: 'server';
+  engine?: GameEngine;
+  clock?: number;
+  remaining?: number;
   code: string;
   hostId: string;
   status: CoopRoom['status'];
@@ -47,7 +78,10 @@ interface Room {
   endedAt?: number;
 }
 
-function validInput(value: unknown, member: Member): value is CoopInput {
+export function validCoopInput(
+  value: unknown,
+  member: Pick<CoopRoomMember, 'classId' | 'config'>,
+): value is CoopInput {
   if (
     !object(value) ||
     Object.keys(value).some(
@@ -97,6 +131,12 @@ function validInput(value: unknown, member: Member): value is CoopInput {
 function validSnapshot(value: unknown): value is CombatSnapshot {
   if (!object(value)) return false;
   return (
+    validStats(value.stats) &&
+    (value.objective === undefined ||
+      (object(value.objective) &&
+        typeof value.objective.name === 'string' &&
+        nonnegative(value.objective.progress) &&
+        nonnegative(value.objective.target))) &&
     [
       'hp',
       'maxHp',
@@ -159,6 +199,8 @@ function bounded(value: unknown, depth = 0): boolean {
 function validResult(value: unknown, member: Member, room: Room): value is RunResult {
   if (
     !object(value) ||
+    !validStats(value.stats) ||
+    value.challenge !== undefined ||
     typeof value.won !== 'boolean' ||
     value.stage !== room.stage ||
     value.partySize !== room.members.length ||
@@ -338,6 +380,7 @@ export function registerCoop(
   options: {
     getUser: (request: FastifyRequest) => { id: string } | null;
     sessionHash: (request: FastifyRequest) => string;
+    event?: (name: string) => void;
   },
 ) {
   const rooms = new Map<string, Room>();
@@ -365,6 +408,39 @@ export function registerCoop(
     room.reason = reason;
     room.endedAt = now;
     room.snapshot = undefined;
+    room.engine?.destroy();
+    room.engine = undefined;
+    options.event?.('coop_aborted');
+  };
+  const acceptFrame = (room: Room, frame: CoopFrame, now: number) => {
+    if (frame.results) {
+      db.exec('BEGIN IMMEDIATE');
+      try {
+        const insert = db.prepare(
+          'INSERT OR IGNORE INTO coop_results(run_id, user_id, character_id, result_json, created_at) VALUES (?, ?, ?, ?, ?)',
+        );
+        for (const member of room.members)
+          insert.run(
+            room.runId,
+            member.userId,
+            member.characterId,
+            JSON.stringify(frame.results[member.id]),
+            now,
+          );
+        db.exec('COMMIT');
+      } catch (e) {
+        db.exec('ROLLBACK');
+        throw e;
+      }
+    }
+    room.snapshot = frame;
+    if (frame.results) {
+      room.status = 'finished';
+      room.endedAt = now;
+      room.engine?.destroy();
+      room.engine = undefined;
+      options.event?.('coop_completed');
+    }
   };
   const prune = (room: Room, now: number) => {
     if (room.status === 'waiting') {
@@ -374,12 +450,17 @@ export function registerCoop(
         else remove(room, member);
       }
     } else if (room.status === 'playing') {
-      const host = room.members.find((member) => member.id === room.hostId)!;
-      if (now - host.lastSeen > HOST_TTL || !sessionActive(host, now))
-        abort(room, '房主连接中断，本次远征已终止，不结算奖励。', now);
-      else if (now - host.inputAt > 5000 && room.snapshot) {
-        // The host may be alive while its simulation is no longer producing frames.
-        abort(room, '房主战场同步中断，请重新组队。', now);
+      if (room.authority === 'server') {
+        if (room.members.every((member) => now - member.lastSeen > HOST_TTL))
+          abort(room, '全队断线超过 30 秒，本次远征已中止；已完成奖励仍可补领。', now);
+      } else {
+        const host = room.members.find((member) => member.id === room.hostId)!;
+        if (now - host.lastSeen > HOST_TTL || !sessionActive(host, now))
+          abort(room, '房主连接中断，本次远征已终止，不结算奖励。', now);
+        else if (now - host.inputAt > FRAME_TTL && room.snapshot) {
+          // The host may be alive while its simulation is no longer producing frames.
+          abort(room, '房主战场同步中断，请重新组队。', now);
+        }
       }
     }
     if (room.endedAt && now - room.endedAt > RETAIN_MS) {
@@ -387,6 +468,40 @@ export function registerCoop(
       rooms.delete(room.code);
     }
   };
+  const hostedTimer = setInterval(() => {
+    for (const room of rooms.values()) {
+      if (room.authority !== 'server' || room.status !== 'playing' || !room.engine) continue;
+      const now = Date.now();
+      prune(room, now);
+      if (!room.engine || room.status !== 'playing') continue;
+      const clock = performance.now();
+      room.remaining =
+        (room.remaining ?? 0) + Math.min(200, Math.max(0, clock - (room.clock ?? clock)));
+      room.clock = clock;
+      try {
+        for (const member of room.members)
+          room.engine.receiveCoopInput(
+            member.id,
+            now - member.inputAt <= 500
+              ? member.input
+              : { sequence: member.input.sequence, movement: { x: 0, y: 0 }, casts: [] },
+          );
+        while (room.remaining >= 1000 / 30) {
+          room.engine.stepHeadless();
+          room.remaining -= 1000 / 30;
+        }
+        acceptFrame(room, room.engine.headlessFrame(room.hostId), now);
+      } catch {
+        abort(room, '托管战场发生异常，请重新组队；已完成奖励仍可补领。', now);
+        options.event?.('coop_simulation_error');
+      }
+    }
+  }, 1000 / 30);
+  hostedTimer.unref();
+  app.addHook('onClose', async () => {
+    clearInterval(hostedTimer);
+    for (const room of rooms.values()) room.engine?.destroy();
+  });
   const sweep = (now: number) => {
     if (now - lastSweep < 30000) return;
     lastSweep = now;
@@ -405,8 +520,12 @@ export function registerCoop(
     if (room) prune(room, now);
     const member = room?.members.find((entry) => entry.userId === user.id);
     if (member && member.session !== options.sessionHash(request)) {
-      error(reply, 409, 'ROOM_SESSION', '此账号已在另一会话中组队，请先离开原房间。');
-      return null;
+      if (room?.authority === 'server' && !sessionActive(member, now))
+        member.session = options.sessionHash(request);
+      else {
+        error(reply, 409, 'ROOM_SESSION', '此账号已在另一会话中组队，请先离开原房间。');
+        return null;
+      }
     }
     return { user, room: room && rooms.has(room.code) ? room : undefined, member, now };
   };
@@ -416,12 +535,23 @@ export function registerCoop(
     const account = JSON.parse(String(row.account_json)) as AccountData;
     const character = account.characters.find((entry) => entry.id === account.activeCharacterId);
     if (!character || stage > character.save.highestStage) return null;
-    return { character, config: { ...createCombatConfig(character.save, account.stash), stage } };
+    return {
+      character,
+      config: { ...createCombatConfig(character.save, account.stash), challenge: undefined, stage },
+    };
   };
   const view = (room: Room, self: Member, now: number): CoopRoom => ({
+    runId: room.runId,
+    ...(room.authority ? { authority: room.authority } : {}),
     code: room.code,
     hostId: room.hostId,
     selfId: self.id,
+    inputSequenceBase: self.input.sequence,
+    commandSequenceBase: Math.max(
+      0,
+      ...(self.input.commands ?? []).map((command) => command.sequence),
+      room.snapshot?.actors.find((actor) => actor.id === self.id)?.inputSequence ?? 0,
+    ),
     status: room.status,
     stage: room.stage,
     seed: room.seed,
@@ -433,7 +563,17 @@ export function registerCoop(
         inputAt: _inputAt,
         input: _input,
         ...member
-      }) => ({ ...member, connected: now - lastSeen < 5000 }),
+      }) => ({
+        ...member,
+        config:
+          member.id === self.id && _input.autoSkills
+            ? {
+                ...member.config,
+                autoSkills: { ...member.config.autoSkills, ..._input.autoSkills },
+              }
+            : member.config,
+        connected: now - lastSeen < 5000,
+      }),
     ),
     ...(room.reason ? { reason: room.reason } : {}),
     ...(room.snapshot ? { snapshot: room.snapshot } : {}),
@@ -464,6 +604,13 @@ export function registerCoop(
     const state = current(request, reply);
     if (!state) return;
     if (!state.room || !state.member) return { room: null };
+    if (
+      state.room.authority !== 'server' &&
+      state.room.status === 'playing' &&
+      state.room.snapshot &&
+      state.member.id === state.room.hostId
+    )
+      abort(state.room, '队长页面已重新载入，本次远征安全中止；已完成的奖励仍可补领。', state.now);
     state.member.lastSeen = state.now;
     return response(state.room, state.member, state.now);
   });
@@ -474,7 +621,8 @@ export function registerCoop(
     const body = request.body;
     if (
       !object(body) ||
-      Object.keys(body).some((key) => key !== 'stage') ||
+      Object.keys(body).some((key) => !['stage', 'authority'].includes(key)) ||
+      (body.authority !== undefined && body.authority !== 'server') ||
       !Number.isInteger(body.stage) ||
       Number(body.stage) < 1 ||
       Number(body.stage) > 150
@@ -510,6 +658,8 @@ export function registerCoop(
       input: { sequence: 0, movement: { x: 0, y: 0 }, casts: [] },
     };
     const room: Room = {
+      runId: randomUUID(),
+      ...(body.authority === 'server' ? { authority: 'server' as const } : {}),
       code,
       hostId: member.id,
       status: 'waiting',
@@ -619,7 +769,30 @@ export function registerCoop(
         return error(reply, 409, 'CHARACTER_CHANGED', '队员角色或配装已改变，请同步后重新准备。');
       }
     }
+    if (room.authority === 'server') {
+      const configuredCapacity = Number(process.env.MAX_HOSTED_ROOMS ?? 2);
+      const capacity =
+        Number.isInteger(configuredCapacity) && configuredCapacity >= 1 && configuredCapacity <= 8
+          ? configuredCapacity
+          : 2;
+      if (
+        [...rooms.values()].filter(
+          (entry) => entry.authority === 'server' && entry.status === 'playing',
+        ).length >= capacity
+      )
+        return error(reply, 503, 'HOSTED_CAPACITY', '托管远征席位暂满，请稍后出发。');
+      room.engine = new GameEngine();
+      room.engine.initHeadlessCoop(room.members, room.seed, {
+        onSnapshot: () => {},
+        onSound: () => {},
+        onFinish: () => {},
+      });
+      room.clock = performance.now();
+      room.remaining = 0;
+      room.snapshot = room.engine.headlessFrame(room.hostId);
+    }
     room.status = 'playing';
+    options.event?.('coop_started');
     for (const entry of room.members) entry.inputAt = now;
     return response(room, member, now);
   });
@@ -635,9 +808,16 @@ export function registerCoop(
         return error(reply, 400, 'INVALID_EXCHANGE', '战场同步数据无效。');
       if (room.status === 'waiting')
         return error(reply, 409, 'ROOM_NOT_STARTED', '请等待房主开始远征。');
+      if (room.authority === 'server' && body.snapshot !== undefined)
+        return error(
+          reply,
+          403,
+          'SERVER_AUTHORITY',
+          '托管战场只接受操作，不接受客户端快照或成绩。',
+        );
       if (body.snapshot !== undefined && member.id !== room.hostId)
         return error(reply, 403, 'HOST_REQUIRED', '仅房主可提交战场快照。');
-      if (body.input !== undefined && !validInput(body.input, member))
+      if (body.input !== undefined && !validCoopInput(body.input, member))
         return error(reply, 400, 'INVALID_INPUT', '战场输入无效。');
       if (body.snapshot !== undefined && !validFrame(body.snapshot, room))
         return error(reply, 400, 'INVALID_FRAME', '战场快照格式或结算无效。');
@@ -647,24 +827,116 @@ export function registerCoop(
           body.input !== undefined &&
           (body.input as CoopInput).sequence > member.input.sequence
         ) {
-          member.input = body.input as CoopInput;
+          const nextInput = body.input as CoopInput;
+          member.input = {
+            ...nextInput,
+            autoSkills: nextInput.autoSkills ?? member.input.autoSkills,
+          };
           member.inputAt = now;
         }
         if (
           body.snapshot !== undefined &&
           (!room.snapshot || (body.snapshot as CoopFrame).sequence > room.snapshot.sequence)
         ) {
-          room.snapshot = body.snapshot as CoopFrame;
+          const nextFrame = body.snapshot as CoopFrame;
+          acceptFrame(room, nextFrame, now);
           member.inputAt = now;
-          if (room.snapshot.results) {
-            room.status = 'finished';
-            room.endedAt = now;
-          }
         }
       }
       return response(room, member, now);
     },
   );
+  app.get('/api/coop/results', { config: rate(60) }, async (request, reply) => {
+    const user = options.getUser(request);
+    if (!user) return error(reply, 401, 'AUTH_REQUIRED', '请先登录账号。');
+    const rows = db
+      .prepare(
+        'SELECT run_id, character_id, result_json, created_at FROM coop_results WHERE user_id = ? AND claimed_at IS NULL ORDER BY created_at LIMIT 100',
+      )
+      .all(user.id);
+    return {
+      rewards: rows.map((row) => ({
+        runId: row.run_id,
+        characterId: row.character_id,
+        result: JSON.parse(String(row.result_json)),
+        createdAt: row.created_at,
+      })),
+    };
+  });
+  app.post('/api/coop/claim', { bodyLimit: 1024, config: rate(60) }, async (request, reply) => {
+    const user = options.getUser(request);
+    if (!user) return error(reply, 401, 'AUTH_REQUIRED', '请先登录账号。');
+    const body = request.body;
+    if (
+      !object(body) ||
+      typeof body.runId !== 'string' ||
+      body.runId.length > 100 ||
+      !sequence(body.revision)
+    )
+      return error(reply, 400, 'INVALID_CLAIM', '远征凭据或存档版本无效。');
+    db.exec('BEGIN IMMEDIATE');
+    try {
+      const reward = db
+        .prepare('SELECT * FROM coop_results WHERE run_id = ? AND user_id = ?')
+        .get(body.runId, user.id);
+      const saved = db
+        .prepare('SELECT account_json, revision, updated_at FROM saves WHERE user_id = ?')
+        .get(user.id)!;
+      if (!reward) {
+        db.exec('ROLLBACK');
+        return error(reply, 404, 'RESULT_NOT_FOUND', '没有找到此账号的远征奖励。');
+      }
+      if (saved.revision !== body.revision) {
+        db.exec('ROLLBACK');
+        return error(reply, 409, 'SAVE_CONFLICT', '云端已更新，请载入最新存档后补领奖励。');
+      }
+      const result = JSON.parse(String(reward.result_json)) as RunResult;
+      const account = JSON.parse(String(saved.account_json)) as AccountData;
+      if (reward.claimed_at !== null) {
+        db.exec('COMMIT');
+        return {
+          account,
+          revision: saved.revision,
+          updatedAt: saved.updated_at,
+          alreadyClaimed: true,
+          result,
+        };
+      }
+      const character = account.characters.find((entry) => entry.id === reward.character_id);
+      if (!character) {
+        db.exec('ROLLBACK');
+        return error(
+          reply,
+          409,
+          'RESULT_CHARACTER_MISSING',
+          '该奖励属于已移除的角色，请先恢复对应角色再领取。',
+        );
+      }
+      const notice = applyRunResult(character.save, result, account.stash);
+      const updatedAt = Date.now();
+      db.prepare(
+        'UPDATE saves SET account_json = ?, revision = revision + 1, updated_at = ? WHERE user_id = ?',
+      ).run(JSON.stringify(account), updatedAt, user.id);
+      db.prepare('UPDATE coop_results SET claimed_at = ? WHERE run_id = ? AND user_id = ?').run(
+        updatedAt,
+        body.runId,
+        user.id,
+      );
+      db.exec('COMMIT');
+      options.event?.('reward_claimed');
+      return {
+        account,
+        revision: Number(saved.revision) + 1,
+        updatedAt,
+        alreadyClaimed: false,
+        result,
+        notice,
+      };
+    } catch (e) {
+      db.exec('ROLLBACK');
+      throw e;
+    }
+  });
   app.post('/api/coop/leave', { bodyLimit: 1024, config: rate(60) }, async (request, reply) => {
     const state = current(request, reply);
     if (!state) return;

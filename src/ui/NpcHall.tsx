@@ -25,6 +25,8 @@ import { CAMP_ART, HallScene } from './HallScene';
 import { VirtualJoystick } from './VirtualJoystick';
 import { useDialog } from './useDialog';
 import './npc-hall.css';
+import { DEFAULT_KEYS } from '../core/preferences';
+import { actionKey } from './inputLabels';
 
 const NPC_ICONS: Record<string, typeof Hammer> = {
   forge: Hammer,
@@ -64,6 +66,12 @@ export function NpcHall({
   active: boolean;
 }) {
   const save = useGameStore((state) => state.save);
+  const bindings = { ...DEFAULT_KEYS, ...save.preferences?.keyBindings };
+  const bindingRef = useRef(bindings);
+  bindingRef.current = bindings;
+  const keyboardInteract = ![bindings.up, bindings.down, bindings.left, bindings.right].includes(
+    'KeyE',
+  );
   const accounts = useGameStore((state) => state.accounts);
   const activeAccountId = useGameStore((state) => state.activeAccountId);
   const labBackup = useGameStore((state) => state.labBackup);
@@ -261,19 +269,31 @@ export function NpcHall({
         document.querySelector('[role="dialog"][aria-modal="true"]')
       )
         return;
+      if (event.code === 'Space' && element?.closest?.('button,a[href],[role="button"]')) return;
       const key = event.key.toLowerCase();
-      if (['w', 'a', 's', 'd', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright'].includes(key)) {
+      const currentBindings = bindingRef.current;
+      const movementKey = [
+        currentBindings.up,
+        currentBindings.down,
+        currentBindings.left,
+        currentBindings.right,
+        'ArrowUp',
+        'ArrowDown',
+        'ArrowLeft',
+        'ArrowRight',
+      ].includes(event.code);
+      if (movementKey) {
         event.preventDefault();
-        keys.current.add(key);
+        keys.current.add(event.code);
         targetRef.current = null;
         setTarget(null);
       }
-      if (key === 'e' && !event.repeat) {
+      if (key === 'e' && !event.repeat && !movementKey) {
         event.preventDefault();
         interaction.current();
       }
     };
-    const keyUp = (event: KeyboardEvent) => keys.current.delete(event.key.toLowerCase());
+    const keyUp = (event: KeyboardEvent) => keys.current.delete(event.code);
     const visibility = () => {
       if (document.hidden) reset();
     };
@@ -287,16 +307,17 @@ export function NpcHall({
       const dt = Math.min(0.05, (now - last) / 1000);
       last = now;
       if (!document.hidden) {
+        const currentBindings = bindingRef.current;
         let x =
           joystick.current.x +
           dragMove.current.x +
-          (keys.current.has('d') || keys.current.has('arrowright') ? 1 : 0) -
-          (keys.current.has('a') || keys.current.has('arrowleft') ? 1 : 0);
+          (keys.current.has(currentBindings.right) || keys.current.has('ArrowRight') ? 1 : 0) -
+          (keys.current.has(currentBindings.left) || keys.current.has('ArrowLeft') ? 1 : 0);
         let y =
           joystick.current.y +
           dragMove.current.y +
-          (keys.current.has('s') || keys.current.has('arrowdown') ? 1 : 0) -
-          (keys.current.has('w') || keys.current.has('arrowup') ? 1 : 0);
+          (keys.current.has(currentBindings.down) || keys.current.has('ArrowDown') ? 1 : 0) -
+          (keys.current.has(currentBindings.up) || keys.current.has('ArrowUp') ? 1 : 0);
         const width = board.current?.clientWidth || 500,
           height = board.current?.clientHeight || 460;
         const currentTarget = targetRef.current;
@@ -423,7 +444,7 @@ export function NpcHall({
           transform: `translate3d(${cameraX}px, ${cameraY}px, 0) scale(${worldScale})`,
         }}
         role="group"
-        aria-label="营地地图，WASD或方向键移动，点击地面前往，靠近居民后按E交互"
+        aria-label={`营地地图，${(['up', 'left', 'down', 'right'] as const).map((action) => actionKey(save.preferences, action)).join(' ')}或方向键移动，点击地面前往，靠近居民后${keyboardInteract ? '按E或点击' : '点击'}交互`}
         aria-describedby="hall-controls-help"
         tabIndex={0}
         onPointerDown={(event) => {
@@ -477,7 +498,7 @@ export function NpcHall({
             top: `${HALL_LAYOUT.portalPlaza.y * 100}%`,
           }}
           aria-label="符文传送阵，选择单人或组队远征"
-          title="秘境传送 · 点击选择远征，靠近后也可按 E"
+          title={`秘境传送 · 点击选择远征${keyboardInteract ? '，靠近后也可按 E' : ''}`}
           disabled={!movingEnabled}
           onClick={enterPortal}
         >
@@ -625,7 +646,7 @@ export function NpcHall({
             disabled={!movingEnabled || !inReach}
             onClick={() => interaction.current()}
           >
-            <kbd>E</kbd>
+            {keyboardInteract && <kbd>E</kbd>}
             <span>
               <small>
                 {interactingPortal
@@ -651,8 +672,8 @@ export function NpcHall({
             : inReach
               ? `「${interactionNpc.greeting}」`
               : selectedNpc
-                ? `正在前往${selectedNpc.name}，靠近后点击交互或按 E。`
-                : 'WASD / 摇杆移动　·　点击居民或传送阵交互'}
+                ? `正在前往${selectedNpc.name}，靠近后点击交互${keyboardInteract ? '或按 E' : ''}。`
+                : '方向键 / 摇杆移动　·　点击居民或传送阵交互'}
         </span>
       </div>
       {publishError && (

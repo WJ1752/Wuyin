@@ -193,6 +193,9 @@ test('inputs are validated and expire; final host results are shared once and re
     commands: [{ sequence: 1, id: skill }],
   };
   assert.equal((await guest.request('POST', '/coop/exchange', { input })).statusCode, 200);
+  const rejoining = (await guest.request('GET', '/coop/room')).json().room;
+  assert.equal(rejoining.inputSequenceBase, 2);
+  assert.equal(rejoining.commandSequenceBase, 1);
   assert.equal(
     (await host.request('POST', '/coop/exchange', {})).json().room.inputs[guestId].movement.x,
     1,
@@ -208,6 +211,12 @@ test('inputs are validated and expire; final host results are shared once and re
     400,
   );
   const final = frame(active, 3);
+  const invalidStats = structuredClone(final);
+  invalidStats.actors[0].snapshot.stats = { damageBySkill: null } as any;
+  assert.equal(
+    (await host.request('POST', '/coop/exchange', { snapshot: invalidStats })).statusCode,
+    400,
+  );
   const cue = {
     kind: 'ring',
     x: 0,
@@ -280,7 +289,7 @@ test('single-player rooms start, and host timeout or logout closes live expediti
   await guest.request('POST', '/coop/join', { code: created.code });
   await guest.request('POST', '/coop/ready', { ready: true });
   await host.request('POST', '/coop/start', {});
-  now += 16000;
+  now += 31000;
   const stale = await guest.request('POST', '/coop/exchange', {});
   assert.equal(stale.statusCode, 200, stale.body);
   assert.equal(stale.json().room.status, 'aborted');
@@ -293,4 +302,72 @@ test('single-player rooms start, and host timeout or logout closes live expediti
   await host.request('POST', '/coop/start', {});
   await host.request('POST', '/auth/logout');
   assert.equal((await guest.request('GET', '/coop/room')).json().room.status, 'aborted');
+});
+
+test('server-hosted cooperation keeps the same world across guest and leader reconnects, rejects snapshots and persists both rewards', async (t) => {
+  let now = Date.now();
+  let clock = 0;
+  t.mock.method(Date, 'now', () => now);
+  t.mock.method(performance, 'now', () => clock);
+  t.mock.timers.enable({ apis: ['setInterval'] });
+  const {
+    clients: [host, guest],
+  } = await fixture(t, 2);
+  const created = (
+    await host.request('POST', '/coop/create', { stage: 1, authority: 'server' })
+  ).json().room as CoopRoom;
+  await guest.request('POST', '/coop/join', { code: created.code });
+  await guest.request('POST', '/coop/ready', { ready: true });
+  let room = (await host.request('POST', '/coop/start', {})).json().room as CoopRoom;
+  assert.equal(room.authority, 'server');
+  const initialSequence = room.snapshot!.sequence;
+  const advance = (milliseconds: number) => {
+    for (let index = 0; index < milliseconds; index += 34) {
+      now += 34;
+      clock += 34;
+      t.mock.timers.tick(34);
+    }
+  };
+  advance(1000);
+  const skill = Object.keys(room.members[0].config.skills)[0];
+  await guest.request('POST', '/coop/exchange', {
+    input: {
+      sequence: 20,
+      movement: { x: 0, y: 0 },
+      casts: [],
+      commands: [{ sequence: 10, id: skill }],
+      autoSkills: { [skill]: false },
+    },
+  });
+  advance(1000);
+  const returned = (await guest.request('GET', '/coop/room')).json().room as CoopRoom;
+  assert.equal(returned.runId, created.runId);
+  assert.equal(returned.inputSequenceBase, 20);
+  assert.equal(returned.commandSequenceBase, 10);
+  assert.equal(
+    returned.members.find((member) => member.id === returned.selfId)!.config.autoSkills[skill],
+    false,
+  );
+  await guest.request('POST', '/coop/exchange', {
+    input: { sequence: 21, movement: { x: 0, y: 0 }, casts: [], autoSkills: { [skill]: true } },
+  });
+  const leaderReturned = await host.request('GET', '/coop/room');
+  assert.equal(leaderReturned.json().room.status, 'playing');
+  assert.ok(leaderReturned.json().room.snapshot.sequence > initialSequence);
+  assert.equal(
+    (await host.request('POST', '/coop/exchange', { snapshot: frame(room) })).statusCode,
+    403,
+  );
+  // Only the leader reconnects for a while; the absent member does not abort the party.
+  for (let second = 0; second < 120 && room.status === 'playing'; second++) {
+    advance(1000);
+    room = (await host.request('POST', '/coop/exchange', {})).json().room;
+  }
+  assert.equal(room.status, 'finished');
+  assert.equal((await host.request('GET', '/coop/results')).json().rewards.length, 1);
+  assert.equal((await guest.request('GET', '/coop/results')).json().rewards.length, 1);
+  assert.equal(
+    (await guest.request('POST', '/coop/claim', { runId: room.runId, revision: 1 })).statusCode,
+    200,
+  );
 });

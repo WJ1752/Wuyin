@@ -11,7 +11,7 @@
   background: #05090c;
   backdrop-filter: none;
 }
-.app .systems-modal.system-screen {
+.systems-modal.system-screen {
   --system-glow: #7e70442a;
   position: relative;
   width: 100%;
@@ -19,27 +19,7 @@
   height: 100dvh;
   max-height: none;
   margin: 0;
-  border: 0;
-  border-radius: 0;
   overflow: hidden;
-  background:
-    radial-gradient(ellipse at 50% 10%, var(--system-glow), transparent 55%),
-    repeating-linear-gradient(115deg, #a6946703 0 1px, transparent 1px 7px),
-    linear-gradient(100deg, #060a0d, #101718 40%, #0d1315 65%, #060a0d);
-  box-shadow: inset 0 0 100px #0008;
-}
-.app .systems-modal.system-screen::before {
-  inset: 10px;
-  opacity: 0.5;
-  background:
-    linear-gradient(#b79a60, #b79a60) left top / 48px 1px no-repeat,
-    linear-gradient(#b79a60, #b79a60) left top / 1px 48px no-repeat,
-    linear-gradient(#b79a60, #b79a60) right top / 48px 1px no-repeat,
-    linear-gradient(#b79a60, #b79a60) right top / 1px 48px no-repeat,
-    linear-gradient(#b79a60, #b79a60) left bottom / 48px 1px no-repeat,
-    linear-gradient(#b79a60, #b79a60) left bottom / 1px 48px no-repeat,
-    linear-gradient(#b79a60, #b79a60) right bottom / 48px 1px no-repeat,
-    linear-gradient(#b79a60, #b79a60) right bottom / 1px 48px no-repeat;
 }
 .app .system-screen .modal-header {
   min-height: 80px;

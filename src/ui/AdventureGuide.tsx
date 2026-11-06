@@ -4,6 +4,9 @@ import { CLASSES } from '../data/classes';
 import { SKILLS } from '../data/skillTrees';
 import { useGameStore } from '../state/gameStore';
 import { useDialog } from './useDialog';
+import { OnboardingChecklist } from './OnboardingChecklist';
+import { nextSkillPointLevel, skillPointBudget } from '../data/progression';
+import { actionKey } from './inputLabels';
 
 const CHAPTERS = [
   { title: '从大厅出发', icon: Compass, label: '出发' },
@@ -73,6 +76,15 @@ export function AdventureGuide({
           ))}
         </nav>
         <div className="modal-body guide-content">
+          <OnboardingChecklist save={save} onNavigate={onNavigate} />
+          <button
+            className="ghost-button onboarding-skip"
+            onClick={() => {
+              useGameStore.getState().updateSettings({ tutorialSeen: !save.tutorialSeen });
+            }}
+          >
+            {save.tutorialSeen ? '恢复营地实操提醒' : '跳过营地实操提醒，保留指南'}
+          </button>
           <div className="guide-heading">
             <Icon size={28} />
             <div>
@@ -85,19 +97,32 @@ export function AdventureGuide({
           {step === 0 && (
             <>
               <div className="guide-callout">
-                在大厅用摇杆或 WASD 走动，点击 NPC 会走近，靠近后点「交互」或按
+                在大厅用摇杆或方向键走动，点击 NPC 会走近，靠近后点「交互」或按
                 E。右下角选层后即可出征。要找队友，点击营地传送门选择组队远征。
               </div>
+              <button className="outline-button full-width" onClick={() => onNavigate('story')}>
+                <BookOpen size={16} /> 回顾开场剧情
+              </button>
               <p>
                 你已掌握{basic?.name ?? '基础技能'}
                 。靠近敌人后会自动攻击，把注意力留给躲避红色预警。
               </p>
               <div className="guide-controls">
                 <span>
-                  <kbd>W A S D</kbd> / 方向键移动
+                  <kbd>
+                    {(['up', 'left', 'down', 'right'] as const)
+                      .map((action) => actionKey(save.preferences, action))
+                      .join(' ')}
+                  </kbd>{' '}
+                  / 方向键移动
                 </span>
                 <span>
-                  <kbd>1–6</kbd> 施放已学技能
+                  <kbd>
+                    {(['skill1', 'skill2', 'skill3', 'skill4', 'skill5', 'skill6'] as const)
+                      .map((action) => actionKey(save.preferences, action))
+                      .join(' / ')}
+                  </kbd>{' '}
+                  施放已学技能
                 </span>
                 <span>
                   <kbd>Esc</kbd> 暂停 / 继续
@@ -106,8 +131,8 @@ export function AdventureGuide({
               </div>
               <div className="guide-callout">
                 {movement && save.skills[movement.id]
-                  ? `空格施放「${movement.name}」，默认手动，留给危险时刻。`
-                  : '位移在 Lv.3 解锁并学习后，才能用空格施放；现在先用走位躲避。'}
+                  ? `${actionKey(save.preferences, 'movement')}施放「${movement.name}」，默认手动，留给危险时刻。`
+                  : `位移在 Lv.3 解锁并学习后，才能用${actionKey(save.preferences, 'movement')}施放；现在先用走位躲避。`}
               </div>
               <button className="outline-button full-width" onClick={onTrain}>
                 <Swords size={16} /> 去无收益训练场试试走位
@@ -117,8 +142,15 @@ export function AdventureGuide({
           {step === 1 && (
             <>
               <p>
-                每升一级获得 2
-                点技能点。在营地点击「技能」学习后，主动技能会加入战斗栏，被动分支强化其前置技能。
+                Lv.2–15 每级获得 2 点，之后逐步获得进阶技能点，满级总预算 {skillPointBudget(100)}{' '}
+                点。 在营地点击「技能」学习后，主动技能会加入战斗栏，被动分支强化其前置技能。
+              </p>
+              <p className="guide-callout">
+                当前技能点总预算 {skillPointBudget(save.level)} 点。
+                {nextSkillPointLevel(save.level)
+                  ? `下一次获得技能点：Lv.${nextSkillPointLevel(save.level)}。`
+                  : '已获得全部技能点，可免费洗点调整取舍。'}
+                优先强化流派的核心技能，再选择回能、防御或另一种输出方式。
               </p>
               <ol className="guide-milestones">
                 <li>

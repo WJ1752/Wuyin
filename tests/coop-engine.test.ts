@@ -2,6 +2,60 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { MONSTERS } from '../src/data/monsters';
 import { buildHarness } from './helpers/combatHarness';
+import { GameEngine } from '../src/engine/GameEngine';
+import { createCombatConfig, newSave } from '../src/state/gameStore';
+import type { RunResult } from '../src/core/types';
+
+test('hosted headless parties clear one shared world and settle independent rewards', () => {
+  const members = (['ranger', 'sorcerer'] as const).map((classId, i) => ({
+    id: `p${i}`,
+    name: `队员${i}`,
+    config: createCombatConfig(newSave(classId)),
+  }));
+  const engine = new GameEngine();
+  let result: RunResult | undefined;
+  engine.initHeadlessCoop(members, 4107, {
+    onSound() {},
+    onSnapshot() {},
+    onFinish(value) {
+      result = value;
+    },
+  });
+  try {
+    for (let sequence = 1; sequence <= 9000 && !result; sequence++) {
+      const frame = engine.headlessFrame('p0');
+      for (const actor of frame.actors) {
+        const target = frame.enemies
+          .filter((enemy) => enemy.hp > 0)
+          .sort(
+            (a, b) =>
+              Math.hypot(a.x - actor.x, a.y - actor.y) - Math.hypot(b.x - actor.x, b.y - actor.y),
+          )[0];
+        const angle = target
+          ? Math.atan2(target.y - actor.y, target.x - actor.x) +
+            (Math.hypot(target.x - actor.x, target.y - actor.y) < 65 ? Math.PI / 2 : 0)
+          : 0;
+        engine.receiveCoopInput(actor.id, {
+          sequence,
+          movement: target ? { x: Math.cos(angle), y: Math.sin(angle) } : { x: 0, y: 0 },
+          casts: [],
+        });
+      }
+      engine.stepHeadless();
+    }
+    assert.equal(result?.won, true);
+    const final = engine.headlessFrame('p0');
+    assert.equal(final.actors.length, 2);
+    assert.equal(Object.keys(final.results!).length, 2);
+    assert.equal(final.results!.p0.partySize, 2);
+    assert.equal(final.results!.p0.kills, final.results!.p1.kills);
+    const first = new Set(final.results!.p0.items.map((item) => item.id));
+    assert.ok(final.results!.p0.items.length > 0 && final.results!.p1.items.length > 0);
+    assert.ok(final.results!.p1.items.every((item) => !first.has(item.id)));
+  } finally {
+    engine.destroy();
+  }
+});
 
 function party(size = 2) {
   const host = buildHarness('wasteland', 4, 1, false).engine;

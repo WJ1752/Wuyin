@@ -28,7 +28,7 @@ export const BUILD_GUIDES: Record<string, BuildGuide> = {
   wasteland: {
     style: '移动旋风',
     range: '近距，沿怪群边缘旋转',
-    rotation: '旋风 AUTO，持续移动覆盖怪群，位移留给脱困。',
+    rotation: '旋风 AUTO，持续移动覆盖怪群；手动冲锋后4秒内四道龙卷全部追踪敌人。',
     tip: '成型续能依赖布尔凯索；未取得该传奇时仍需基础攻击回怒。',
   },
   earthbreaker: {
@@ -70,7 +70,7 @@ export const BUILD_GUIDES: Record<string, BuildGuide> = {
   trang_oul: {
     style: '毒镰叠层',
     range: '近距，同时扫过多个目标',
-    rotation: '死亡镰刀 AUTO，连续叠毒触发五层新星，再借传染清群。',
+    rotation: '死亡镰刀 AUTO，连续叠毒触发五层新星；血步后4秒内毒镰额外叠层，再借传染清群。',
     tip: '强项是群体叠毒；保留骨刺回能，目标分散与单体战需要持续叠层。',
   },
   inarius: {

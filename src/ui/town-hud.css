@@ -565,7 +565,7 @@
 @media (max-width: 760px) and (orientation: portrait) {
   .in-town {
     --camp-top: calc(70px + env(safe-area-inset-top));
-    --camp-bottom: calc(126px + env(safe-area-inset-bottom));
+    --camp-bottom: calc(158px + env(safe-area-inset-bottom));
   }
   .game-hall {
     --hud-edge: max(12px, env(safe-area-inset-right));
@@ -573,7 +573,7 @@
   }
   .game-hall .npc-hall,
   .game-hall::after {
-    inset: var(--camp-top) 0 var(--camp-bottom);
+    inset: calc(var(--camp-top) + 30px) 0 var(--camp-bottom);
     height: auto;
   }
   .game-hall::after {

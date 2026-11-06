@@ -1,0 +1,310 @@
+/* Compact pixel-fantasy layout for the camp and system folio. */
+.mobile-camp-topline,
+.mobile-expedition-bar,
+.mobile-camp-nav {
+  display: none;
+}
+
+@media (max-width: 760px) and (orientation: portrait) {
+  .game-hall .hall-header,
+  .game-hall .hall-visitors,
+  .game-hall .hall-network-note,
+  .game-hall .hall-dialogue,
+  .game-hall .hall-lab-status {
+    display: none;
+  }
+
+  .game-hall .hall-npc:not(.selected):not(.in-reach) .hall-actor-name,
+  .game-hall .hall-actor-name {
+    display: none;
+  }
+
+  .game-hall .hall-npc.selected .hall-actor-name,
+  .game-hall .hall-npc.in-reach .hall-actor-name {
+    display: block;
+  }
+
+  .game-hall .hall-interact {
+    z-index: 4;
+    min-height: 48px;
+  }
+
+  .hall-service-rail,
+  .hall-expedition {
+    display: none;
+  }
+
+  .mobile-camp-topline,
+  .mobile-expedition-bar,
+  .mobile-camp-nav {
+    display: flex;
+    position: absolute;
+    z-index: 120;
+    left: 0;
+    right: 0;
+  }
+
+  .mobile-camp-topline {
+    top: var(--camp-top);
+    align-items: center;
+    justify-content: space-between;
+    min-height: 30px;
+    padding: 2px 10px;
+    background: #0b141ae8;
+  }
+
+  .mobile-camp-save {
+    overflow: hidden;
+    color: #c8bb9c;
+    font-size: 10px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .mobile-task-chip {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    min-height: 28px;
+    max-width: 56%;
+    overflow: hidden;
+    padding: 3px 7px;
+    border: 1px solid #a68a5059;
+    background: #1a2423;
+    color: #dfc88f;
+    font-size: 10px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .mobile-expedition-bar {
+    bottom: calc(82px + env(safe-area-inset-bottom));
+    align-items: stretch;
+    gap: 8px;
+    min-height: 66px;
+    padding: 7px 10px;
+    border-top: 1px solid #a68a5070;
+    background: linear-gradient(105deg, #172322, #0c1519);
+  }
+
+  .mobile-stage-picker {
+    display: flex;
+    flex: 0 0 144px;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 6px;
+    border: 1px solid #a68a5040;
+    color: #d5c69f;
+    font-size: 11px;
+  }
+
+  .mobile-stage-picker > span {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  .mobile-stage-picker .expedition-tier > button {
+    width: 48px;
+    min-height: 48px;
+  }
+
+  .mobile-stage-picker .expedition-tier label {
+    font-size: 10px;
+  }
+
+  .mobile-stage-picker .expedition-tier label > span:last-child {
+    display: none;
+  }
+
+  .app .mobile-stage-picker input {
+    width: 32px;
+    min-height: 42px;
+    padding: 0;
+    text-align: center;
+    background: transparent;
+    color: #f0ddb0;
+  }
+
+  .mobile-expedition-button {
+    display: flex;
+    flex: 1 1 auto;
+    min-width: 0;
+    min-height: 52px;
+    align-items: center;
+    justify-content: space-between;
+    gap: 7px;
+    padding: 5px 10px;
+    border: 1px solid #e2c983;
+    background: linear-gradient(110deg, #d3b878, #92784c);
+    color: #18201d;
+    font: 16px var(--serif);
+  }
+
+  .mobile-expedition-button > span:not(.pixel-ui-icon) {
+    flex: 1;
+    text-align: left;
+  }
+
+  .mobile-expedition-button small {
+    display: block;
+    margin-top: 2px;
+    font: 10px var(--ui-mono);
+  }
+
+  .mobile-camp-nav {
+    bottom: env(safe-area-inset-bottom);
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    min-height: 76px;
+    border-top: 1px solid #a68a5070;
+    background: #0c1519f5;
+  }
+
+  .mobile-camp-nav button {
+    position: relative;
+    display: flex;
+    min-width: 0;
+    min-height: 76px;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    gap: 4px;
+    color: #d7c89f;
+  }
+
+  .mobile-camp-nav span {
+    font: 13px var(--serif);
+  }
+
+  .mobile-camp-nav svg {
+    width: 28px;
+    height: 28px;
+  }
+
+  .mobile-camp-nav button + button {
+    border-left: 1px solid #a68a5026;
+  }
+
+  .app .system-screen {
+    position: fixed;
+    inset: max(8px, env(safe-area-inset-top)) 8px max(8px, env(safe-area-inset-bottom));
+    width: auto;
+    max-width: none;
+    height: auto;
+    max-height: none;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  .app .system-screen .modal-header {
+    position: relative;
+    flex: 0 0 auto;
+    min-height: 64px;
+    padding: 8px 12px;
+    gap: 9px;
+  }
+
+  .app .system-screen .modal-header .camp-back {
+    display: grid;
+    flex: 0 0 48px;
+    width: 48px;
+    height: 48px;
+    place-items: center;
+    transform: rotate(180deg);
+  }
+
+  .app .system-screen .modal-close,
+  .app .system-screen .modal-footer button {
+    min-width: 48px;
+    min-height: 48px;
+  }
+
+  .app .system-screen .system-groups {
+    flex: 0 0 auto;
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 4px;
+    padding: 5px 8px;
+  }
+
+  .app .system-screen .system-groups button {
+    min-width: 0;
+    min-height: 48px;
+    font-size: 11px;
+  }
+
+  .app .system-screen .system-navigation {
+    flex: 0 0 auto;
+    display: flex;
+    gap: 5px;
+    overflow-x: auto;
+    padding: 5px 8px;
+    scrollbar-width: thin;
+  }
+
+  .app .system-screen .system-navigation button {
+    flex: 0 0 auto;
+    min-width: 48px;
+    min-height: 48px;
+    padding: 8px 12px;
+  }
+
+  .app .system-screen .modal-body {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding: 14px;
+  }
+
+  .app .system-screen .modal-footer {
+    flex: 0 0 auto;
+    min-height: 56px;
+  }
+
+  .app .system-screen.panel-character .system-columns,
+  .app .system-screen.panel-stash .stash-columns {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .app .system-screen.panel-character .character-dossier {
+    min-height: 250px;
+  }
+
+  .app .system-screen.panel-character .item-grid,
+  .app .system-screen.panel-stash .item-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  .app .system-screen .item-detail {
+    position: sticky;
+    bottom: 0;
+    z-index: 3;
+    max-height: 42vh;
+    overflow-y: auto;
+    margin-top: 8px;
+    border: 1px solid #b99a5e;
+    background: #101719f5;
+    box-shadow: 0 -8px 22px #0008;
+  }
+
+  .app .system-screen.panel-skills .skill-description {
+    order: 0;
+    margin: 0 0 12px;
+  }
+
+  .app .system-screen.panel-skills .skill-tree {
+    order: 1;
+  }
+
+  .app .system-screen button,
+  .app .system-screen summary {
+    min-height: 44px;
+  }
+}

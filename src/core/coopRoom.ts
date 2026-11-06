@@ -1,5 +1,5 @@
 import type { CoopFrame, CoopInput } from './coop';
-import type { ClassId, CombatConfig } from './types';
+import type { ClassId, CombatConfig, RunResult } from './types';
 
 export interface CoopRoomMember {
   id: string;
@@ -13,6 +13,8 @@ export interface CoopRoomMember {
 }
 
 export interface CoopRoom {
+  runId: string;
+  authority?: 'server';
   code: string;
   hostId: string;
   selfId: string;
@@ -23,6 +25,15 @@ export interface CoopRoom {
   reason?: string;
   snapshot?: CoopFrame;
   inputs?: Record<string, CoopInput>;
+  inputSequenceBase?: number;
+  commandSequenceBase?: number;
+}
+
+export interface CoopReward {
+  runId: string;
+  characterId: string;
+  result: RunResult;
+  createdAt: number;
 }
 
 export interface CoopRoomResponse {

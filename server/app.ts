@@ -3,13 +3,17 @@ import cookie from '@fastify/cookie';
 import csrf from '@fastify/csrf-protection';
 import rateLimit from '@fastify/rate-limit';
 import serveStatic from '@fastify/static';
-import { createHash, randomBytes, randomUUID, scrypt, timingSafeEqual } from 'node:crypto';
+import { createHash, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
 import { resolve } from 'node:path';
 import { openDatabase } from './database';
 import { registerCommunity } from './community';
 import { registerCoop } from './coop';
 import { MAX_IMPORT_BYTES, validateAccountSave } from '../src/state/saveData';
 import type { AccountData } from '../src/core/types';
+import { createRecoveryCode, passwordHash, registerAccountSecurity } from './accountSecurity';
+import { registerOperations } from './operations';
+import { registerVerifiedLeaderboard } from './verifiedRuns';
+import { registerTrials } from './trials';
 
 export interface AppOptions {
   dbPath?: string;
@@ -36,14 +40,6 @@ interface SaveRow {
 const tokenHash = (token: string) => createHash('sha256').update(token).digest('hex');
 const isObject = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
-function passwordHash(password: string, salt: string): Promise<Buffer> {
-  return new Promise((resolveHash, reject) => {
-    scrypt(password, salt, 64, { N: 32768, r: 8, p: 1, maxmem: 64 * 1024 * 1024 }, (error, key) => {
-      if (error) reject(error);
-      else resolveHash(key);
-    });
-  });
-}
 function credentials(body: unknown) {
   if (
     !isObject(body) ||
@@ -60,7 +56,16 @@ function credentials(body: unknown) {
 export async function createApp(options: AppOptions = {}) {
   const app = Fastify({
     logger: options.logger
-      ? { redact: ['req.headers.cookie', 'req.headers.authorization', 'req.body.password'] }
+      ? {
+          redact: [
+            'req.headers.cookie',
+            'req.headers.authorization',
+            'req.body.password',
+            'req.body.currentPassword',
+            'req.body.newPassword',
+            'req.body.recoveryCode',
+          ],
+        }
       : false,
     bodyLimit: 1024 * 1024,
     // Only a configured reverse proxy should be trusted; never trust arbitrary forwarding headers.
@@ -170,6 +175,19 @@ export async function createApp(options: AppOptions = {}) {
       updatedAt: row.updated_at,
     };
   };
+  const event = registerOperations(app, db, getUser);
+  registerVerifiedLeaderboard(app, db);
+  registerTrials(app, db, { getUser, event });
+  registerAccountSecurity(app, db, {
+    getUser,
+    beginSession,
+    sessionHash: (request) => tokenHash(request.cookies[sessionCookie] ?? ''),
+    clearSession: (request, reply) => {
+      revokeSession(request);
+      reply.clearCookie(sessionCookie, cookieOptions);
+      return { user: null, csrfToken: rotateCsrf(request, reply) };
+    },
+  });
   // Missing usernames still perform scrypt to avoid a cheap credential-enumeration path.
   const dummySalt = randomBytes(16).toString('hex');
   const dummyHash = await passwordHash(randomBytes(32).toString('base64url'), dummySalt);
@@ -195,6 +213,7 @@ export async function createApp(options: AppOptions = {}) {
       const salt = randomBytes(16).toString('hex');
       const hash = (await passwordHash(input.password, salt)).toString('hex');
       const user = { id: randomUUID(), username: input.username };
+      let recoveryCode = '';
       db.exec('BEGIN IMMEDIATE');
       try {
         if (db.prepare('SELECT id FROM users WHERE username = ?').get(input.username)) {
@@ -207,12 +226,13 @@ export async function createApp(options: AppOptions = {}) {
           'INSERT INTO users(id, username, password_salt, password_hash, created_at) VALUES (?, ?, ?, ?, ?)',
         ).run(user.id, user.username, salt, hash, Date.now());
         db.prepare('INSERT INTO saves(user_id) VALUES (?)').run(user.id);
+        recoveryCode = createRecoveryCode(db, user.id);
         db.exec('COMMIT');
       } catch (error) {
         db.exec('ROLLBACK');
         throw error;
       }
-      return reply.code(201).send(beginSession(user, request, reply));
+      return reply.code(201).send({ ...beginSession(user, request, reply), recoveryCode });
     },
   );
   app.post(
@@ -297,6 +317,7 @@ export async function createApp(options: AppOptions = {}) {
   registerCoop(app, db, {
     getUser,
     sessionHash: (request) => tokenHash(request.cookies[sessionCookie] ?? ''),
+    event,
   });
   if (options.staticDir) await app.register(serveStatic, { root: resolve(options.staticDir) });
   app.setNotFoundHandler((request, reply) => {

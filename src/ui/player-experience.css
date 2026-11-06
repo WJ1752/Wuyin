@@ -1,0 +1,400 @@
+/* The practical guide and settings retain the camp's slate and worn brass. */
+.onboarding-checklist {
+  margin-bottom: 12px;
+  padding: 14px;
+  border: 1px solid #83704a;
+  background: #101a21;
+}
+.onboarding-checklist h3,
+.onboarding-checklist p {
+  margin: 0 0 8px;
+}
+.onboarding-checklist ol {
+  display: grid;
+  gap: 9px;
+  list-style: none;
+  margin: 12px 0 0;
+  padding: 0;
+}
+.onboarding-checklist li {
+  display: grid;
+  grid-template-columns: 26px minmax(0, 1fr) auto;
+  gap: 9px;
+  align-items: start;
+}
+.onboarding-marker {
+  display: grid;
+  place-items: center;
+  width: 25px;
+  height: 25px;
+  border: 1px solid #a68d59;
+  color: #ead39f;
+}
+.onboarding-checklist .complete .onboarding-marker {
+  color: #9fc6b5;
+  border-color: #6a9a87;
+}
+.onboarding-checklist li p {
+  color: #bbb8ac;
+  font-size: 12px;
+  line-height: 1.5;
+}
+.onboarding-checklist li .ghost-button {
+  min-height: 40px;
+  padding: 6px 9px;
+}
+.onboarding-skip {
+  margin: 0 0 18px;
+}
+.hall-hud > .camp-next-step {
+  left: max(24px, env(safe-area-inset-left));
+  bottom: max(24px, env(safe-area-inset-bottom));
+  display: flex;
+  align-items: stretch;
+  gap: 3px;
+  width: min(325px, 42vw);
+  min-height: 52px;
+  border: 1px solid #9d8454;
+  background: linear-gradient(110deg, #202c2bf5, #111c23f5);
+  box-shadow: 0 3px 10px #0008;
+}
+.camp-next-step button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  padding: 5px 8px;
+  border: 0;
+  background: transparent;
+}
+.next-step-guide {
+  flex: 0 0 42px;
+  flex-direction: column;
+  gap: 3px;
+  color: #d9c18c;
+}
+.camp-next-step .next-step-action {
+  flex: 1;
+  min-width: 0;
+  gap: 7px;
+  text-align: left;
+  justify-content: flex-start;
+}
+.next-step-action small {
+  flex: 0 0 auto;
+  color: #b5aa90;
+}
+.next-step-action strong {
+  min-width: 0;
+  line-height: 1.4;
+  font-size: 13px;
+  color: #f0dfb9;
+}
+.camp-next-step .icon-button {
+  flex: 0 0 38px;
+  color: #bcb7ab;
+}
+.preferences-panel .setting-row {
+  gap: 12px;
+  flex-wrap: wrap;
+  min-height: 48px;
+}
+.preferences-panel .setting-row > span:first-child {
+  flex: 1 1 120px;
+}
+.preferences-panel .setting-row select {
+  max-width: 100%;
+  min-height: 42px;
+}
+.preferences-panel input[type='range'] {
+  flex: 1 1 120px;
+  max-width: 220px;
+}
+.preferences-panel input[type='checkbox'] {
+  width: 20px;
+  height: 20px;
+}
+.keybinding-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 14px;
+}
+.keybinding-grid label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 7px 9px;
+  background: #0d161b;
+  border: 1px solid #625b49;
+}
+.keybinding-grid button {
+  min-width: 56px;
+  min-height: 40px;
+}
+.gamepad-status {
+  overflow-wrap: anywhere;
+}
+.combat-report {
+  min-width: 0;
+  max-width: 100%;
+  padding: 12px;
+  border: 1px solid #73664b;
+  background: #101a20f2;
+  text-align: left;
+  color: #e3dcc9;
+  overflow-wrap: anywhere;
+}
+.combat-report summary {
+  cursor: pointer;
+  min-height: 30px;
+  color: #dec592;
+}
+.combat-report-metrics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 8px;
+}
+.combat-report-metrics > span {
+  display: grid;
+  gap: 3px;
+  color: #b9b4a7;
+  font-size: 12px;
+}
+.combat-report-metrics b {
+  color: #f1dfb5;
+  font-size: 15px;
+}
+.combat-report-breakdown h4 {
+  margin: 12px 0 8px;
+}
+.combat-report-breakdown > div {
+  position: relative;
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  padding-bottom: 6px;
+  margin-bottom: 6px;
+}
+.combat-report-breakdown i {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  max-width: 100%;
+  height: 2px;
+  background: #a88c58;
+}
+.combat-report p {
+  line-height: 1.6;
+  margin: 10px 0 0;
+}
+.app :is(.system-screen, .guide-modal, .result-card, .combat-report) :is(p, li, label) {
+  font-size: calc(14px * var(--font-scale, 1));
+  line-height: 1.6;
+}
+.app :is(.system-screen, .guide-modal, .result-card, .combat-report) button {
+  font-size: calc(13px * var(--font-scale, 1));
+}
+.app
+  :is(.system-screen, .guide-modal, .result-card, .combat-report)
+  :is(small, .muted, .item-tile-meta) {
+  font-size: calc(12px * var(--font-scale, 1));
+}
+.app :is(.system-screen, .guide-modal, .result-card) :is(button, select, input) {
+  max-width: 100%;
+}
+.app[data-color-assist='true'] .positive,
+.app[data-color-assist='true'] .set-power {
+  color: #8fd7ff;
+}
+.app[data-color-assist='true'] .negative {
+  color: #ffbe79;
+}
+.app[data-color-assist='true'] :is(.resource-orb, .resource-bar, .skill-node) {
+  border-color: #e0dccb;
+}
+.app[data-color-assist='true'] .health-orb .orb-fill,
+.app[data-color-assist='true'] .boss-health > div > i {
+  background: #a36328;
+}
+.app[data-color-assist='true'] .energy-orb .orb-fill {
+  background: #287ba5;
+}
+.challenge-offer .challenge-reward {
+  color: #e4c892;
+}
+.challenge-offer .button-row {
+  margin-top: 12px;
+}
+.trial-intro {
+  margin-block: 22px;
+}
+.trial-builds {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+.trial-builds > article {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  min-width: 0;
+}
+.trial-builds p {
+  flex: 1;
+}
+.trial-builds button {
+  min-height: 44px;
+}
+.app .trial-panel {
+  line-height: 1.65;
+}
+.app .trial-panel :is(p, button) {
+  font-size: calc(14px * var(--font-scale, 1));
+}
+.app .result-backdrop > .result-card {
+  min-width: 0;
+  max-height: calc(100dvh - 24px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scroll-padding-block: 12px;
+}
+.app .result-card > .combat-report[open],
+.app .paused-label > .combat-report[open] {
+  flex-shrink: 0;
+  max-height: min(38dvh, 280px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.app .combat-report[open] > summary {
+  position: sticky;
+  z-index: 1;
+  top: -12px;
+  padding-block: 6px;
+  background: #101a20;
+}
+.app .paused-label:has(> .combat-report[open]) {
+  justify-content: flex-start;
+}
+.app .paused-label > * {
+  flex-shrink: 0;
+  max-width: 100%;
+}
+.app .result-actions button {
+  white-space: normal;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+@media (max-height: 650px), (max-width: 380px) {
+  .app .result-backdrop {
+    padding: 8px;
+  }
+  .app .result-backdrop > .result-card {
+    max-height: calc(100dvh - 16px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+    padding: 16px;
+  }
+  .app .result-card .result-crest {
+    margin-bottom: 8px;
+  }
+  .app .result-card .result-crest > svg {
+    width: 34px;
+    height: 34px;
+  }
+  .app .result-card > h2 {
+    margin-block: 8px;
+    font-size: 23px;
+  }
+  .app .result-card .result-stats {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+    margin-block: 12px;
+    padding-block: 12px;
+  }
+  .app .result-card > .result-actions {
+    position: sticky;
+    z-index: 3;
+    bottom: -16px;
+    margin-top: 12px;
+    padding-block: 10px 6px;
+    border-top: 1px solid #8b7954;
+    background: linear-gradient(#17262ef5, #222333);
+  }
+  .app .result-card > .combat-report[open],
+  .app .paused-label > .combat-report[open] {
+    max-height: min(32dvh, 220px);
+  }
+  .app .paused-label {
+    gap: 12px;
+    padding: 14px;
+  }
+}
+@media (max-width: 760px) and (orientation: portrait) {
+  .app.in-town:has(.camp-next-step) {
+    --camp-top: calc(70px + env(safe-area-inset-top));
+    --camp-bottom: calc(158px + env(safe-area-inset-bottom));
+  }
+  .app.in-town .hall-hud > .camp-next-step,
+  .app.in-town .hall-hud > .hall-service-rail,
+  .app.in-town .hall-hud > .hall-expedition {
+    display: none;
+  }
+  .app.in-town .hall-hud > .mobile-camp-topline {
+    top: var(--camp-top);
+    min-height: 30px;
+  }
+  .app.in-town .hall-hud > .mobile-expedition-bar {
+    bottom: calc(82px + env(safe-area-inset-bottom));
+    min-height: 66px;
+  }
+  .app.in-town .hall-hud > .mobile-camp-nav {
+    bottom: env(safe-area-inset-bottom);
+    min-height: 76px;
+  }
+  .app.in-town .hall-hud > .mobile-camp-nav button {
+    min-height: 76px;
+  }
+  .app.in-town .hall-hud > .mobile-expedition-button {
+    min-height: 52px;
+  }
+  .app.in-town .hall-hud > .mobile-stage-picker .expedition-tier > button {
+    min-width: 48px;
+    min-height: 48px;
+  }
+  .app.in-town .hall-hud .mobile-task-chip {
+    min-height: 30px;
+  }
+  .hall-hud > .camp-next-step {
+    top: calc(70px + env(safe-area-inset-top));
+    bottom: auto;
+    left: 0;
+    right: 0;
+    width: 100%;
+    min-height: 48px;
+    box-shadow: none;
+    border-inline: 0;
+  }
+  .keybinding-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .onboarding-checklist li {
+    grid-template-columns: 25px minmax(0, 1fr);
+  }
+  .onboarding-checklist li > button {
+    grid-column: 2;
+    justify-self: start;
+  }
+  .combat-report-metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .trial-builds {
+    grid-template-columns: 1fr;
+  }
+}
+@media (max-width: 380px) {
+  .keybinding-grid {
+    grid-template-columns: 1fr;
+  }
+}

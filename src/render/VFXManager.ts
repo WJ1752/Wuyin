@@ -23,6 +23,7 @@ export class VFXManager {
   constructor(
     private layer: Container,
     private record?: (cue: CombatEffectCue) => void,
+    private density: 'full' | 'reduced' | 'off' = 'full',
   ) {}
   replay(cue: CombatEffectCue) {
     const { x, y, color } = cue;
@@ -40,11 +41,13 @@ export class VFXManager {
     }
   }
   private add<T extends Container>(view: T, life: number, update: (view: T, t: number) => void) {
-    if (this.effects.length > 180) this.effects.shift()?.view.destroy();
+    if (this.effects.length >= (this.density === 'full' ? 180 : 40))
+      this.effects.shift()?.view.destroy();
     this.layer.addChild(view);
     this.effects.push({ view, age: 0, life, update: (t) => update(view, t) });
   }
   signature(skill: SkillDef, x: number, y: number, angle: number, tx: number, ty: number) {
+    if (this.density === 'off' || (this.density === 'reduced' && skill.kind === 'basic')) return;
     // Flying missiles and persistent ground spells carry their own artwork on the actual entity.
     if (
       [
@@ -117,6 +120,8 @@ export class VFXManager {
   }
   burst(x: number, y: number, color: number, count = 10, large = false, heal = false) {
     this.record?.({ kind: 'burst', x, y, color, count, large, heal });
+    if (this.density === 'off') return;
+    if (this.density === 'reduced') count = Math.min(4, count);
     const diameter = large ? 110 : 22 + count * 2;
     if (
       this.stamp(
@@ -154,6 +159,7 @@ export class VFXManager {
   }
   ring(x: number, y: number, color: number, radius = 80) {
     this.record?.({ kind: 'ring', x, y, color, radius });
+    if (this.density === 'off') return;
     if (
       this.stamp('ring', x, y, color, 1, 1, 0, 0.55, (v, t) => {
         v.width = 2 * radius * t;
@@ -172,6 +178,7 @@ export class VFXManager {
   }
   slash(x: number, y: number, angle: number, color: number, radius = 65) {
     this.record?.({ kind: 'slash', x, y, color, angle, radius });
+    if (this.density === 'off') return;
     if (
       this.stamp('slash', x, y, color, radius * 2, radius * 2, angle - 0.35, 0.25, (v, t) => {
         v.rotation = angle - 0.35 + t * 0.7;
@@ -202,6 +209,7 @@ export class VFXManager {
   }
   lightning(x: number, y: number, tx: number, ty: number, color = 0xc3b3ff) {
     this.record?.({ kind: 'lightning', x, y, tx, ty, color });
+    if (this.density === 'off') return;
     const length = Math.hypot(tx - x, ty - y);
     if (
       this.stamp(
@@ -237,6 +245,7 @@ export class VFXManager {
   }
   meteor(x: number, y: number, color: number, radius: number) {
     this.record?.({ kind: 'meteor', x, y, color, radius });
+    if (this.density === 'off') return;
     if (
       this.stamp('meteor', x - 72, y - 250, color, 85, 85, 0, 0.43, (v, t) => {
         v.position.set(x - 72 * (1 - t), y - 250 * (1 - t));

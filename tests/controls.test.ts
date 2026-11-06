@@ -6,6 +6,7 @@ import { buildHarness } from './helpers/combatHarness';
 
 function controls() {
   const engine: any = new GameEngine();
+  engine.config = { preferences: undefined };
   engine.emit = () => {};
   return engine;
 }
@@ -98,4 +99,22 @@ test('displayed resource costs match the actual discounted and free meteor cast'
   engine.cast('meteor');
   assert.equal(engine.resource, 0);
   assert.ok(engine.cooldowns.meteor > 0);
+});
+
+test('custom physical keys replace defaults and release movement after key-up', () => {
+  const engine = controls();
+  engine.config.preferences = { keyBindings: { up: 'KeyI', skill1: 'KeyJ' } };
+  engine.skills = [SKILLS.find((skill) => skill.id === 'hunting_arrow')!];
+  const casts: string[] = [];
+  engine.cast = (id: string) => casts.push(id);
+  const press = (key: string, code: string) =>
+    engine.onKeyDown({ key, code, target: null, repeat: false, preventDefault() {} });
+  press('w', 'KeyW');
+  assert.equal(engine.keys.size, 0, 'the replaced default must not keep moving');
+  press('i', 'KeyI');
+  assert.ok(engine.keys.has('w'));
+  engine.onKeyUp({ key: 'i', code: 'KeyI' });
+  assert.equal(engine.keys.size, 0);
+  press('j', 'KeyJ');
+  assert.deepEqual(casts, ['hunting_arrow']);
 });

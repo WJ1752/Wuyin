@@ -1,0 +1,1055 @@
+/* The Lantern Covenant: one authored pixel material system for every game surface. */
+:root {
+  --gold: #f3cc74;
+  --muted: #a4bac4;
+  --line: #42546b;
+  --panel: #111e30;
+  --ui-slate: #142439;
+  --ui-violet: #182338;
+  --ui-bone: #eee7cf;
+  --ui-mono: 'Consolas', monospace;
+}
+.app {
+  color: #eee7cf;
+  font-family: 'Microsoft YaHei', 'Segoe UI', sans-serif;
+  font-size: 15px;
+  background: #080f1c;
+}
+.app *,
+.app *::before,
+.app *::after {
+  box-sizing: border-box;
+}
+.app :is(button, input, select, textarea) {
+  font-family: inherit;
+}
+.app :is(button, summary) {
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+.app button {
+  border-radius: 0;
+  letter-spacing: 0.03em;
+  transition:
+    filter 0.12s,
+    transform 0.12s;
+}
+.app button:focus-visible,
+.app :is(input, select, textarea):focus-visible {
+  outline: 3px solid #70e0d2;
+  outline-offset: 3px;
+}
+.app button:disabled {
+  filter: saturate(0.4);
+  opacity: 0.48;
+}
+.app button:active:not(:disabled) {
+  transform: translateY(2px);
+  filter: brightness(0.92);
+}
+.app button:hover:not(:disabled) {
+  filter: brightness(1.15);
+}
+.app .pixel-ui-icon {
+  display: inline-block;
+  vertical-align: middle;
+  image-rendering: pixelated;
+  color: currentColor;
+}
+.app :is(.icon-button, .modal-close, .camp-back) {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 9px;
+  border: 2px solid #7f99ad;
+  border-radius: 0;
+  background: #1a2c41;
+  box-shadow:
+    inset 2px 2px #a6bdd138,
+    inset -3px -3px #060e1b,
+    2px 2px #040910;
+}
+.app
+  :is(
+    .gold-button,
+    .enter-button,
+    .hall-depart,
+    .mobile-hall-depart,
+    .mobile-expedition-button,
+    .outline-button,
+    .ghost-button,
+    .danger-button
+  ) {
+  min-height: 46px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 12px 20px;
+  border: 10px solid transparent;
+  border-image: url('/assets/ui/pixel-secondary.webp') 64 90 fill / 12px stretch;
+  background: transparent;
+  box-shadow: 0 3px #030913;
+  color: #e8eef1;
+  font-size: 14px;
+  font-weight: 600;
+  text-shadow: 1px 2px #080b15;
+}
+.app
+  :is(.gold-button, .enter-button, .hall-depart, .mobile-hall-depart, .mobile-expedition-button) {
+  border-image-source: url('/assets/ui/pixel-primary.webp');
+  color: #fff4ce;
+}
+.app .mobile-expedition-button {
+  color: #f9df9c;
+  font-size: 17px;
+  padding: 6px 10px;
+}
+.app .danger-button {
+  border-image: none;
+  border: 2px solid #b96765;
+  background: #48292f;
+  color: #ffd0b5;
+}
+.app .ghost-button {
+  box-shadow: none;
+  border-width: 7px;
+  border-image-width: 8px;
+}
+.app :is(input:not([type='checkbox']):not([type='range']), select, textarea) {
+  min-height: 46px;
+  padding: 10px 12px;
+  border: 2px solid #506c82;
+  border-radius: 0;
+  background-color: #081322;
+  color: #f2e7cb;
+  box-shadow: inset 3px 3px #030912;
+  font-size: 15px;
+}
+.app :is(input, select, textarea):focus {
+  border-color: #72cbbd;
+}
+.app input[type='checkbox'] {
+  accent-color: #55c7b1;
+  width: 22px;
+  height: 22px;
+}
+.app input[type='range'] {
+  accent-color: #e6b95c;
+  min-height: 36px;
+}
+.app :is(.modal, .result-card, .coop-panel, .story-book, .character-creation) {
+  border: 12px solid transparent;
+  border-image: url('/assets/ui/pixel-panel.webp') 65 fill / 16px stretch;
+  background: #111e30;
+  border-radius: 0;
+  box-shadow:
+    0 12px 0 #02061166,
+    0 24px 70px #0009;
+  color: #eee7cf;
+}
+.app :is(.modal, .result-card)::before {
+  display: none;
+}
+.app :is(.modal-header, .coop-heading) {
+  padding: 18px 24px;
+  border-bottom: 2px solid #496275;
+  background: #162940;
+  box-shadow: inset 0 -3px #0b182a;
+}
+.app .system-screen .modal-header {
+  background: #162940;
+  border-bottom: 2px solid #496275;
+}
+.app .system-screen .modal-header .camp-back {
+  transform: rotate(180deg);
+}
+.app .system-screen .modal-header .modal-close {
+  width: 48px;
+  height: 48px;
+  min-width: 48px;
+  min-height: 48px;
+  border: 2px solid #718b9d;
+  border-radius: 0;
+  clip-path: none;
+  background: #1a2c41;
+}
+.app .system-screen :is(.modal-heading-icon, .character-dossier, .skill-description, .relic-card) {
+  border: 2px solid #405a70;
+  border-radius: 0;
+  background: #142439;
+}
+.app .system-screen .card {
+  border: 2px solid #3c556c;
+  background: #142439;
+  box-shadow: inset 2px 2px #a8bdcb0d;
+}
+.app :is(.modal-header, .coop-heading) h2 {
+  margin: 0;
+  font-size: 25px;
+  color: #f4d68b;
+  letter-spacing: 2px;
+  text-shadow: 2px 2px #040c1c;
+}
+.app .eyebrow {
+  font:
+    11px/1.6 'Consolas',
+    monospace;
+  color: #87b6bd;
+  letter-spacing: 1.5px;
+}
+.app
+  :is(
+    .card,
+    .current-build,
+    .build-card,
+    .lab-intro,
+    .cloud-choice,
+    .item-detail,
+    .skill-description
+  ) {
+  border: 2px solid #405a70;
+  border-radius: 0;
+  background: #101f32;
+  box-shadow:
+    inset 2px 2px #506b7e22,
+    inset -2px -2px #050f1d;
+  color: #e4e5d7;
+}
+.app .card {
+  padding: 18px;
+}
+.app :is(h3, h4, .section-heading) {
+  color: #ecd295;
+}
+.app .muted {
+  color: #a2b9c8;
+}
+.app .positive {
+  color: #7cdebe;
+}
+.app .negative {
+  color: #ffab9f;
+}
+.app .system-screen .modal-body {
+  background: #0a1729;
+}
+.app .modal-footer {
+  background: #0b1829;
+  border-top: 2px solid #3e566b;
+}
+.app .system-groups,
+.app .system-navigation {
+  background: #0e1d30;
+  border-color: #3d566b;
+}
+.app .system-groups button,
+.app .system-navigation button,
+.app .system-link {
+  border-radius: 0;
+  color: #acc1cd;
+}
+.app :is(.system-groups, .system-navigation) button.active {
+  color: #ffe1a1;
+  background: #283c4d;
+  box-shadow: inset 0 -3px #d3ad58;
+}
+.app :is(.item-card, .paperdoll-slot, .skill-node, .relic-card, .creation-class) {
+  border-radius: 0;
+  border-color: #536c82;
+  background-color: #14253b;
+  box-shadow:
+    inset 2px 2px #71899b2a,
+    inset -3px -3px #07101d;
+}
+.app
+  :is(.item-card.selected, .skill-node.selected, .creation-class.selected, .relic-card.selected) {
+  outline: 2px solid #f3ce76;
+  outline-offset: -2px;
+  background-color: #273c4c;
+}
+.app .item-card {
+  min-height: 74px;
+}
+.app .item-card .watch-item-icon,
+.app .paperdoll-slot .watch-item-icon {
+  filter: drop-shadow(2px 3px #020610);
+}
+.app .paperdoll-stage {
+  background: radial-gradient(ellipse at center, #294656, #101f33 68%);
+}
+.app :is(.skill-description, .item-detail) h3 {
+  color: #f6db9e;
+}
+.app .skill-node .asset-icon {
+  border: 2px solid #6c8599;
+}
+.app .toast {
+  border: 2px solid #699785;
+  border-radius: 0;
+  background: #152a39f5;
+  color: #e9ebd2;
+  box-shadow: 3px 3px #020813;
+  font-size: 14px;
+}
+.app .guide-callout {
+  background: #1c3544;
+  border: 0;
+  border-left: 4px solid #6fcab8;
+}
+.app .onboarding-checklist {
+  background: #14263a;
+  border-color: #516b80;
+}
+.app .combat-report {
+  background: #0b1b2f;
+  border: 2px solid #3d6072;
+  box-shadow: inset 2px 2px #66849222;
+}
+.app .combat-report summary {
+  color: #efd494;
+}
+.app .combat-report-breakdown i {
+  background: #62c2ac;
+}
+.app .hall-wallet {
+  background: #101f30e8;
+  border-color: #6f8295;
+}
+.app .traveler-profile {
+  background: #14253be8;
+  border: 2px solid #718396;
+  border-radius: 0;
+}
+.app .service-seal {
+  background: #14273b;
+  clip-path: none;
+  border: 2px solid #60798f;
+  box-shadow:
+    inset 2px 2px #7e94a72b,
+    inset -2px -2px #07101e;
+}
+.app .service-seal::before,
+.app .service-seal::after {
+  display: none;
+}
+.app .service-label {
+  color: #e1dfc8;
+  font-size: 13px;
+}
+.app :is(.system-screen, .guide-modal, .coop-panel, .character-entry) * {
+  scrollbar-width: thin !important;
+  scrollbar-color: #587a8e #101e2f !important;
+}
+.app :is(.system-screen, .guide-modal, .coop-panel, .character-entry) *::-webkit-scrollbar {
+  display: block !important;
+  width: 5px;
+  height: 5px;
+}
+.app :is(.system-screen, .guide-modal, .coop-panel, .character-entry) *::-webkit-scrollbar-thumb {
+  background: #587a8e;
+}
+.app.character-entry {
+  min-height: 100dvh;
+  overflow: auto;
+  padding: 20px 0;
+  background:
+    linear-gradient(#06111ce8, #0c182ce8),
+    url('/assets/maps/watchers-camp-v3.png') center/cover;
+}
+.app.character-entry .character-creation {
+  margin: 0 auto;
+  max-height: none;
+}
+.app .creation-class {
+  min-height: 160px;
+  padding: 15px 8px;
+  gap: 8px;
+}
+.app .creation-class .hero-art {
+  height: 84px;
+  width: 80px;
+}
+.app .creation-class strong {
+  font-size: 16px;
+  color: #efd99f;
+}
+.app .creation-class small {
+  font-size: 12px;
+  color: #a5bdc8;
+}
+.app .creation-intro {
+  border: 0;
+  border-left: 3px solid #6ac7b4;
+  background: #10283a;
+}
+.app .character-creation h1 {
+  color: #f1d48b;
+  letter-spacing: 3px;
+}
+.app .character-creation p {
+  line-height: 1.7;
+}
+.app .story-book {
+  max-height: calc(100dvh - 32px);
+  overflow: auto;
+}
+.app .story-art {
+  height: 110px;
+  display: flex;
+  gap: 28px;
+  justify-content: center;
+  color: #8bcfc5;
+  background: #122d3c;
+  border-block: 2px solid #3c6074;
+  font-size: 15px;
+}
+.app .story-art .hero-art {
+  width: 88px;
+  height: 100px;
+}
+.app .story-lines {
+  line-height: 1.9;
+  font-size: 17px;
+}
+.app .story-book footer {
+  position: sticky;
+  bottom: -2px;
+  padding-top: 12px;
+  background: #111e30;
+}
+.app .character-delete {
+  min-height: 44px;
+}
+@media (min-width: 761px) {
+  .app .systems-modal.system-screen {
+    position: fixed;
+    inset: 3vh 3vw;
+    width: 94vw;
+    height: 94dvh;
+    max-width: 1440px;
+    margin: auto;
+    border-width: 14px;
+  }
+  .app .system-screen .modal-body {
+    min-height: 0;
+  }
+  .app .systems-modal .modal-body {
+    padding: 24px 32px;
+  }
+  .app .service-seal {
+    width: 48px;
+    height: 48px;
+  }
+}
+@media (max-width: 760px) {
+  .app .systems-modal.system-screen {
+    position: fixed;
+    inset: max(8px, env(safe-area-inset-top)) 8px max(8px, env(safe-area-inset-bottom));
+    width: auto;
+    height: auto;
+    min-height: 0;
+    max-height: none;
+    max-width: none;
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  .app .system-screen .modal-body {
+    flex: 1 1 0;
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+  .app .system-screen :is(.modal-header, .system-groups, .system-navigation, .modal-footer) {
+    flex: 0 0 auto;
+  }
+  .app .system-screen .system-groups {
+    display: none;
+  }
+  .app .system-screen .system-navigation {
+    display: flex;
+    padding: 4px;
+    gap: 2px;
+    overflow-x: auto;
+  }
+  .app .system-screen .system-navigation button {
+    min-width: 0;
+    flex: 1;
+    min-height: 44px;
+    padding: 6px 2px;
+    white-space: nowrap;
+    font-size: 12px;
+  }
+  .app .system-screen .modal-footer {
+    display: none;
+  }
+  .app {
+    font-size: 15px;
+  }
+  .app :is(.system-screen, .coop-panel, .guide-modal) {
+    border-width: 6px;
+    border-image-width: 10px;
+    border-image-slice: 55;
+    border-radius: 0;
+  }
+  .app .system-screen .modal-header {
+    min-height: 58px;
+    padding: 8px;
+  }
+  .app :is(.modal-header, .coop-heading) h2 {
+    font-size: 21px;
+    letter-spacing: 1px;
+  }
+  .app :is(.gold-button, .outline-button, .ghost-button, .danger-button) {
+    min-height: 48px;
+    font-size: 15px;
+    padding: 11px 16px;
+  }
+  .app :is(.modal-body, .coop-panel) p {
+    line-height: 1.7;
+  }
+  .app .card {
+    padding: 14px;
+  }
+  .app .system-screen .modal-body {
+    padding: 14px 10px 24px;
+  }
+  .app .system-screen .modal-footer {
+    min-height: 54px;
+  }
+  .app .creation-classes {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 6px;
+    margin: 18px 0;
+  }
+  .app .creation-class {
+    min-height: 105px;
+    padding: 8px 2px;
+  }
+  .app .creation-class:last-child {
+    grid-column: auto;
+  }
+  .app .creation-class .hero-art {
+    width: 50px;
+    height: 62px;
+  }
+  .app .creation-class strong {
+    font-size: 12px;
+  }
+  .app .creation-class small {
+    display: none;
+  }
+  .app.character-entry {
+    padding: 8px 0;
+  }
+  .app .character-creation {
+    width: calc(100% - 16px);
+    padding: 16px 12px;
+    border-width: 8px;
+    border-image-width: 11px;
+  }
+  .app .character-creation h1 {
+    font-size: 27px;
+    letter-spacing: 1px;
+  }
+  .app .character-creation > p {
+    font-size: 14px;
+  }
+  .app .creation-intro {
+    padding: 12px;
+  }
+  .app .creation-intro h2 {
+    font-size: 18px;
+  }
+  .app .creation-intro p {
+    font-size: 13px;
+    margin: 8px 0;
+  }
+  .app .character-creation form {
+    margin-top: 14px;
+  }
+  .app .character-creation form .gold-button {
+    width: 100%;
+  }
+  .app .story-backdrop {
+    padding: 8px;
+  }
+  .app .story-book {
+    padding: 18px 14px;
+    border-width: 8px;
+    border-image-width: 12px;
+    max-height: calc(100dvh - 16px);
+  }
+  .app .story-book h2 {
+    margin: 10px 0;
+    font-size: 25px;
+  }
+  .app .story-lines {
+    font-size: 16px;
+    min-height: 0;
+  }
+  .app .story-art {
+    height: 84px;
+    margin: 12px 0;
+  }
+  .app .story-art .hero-art {
+    height: 78px;
+    width: 70px;
+  }
+  .app .story-book footer {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+  .app .story-book footer .gold-button {
+    grid-column: 2;
+    grid-row: 1;
+  }
+  .app .story-book footer:has(.story-previous) {
+    grid-template-columns: 1fr 44px 1.15fr;
+  }
+  .app .story-book footer:has(.story-previous) .gold-button {
+    grid-column: 3;
+  }
+  .app .story-book footer .story-previous {
+    grid-column: 2;
+    grid-row: 1;
+    padding: 4px;
+  }
+}
+.app.in-combat {
+  padding: 0;
+}
+.combat-vitals {
+  display: none;
+}
+.app .combat-top {
+  background: #0b1b2ee8;
+  border-bottom: 2px solid #4e687e;
+}
+.app .combat-bottom {
+  background: #101e32ed;
+  border-top: 3px solid #648294;
+  box-shadow: inset 0 2px #d8c27e44;
+}
+.app .resource-orb {
+  border: 3px solid #a7b5b8;
+  border-radius: 0;
+  background: #10263a;
+  box-shadow: inset 3px 3px #020b19;
+}
+.app .resource-orb .orb-fill {
+  border-radius: 0;
+}
+.app .health-orb .orb-fill {
+  background: #a73f51;
+}
+.app .energy-orb .orb-fill {
+  background: #238da5;
+}
+.app .skill-cast {
+  border: 0;
+  border-radius: 0;
+  background: url('/assets/ui/pixel-slot.webp') center/100% 100% no-repeat;
+  padding: 6px;
+  box-shadow: none;
+}
+.app .skill-cast:disabled {
+  opacity: 1;
+  filter: none;
+}
+.app .skill-cast .skill-symbol {
+  opacity: 1;
+  width: 100%;
+  height: 100%;
+}
+.app .skill-cast .skill-symbol > .asset-icon {
+  width: 100% !important;
+  height: 100% !important;
+}
+.app .auto-toggle {
+  background: #132c3b;
+  border: 2px solid #527e86;
+  border-radius: 0;
+  color: #92dfc2;
+}
+.app .auto-toggle[aria-pressed='false'] {
+  background: #2c2c3b;
+  color: #f0cf8c;
+}
+.app .skill-name {
+  color: #ede4ce;
+}
+.app .boss-health {
+  background: #201c2ef0;
+  border: 2px solid #967275;
+  border-radius: 0;
+  padding: 8px 14px;
+}
+.app .boss-health > div {
+  border-radius: 0;
+  background: #0c1320;
+}
+.app .boss-health > div > i {
+  background: #a34e64;
+  border-radius: 0;
+}
+.app .virtual-joystick {
+  border-radius: 0;
+  border: 2px solid #7696a16b;
+  background: #152a3d70;
+  box-shadow: inset 3px 3px #add2d81a;
+}
+.app .joystick-ring {
+  border-radius: 0;
+  border-color: #93bbbf45;
+}
+.app .joystick-thumb {
+  border-radius: 0;
+  border: 2px solid #a5c3bb;
+  background: #30515ce0;
+  box-shadow:
+    inset 2px 2px #b7d5c944,
+    2px 2px #030b15;
+  color: #dbe6cc;
+}
+.app .paused-label {
+  background: #06111de8;
+}
+.app .paused-label h2 {
+  color: #f0d48a;
+  letter-spacing: 3px;
+}
+.app .result-card {
+  text-align: center;
+}
+.app .result-card h2 {
+  color: #f3d183;
+}
+.app .result-stats > div {
+  background: #162c3c;
+  border: 1px solid #456678;
+  padding: 10px;
+}
+@media (max-width: 760px) and (orientation: portrait) {
+  .app.in-combat {
+    width: 100%;
+    height: 100dvh;
+    overflow: hidden;
+  }
+  .app .combat-screen,
+  .app.orientation-portrait .combat-screen {
+    width: 100%;
+    max-width: none;
+    height: 100dvh;
+    margin: 0;
+    border: 0;
+  }
+  .app .combat-top {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 68px;
+    padding: 8px;
+    gap: 8px;
+    z-index: 8;
+  }
+  .app .combat-top .icon-button {
+    width: 44px;
+    height: 44px;
+    min-width: 44px;
+    min-height: 44px;
+    padding: 10px;
+  }
+  .app .rift-progress {
+    min-width: 0;
+    flex: 1;
+  }
+  .app .rift-progress > div:first-child {
+    font-size: 12px;
+    gap: 4px;
+  }
+  .app .rift-progress > div:first-child span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 75%;
+  }
+  .app .rift-progress small {
+    font-size: 10px;
+    line-height: 1.4;
+  }
+  .app .rift-progress small > span:last-child {
+    display: none;
+  }
+  .app .progress-track {
+    height: 7px;
+    margin: 5px 0;
+    border-radius: 0;
+    border: 1px solid #547481;
+  }
+  .app .combat-vitals {
+    position: absolute;
+    top: 68px;
+    left: 8px;
+    right: 8px;
+    z-index: 7;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+  .app .combat-vitals > div {
+    position: relative;
+    height: 33px;
+    overflow: hidden;
+    border: 2px solid #4d7183;
+    background: #091829e8;
+    padding: 3px 6px 8px;
+  }
+  .app .combat-vitals span {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 12px;
+    color: #d7dfdc;
+    line-height: 1.4;
+  }
+  .app .combat-vitals b {
+    color: #faf1d9;
+    font-size: 12px;
+  }
+  .app .combat-vitals i {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    height: 5px;
+    max-width: 100%;
+    background: #a6475e;
+  }
+  .app .combat-vitals .vital-energy i {
+    background: #38a1b6;
+  }
+  .app .combat-bottom {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    width: 100%;
+    height: calc(126px + env(safe-area-inset-bottom));
+    padding: 6px 4px calc(8px + env(safe-area-inset-bottom));
+    display: block;
+    z-index: 7;
+  }
+  .app .combat-bottom .resource-orb {
+    display: none;
+  }
+  .app .skills-bar {
+    display: grid;
+    width: 100%;
+    height: 112px;
+    grid-template-columns: repeat(var(--skill-count), minmax(0, 60px));
+    justify-content: center;
+    align-items: start;
+    gap: 3px;
+    padding: 0;
+  }
+  .app .combat-skill {
+    min-width: 0;
+    display: grid;
+    grid-template-rows: 38px 52px 18px;
+    gap: 1px;
+    justify-items: stretch;
+  }
+  .app .auto-toggle {
+    width: 100%;
+    min-width: 0;
+    height: 36px;
+    min-height: 36px;
+    padding: 0 2px;
+    margin: 0;
+    font-size: 10px;
+    letter-spacing: 0;
+  }
+  .app .skill-cast {
+    position: relative;
+    width: 100%;
+    height: 52px;
+    min-width: 0;
+    min-height: 48px;
+    border: 0;
+    padding: 6px;
+  }
+  .app .skill-cast .keybind {
+    display: none;
+  }
+  .app .skill-name {
+    display: block;
+    width: 100%;
+    font-size: 10px;
+    line-height: 17px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    text-align: center;
+  }
+  .app .unlearned-skill {
+    display: none;
+  }
+  .app .virtual-joystick {
+    left: 16px;
+    bottom: calc(145px + env(safe-area-inset-bottom));
+    width: 88px;
+    height: 88px;
+    z-index: 6;
+    opacity: 0.8;
+  }
+  .app .virtual-joystick small {
+    font-size: 11px;
+  }
+  .app .joystick-thumb {
+    width: 42px;
+    height: 42px;
+    margin-left: -21px;
+    margin-top: -21px;
+    font-size: 24px;
+  }
+  .app .combat-help {
+    display: none;
+  }
+  .app .combat-tools {
+    top: 108px;
+    right: 8px;
+    padding: 0;
+  }
+  .app .combat-tools .icon-button {
+    display: none;
+  }
+  .app .combat-tools small {
+    font-size: 10px;
+    background: #0b1926c7;
+    padding: 2px 5px;
+  }
+  .app .buff-list {
+    top: 108px;
+    left: 8px;
+    right: 65px;
+    max-width: none;
+    display: flex;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    gap: 4px;
+    height: 22px;
+  }
+  .app .buff-list span {
+    flex: 0 0 auto;
+    padding: 2px 5px;
+    font-size: 10px;
+    background: #10283ae8;
+  }
+  .app .boss-health {
+    top: 137px;
+    left: 12px;
+    right: 12px;
+    width: auto;
+    padding: 6px 9px;
+    transform: none;
+  }
+  .app .boss-health > span {
+    justify-content: center;
+    font-size: 13px;
+    line-height: 1.5;
+  }
+  .app .boss-health > small {
+    font-size: 10px;
+    line-height: 1.4;
+  }
+  .app .coop-team-hud {
+    top: 108px;
+    left: 8px;
+    right: 8px;
+    width: auto;
+    display: flex;
+    flex-wrap: nowrap;
+    gap: 4px;
+  }
+  .app .coop-team-hud > div {
+    flex: 1;
+    min-width: 0;
+    padding: 4px;
+    font-size: 10px;
+    background: #11273ad9;
+  }
+  .app .coop-team-hud strong {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 10px;
+  }
+  .app .coop-combat .buff-list {
+    display: none;
+  }
+  .app .coop-combat .boss-health {
+    top: 166px;
+  }
+  .app .pylon-list {
+    top: auto;
+    right: 12px;
+    bottom: calc(155px + env(safe-area-inset-bottom));
+    width: 140px;
+  }
+  .app .pylon-list button {
+    width: 100%;
+    min-height: 46px;
+    font-size: 12px;
+    border: 2px solid #668477;
+    border-radius: 0;
+    background: #163d3ce8;
+  }
+  .app .pylon-list button:not([data-in-reach='true']),
+  .app .pylon-list button:disabled {
+    display: none;
+  }
+  .app .training-hint {
+    top: 108px;
+    left: 12px;
+    right: 12px;
+    max-width: none;
+    transform: none;
+    background: #10293bd9;
+    padding: 4px 8px;
+    font-size: 10px;
+  }
+  .app .paused-label {
+    padding: 24px 14px;
+  }
+  .app .paused-label > .gold-button,
+  .app .paused-label > .outline-button {
+    min-width: 180px;
+  }
+  .app .result-card {
+    width: calc(100vw - 16px);
+    max-height: calc(100dvh - 16px);
+    padding: 16px 12px;
+    border-width: 8px;
+    border-image-width: 12px;
+  }
+  .app .result-card h2 {
+    font-size: 25px;
+    margin: 10px 0;
+  }
+  .app .result-stats {
+    grid-template-columns: 1fr 1fr;
+    gap: 7px;
+  }
+  .app .result-actions {
+    position: sticky;
+    bottom: -2px;
+    padding-top: 8px;
+    background: #111e30;
+  }
+}

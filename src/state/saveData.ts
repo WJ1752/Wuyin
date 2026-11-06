@@ -9,9 +9,13 @@ import {
   PROGRESSION_MILESTONES,
   HUNT_LIMIT,
   skillLearningStatus,
+  skillPointBudget,
+  recommendedSkills,
   skillUnlockLevel,
   starterSkills,
 } from '../data/progression';
+import { CHALLENGES, validChallengeKey } from '../data/challenges';
+import { getPreferences, validatePreferences } from '../core/preferences';
 
 const clone = <T>(value: T): T => JSON.parse(JSON.stringify(value));
 const starters = starterSkills;
@@ -51,7 +55,11 @@ export function newSave(classId: ClassId = 'ranger'): SaveData {
     autoSalvage: false,
     orientation: 'portrait',
     tutorialSeen: false,
-    progression: { version: 1, clearedStage: 0, claimedMilestones: [] },
+    characterCreated: true,
+    storyChapter: 'arrival',
+    storySkipped: false,
+    preferences: getPreferences(),
+    progression: { version: 1, clearedStage: 0, claimedMilestones: [], skillBudgetVersion: 2 },
   };
 }
 export function cubeSlot(slot: Slot): 'weapon' | 'armor' | 'jewelry' {
@@ -211,6 +219,19 @@ export function validateSave(input: unknown, historical = false): SaveData {
     ['muted', 'autoSalvage', 'tutorialSeen'].some((k) => typeof s[k] !== 'boolean')
   )
     throw new Error('设置无效。');
+  if (s.characterCreated !== undefined && typeof s.characterCreated !== 'boolean')
+    throw new Error('角色创建状态无效。');
+  if (
+    s.storyChapter !== undefined &&
+    !['arrival', 'mentor', 'first-clear', 'complete'].includes(String(s.storyChapter))
+  )
+    throw new Error('剧情进度无效。');
+  if (s.storySkipped !== undefined && typeof s.storySkipped !== 'boolean')
+    throw new Error('剧情跳过状态无效。');
+  // Older saves represent real, already-played characters and should never be sent through creation again.
+  if (s.characterCreated === undefined) s.characterCreated = true;
+  if (s.storyChapter === undefined) s.storyChapter = Number(s.clears) > 0 ? 'complete' : 'arrival';
+  if (s.storySkipped === undefined) s.storySkipped = false;
   if (s.runRecords !== undefined) {
     if (!Array.isArray(s.runRecords) || s.runRecords.length > 20) throw new Error('远征记录无效。');
     const recordIds = new Set<string>();
@@ -278,6 +299,7 @@ export function validateSave(input: unknown, historical = false): SaveData {
             PROGRESSION_MILESTONES.some((m) => key === `${hero.id}:${m.stage}`),
           ),
       ) ||
+      (p.skillBudgetVersion !== undefined && p.skillBudgetVersion !== 2) ||
       (p.summit !== undefined &&
         (!isRecord(p.summit) ||
           !bounded(p.summit.wins, 0, 3, true) ||
@@ -297,7 +319,39 @@ export function validateSave(input: unknown, historical = false): SaveData {
     )
       throw new Error('成长旅程记录无效。');
   }
+  const challenges = isRecord(s.progression) ? s.progression.challenges : undefined;
+  if (challenges !== undefined) {
+    if (
+      !isRecord(challenges) ||
+      !Array.isArray(challenges.claimed) ||
+      challenges.claimed.length > 90 ||
+      new Set(challenges.claimed).size !== challenges.claimed.length ||
+      challenges.claimed.some((key) => !validChallengeKey(key)) ||
+      !isRecord(challenges.best) ||
+      Object.entries(challenges.best).some(
+        ([id, seconds]) =>
+          !CHALLENGES.some((challenge) => challenge.id === id) || !bounded(seconds, 0, 300),
+      )
+    )
+      throw new Error('轮换挑战记录无效。');
+    if (challenges.pending !== undefined) {
+      const pending = challenges.pending;
+      if (
+        !isRecord(pending) ||
+        !CHALLENGES.some((challenge) => challenge.id === pending.id) ||
+        !validChallengeKey(pending.key, pending.id as (typeof CHALLENGES)[number]['id']) ||
+        !bounded(
+          pending.stage,
+          16,
+          Number((s.progression as Record<string, unknown>).clearedStage),
+          true,
+        )
+      )
+        throw new Error('进行中的轮换挑战无效。');
+    }
+  }
   const save = clone(s) as unknown as SaveData;
+  save.preferences = validatePreferences(s.preferences);
   if (!save.progression) {
     // Old equipment/economy survives. Rebuild old automatic unlocks into the new
     // level/parent budget; unspent points remain available to choose again.
@@ -336,7 +390,10 @@ export function validateSave(input: unknown, historical = false): SaveData {
       const nodes = SKILLS.filter((node) => node.classId === hero.id);
       const spent = nodes.reduce((sum, node) => sum + (save.skills[node.id] ?? 0), 0);
       if (
-        spent > 1 + (save.level - 1) * 2 ||
+        spent >
+          (save.progression.skillBudgetVersion === 2
+            ? skillPointBudget(save.level)
+            : 1 + (save.level - 1) * 2) ||
         nodes.some((node) => {
           const rank = save.skills[node.id] ?? 0;
           return (
@@ -355,6 +412,38 @@ export function validateSave(input: unknown, historical = false): SaveData {
     )
       throw new Error('当前职业至少需要一个基础攻击。');
   }
+  if (!historical && save.progression.skillBudgetVersion !== 2) {
+    const previous = { ...save.skills };
+    for (const hero of CLASSES) {
+      if (
+        hero.id !== save.classId &&
+        !SKILLS.some((node) => node.classId === hero.id && previous[node.id])
+      )
+        continue;
+      const nodes = SKILLS.filter((node) => node.classId === hero.id);
+      const spent = nodes.reduce((sum, node) => sum + (previous[node.id] ?? 0), 0);
+      if (spent <= skillPointBudget(save.level)) continue;
+      const equipped = SETS.filter((set) => set.classId === hero.id).sort(
+        (a, b) =>
+          Object.values(save.equipment).filter((item) => item?.setId === b.id).length -
+          Object.values(save.equipment).filter((item) => item?.setId === a.id).length,
+      )[0];
+      const view = {
+        ...save,
+        classId: hero.id,
+        progression: {
+          ...save.progression,
+          targetSetId:
+            equipped && Object.values(save.equipment).some((item) => item?.setId === equipped.id)
+              ? equipped.id
+              : save.progression.targetSetId,
+        },
+      };
+      for (const node of nodes) delete save.skills[node.id];
+      Object.assign(save.skills, recommendedSkills(view, previous));
+    }
+    save.progression.skillBudgetVersion = 2;
+  }
   return save;
 }
 
@@ -368,8 +457,10 @@ export const validName = (name: unknown): name is string =>
   !/[\u0000-\u001f\u007f]/.test(name);
 export const nameKey = (name: string) => name.normalize('NFKC').toLocaleLowerCase();
 
-export function newAccountSave(save = newSave()): AccountSave {
-  const character = { id: identity(), name: '初始行者', save: clone(save) };
+export function newAccountSave(initialSave?: SaveData): AccountSave {
+  const save = clone(initialSave ?? newSave());
+  if (!initialSave) save.characterCreated = false;
+  const character = { id: identity(), name: '初始行者', save };
   const account: AccountData = {
     id: identity(),
     name: '本地账号',

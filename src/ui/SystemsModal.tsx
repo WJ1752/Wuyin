@@ -53,6 +53,7 @@ import {
 import { AccountPanel } from './AccountPanel';
 import { formatBigNumber } from '../core/format';
 import './systems.css';
+import './mobile-camp.css';
 import { audio } from '../audio/SynthAudio';
 import { CharacterPreview } from './CharacterPreview';
 import { ItemIcon, PetIcon, SkillIcon } from './AssetIcon';
@@ -61,6 +62,8 @@ import { CampWallet } from './TownHud';
 import {
   campRates,
   HUNT_LIMIT,
+  nextSkillPointLevel,
+  skillPointBudget,
   isSkillAutoEnabled,
   skillLearningStatus,
   skillUnlockLevel,
@@ -68,6 +71,8 @@ import {
 import { BUILD_GUIDES } from '../data/buildGuides';
 import { useDialog } from './useDialog';
 import { apiRequest } from '../state/cloudStore';
+import { PlayerSettings } from './PlayerSettings';
+import { FeedbackForm } from './CloudAccountPanel';
 
 const icons: Record<Slot, typeof Sword> = {
   weapon: Sword,
@@ -457,7 +462,6 @@ function CharacterPanel() {
   const detail = useRef<HTMLDivElement>(null);
   const selectItem = (id: string) => {
     setSelected(id);
-    requestAnimationFrame(() => detail.current?.scrollIntoView({ block: 'nearest' }));
   };
   const item = [...save.inventory, ...Object.values(save.equipment)].find(
     (i) => i?.id === selected,
@@ -695,7 +699,6 @@ function StashPanel() {
   const detail = useRef<HTMLDivElement>(null);
   const selectItem = (id: string) => {
     setSelected(id);
-    requestAnimationFrame(() => detail.current?.scrollIntoView({ block: 'nearest' }));
   };
   const locked = !!store.labBackup || store.inCombat || store.cloudTransition;
   const inStash = account.stash.some((item) => item.id === selected);
@@ -850,7 +853,14 @@ function SkillsPanel() {
           </button>
         ))}
       </div>
-      <p className="muted system-hint">选择流派可推荐加点，仍可手动调整。</p>
+      <p className="muted system-hint">
+        已分配 {skillPointBudget(save.level) - skillPoints(save)} / {skillPointBudget(save.level)}{' '}
+        点， 满级总预算 {skillPointBudget(100)} 点。
+        {nextSkillPointLevel(save.level)
+          ? `下一点在 Lv.${nextSkillPointLevel(save.level)} 获得。`
+          : '已获得全部技能点。'}
+        核心强化、辅助分支与备用技能需要取舍；选择流派可推荐加点，仍可免费洗点调整。
+      </p>
       {node && (
         <div ref={description} className="card skill-description">
           <div>
@@ -901,8 +911,9 @@ function SkillsPanel() {
         <details className="skill-learning-rules">
           <summary>技能学习规则</summary>
           <p className="muted system-hint">
-            初始掌握 1 个基础技能；每升一级获得 2 点。位移 Lv.3 → 核心 Lv.5 → 掌控 Lv.8 → 防御 Lv.10
-            → 终极 Lv.15。分支需前置 2 级，每个技能每隔 3 级可再提升一阶。
+            初始掌握 1 个基础技能；Lv.2–15 每级获得 2 点，之后逐步获得进阶点，满级共{' '}
+            {skillPointBudget(100)} 点。 位移 Lv.3 → 核心 Lv.5 → 掌控 Lv.8 → 防御 Lv.10 → 终极
+            Lv.15。分支需前置 2 级，每个技能每隔 3 级可再提升一阶。
             <br />
             技能说明以 1 级为基准。每提升 1 级，主动伤害与护盾强度、被动数值收益提高 10%，最高 5
             级（+40%）；穿透、分裂等结构性效果保持，衍生伤害随节点等级提高。
@@ -926,7 +937,6 @@ function SkillsPanel() {
                     aria-pressed={selected === n.id}
                     onClick={() => {
                       setSelected(n.id);
-                      description.current?.scrollIntoView({ block: 'nearest' });
                     }}
                   >
                     <span className="skill-symbol">
@@ -1661,7 +1671,7 @@ function LeaderboardPanel({
 }) {
   const store = useGameStore();
   const account = store.accounts.find((entry) => entry.id === store.activeAccountId)!;
-  const [source, setSource] = useState<'local' | 'cloud'>('local');
+  const [source, setSource] = useState<'local' | 'cloud' | 'verified'>('local');
   const [classId, setClassId] = useState<ClassId>((store.labBackup ?? store.save).classId);
   const [buildId, setBuildId] = useState('all');
   const [reload, setReload] = useState(0);
@@ -1672,12 +1682,14 @@ function LeaderboardPanel({
   }>({ data: null, loading: false, error: '' });
   const hero = CLASSES.find((entry) => entry.id === classId)!;
   useEffect(() => {
-    if (source !== 'cloud') return;
+    if (source === 'local') return;
     let active = true;
     setOnline({ data: null, loading: true, error: '' });
-    void apiRequest<LeaderboardResponse>(`/leaderboard?classId=${classId}`)
+    void apiRequest<LeaderboardResponse>(
+      `/leaderboard${source === 'verified' ? '/verified' : ''}?classId=${classId}`,
+    )
       .then((data) => {
-        if (data.classId !== classId || !Array.isArray(data.entries))
+        if (data.classId !== classId || data.source !== source || !Array.isArray(data.entries))
           throw new Error('在线榜暂不可用，请稍后再试。');
         if (active) setOnline({ data, loading: false, error: '' });
       })
@@ -1713,7 +1725,8 @@ function LeaderboardPanel({
   const matchesBuild = (setId?: string) =>
     buildId === 'all' || (buildId === 'custom' ? !setId : buildId === setId);
   const visibleLocal = localRecords.filter(({ record }) => matchesBuild(recordSet(record)?.id));
-  const cloudData = online.data?.classId === classId ? online.data : null;
+  const cloudData =
+    online.data?.classId === classId && online.data.source === source ? online.data : null;
   const visibleOnline = (cloudData?.entries ?? []).filter((entry) =>
     matchesBuild(SETS.find((set) => set.name === entry.setName)?.id),
   );
@@ -1726,7 +1739,8 @@ function LeaderboardPanel({
     <section className="class-leaderboard">
       <div className="section-heading">
         <h3 style={{ color: hero.color }}>
-          {hero.name} · {source === 'local' ? '本机职业榜' : '在线职业榜'}
+          {hero.name} ·{' '}
+          {source === 'local' ? '本机职业榜' : source === 'verified' ? '验证挑战榜' : '社区职业榜'}
         </h3>
         <span>按层数降序 · 同层按用时升序</span>
       </div>
@@ -1743,9 +1757,16 @@ function LeaderboardPanel({
           aria-pressed={source === 'cloud'}
           onClick={() => setSource('cloud')}
         >
-          在线职业榜
+          社区职业榜
         </button>
-        {source === 'cloud' && (
+        <button
+          className={source === 'verified' ? 'gold-button' : 'ghost-button'}
+          aria-pressed={source === 'verified'}
+          onClick={() => setSource('verified')}
+        >
+          验证挑战榜
+        </button>
+        {source !== 'local' && (
           <button
             className="ghost-button"
             disabled={online.loading}
@@ -1756,6 +1777,18 @@ function LeaderboardPanel({
           </button>
         )}
       </div>
+      {source === 'verified' && (
+        <div className="operation-review">
+          <p>使用统一配装挑战第 150 层，由服务器推演与记录；成长装备不会影响验证成绩。</p>
+          <button
+            className="gold-button"
+            disabled={!onNavigate || !!store.labBackup}
+            onClick={() => onNavigate?.('trial')}
+          >
+            {store.labBackup ? '结束流派演武后可验证' : '参加守望者验证试炼'}
+          </button>
+        </div>
+      )}
       <div className="panel-tabs leaderboard-classes" aria-label="职业独立榜单">
         {CLASSES.map((entry) => (
           <button
@@ -1789,8 +1822,8 @@ function LeaderboardPanel({
       </label>
       <div className="leaderboard-meta">
         <span>
-          {source === 'cloud' && cloudData
-            ? `共 ${cloudData.total} 位行者 · ${new Date(cloudData.updatedAt).toLocaleTimeString('zh-CN', { timeZone: 'Asia/Hong_Kong' })} 更新`
+          {source !== 'local' && cloudData
+            ? `共 ${cloudData.total} ${source === 'verified' ? '条验证成绩' : '位行者'} · ${new Date(cloudData.updatedAt).toLocaleTimeString('zh-CN', { timeZone: 'Asia/Hong_Kong' })} 更新`
             : '每职业前 20 条'}
         </span>
         <details>
@@ -1798,12 +1831,14 @@ function LeaderboardPanel({
           <p>
             {source === 'local'
               ? `汇总「${account.name}」各角色的正式通关战绩，保留历史配装体验。`
-              : '在线榜按已同步云档记录，每账号每职业保留最佳成绩；成绩由玩家同步。'}
+              : source === 'verified'
+                ? '验证挑战使用统一配装与服务器战斗结算，普通远征和上传云档均不计入。'
+                : '社区榜按已同步云档记录，每账号每职业保留最佳成绩；客户端结算，仅供交流配装。'}
             层数较高者优先，同层用时较短者优先。流派筛选在该职业前 20 条内进行。
           </p>
         </details>
       </div>
-      {source === 'cloud' ? (
+      {source !== 'local' ? (
         <div className="run-leaderboard" aria-busy={online.loading}>
           {online.loading && <Empty>正在读取{hero.name}职业榜…</Empty>}
           {online.error && (
@@ -1822,7 +1857,9 @@ function LeaderboardPanel({
           {!online.loading && !online.error && cloudData && !visibleOnline.length && (
             <Empty>
               {buildId === 'all'
-                ? `尚无${hero.name}在线战绩，完成正式远征并同步云档后即可参与。`
+                ? source === 'verified'
+                  ? `尚无${hero.name}验证战绩，参加服务器验证挑战后即可参与。`
+                  : `尚无${hero.name}社区战绩，完成正式远征并同步云档后即可参与。`
                 : '当前职业前 20 名中暂无此流派战绩。'}
             </Empty>
           )}
@@ -2286,6 +2323,11 @@ function SettingsPanel() {
         </label>
         <RareAffixFilter />
       </section>
+      <PlayerSettings />
+      <section className="card">
+        <h3>反馈与建议</h3>
+        <FeedbackForm />
+      </section>
       <section className="card">
         <h3>旅程档案</h3>
         <p className="muted">
@@ -2371,8 +2413,8 @@ function SettingsPanel() {
       <section className="card">
         <h3>操控指南</h3>
         <p>
-          WASD / 方向键移动；拖动战场或虚拟摇杆移动；1–6 或点击技能栏施法；空格释放位移；Esc
-          暂停。每个技能可独立切换 AUTO / MANUAL。
+          移动、施法与位移按键可在上方自定义，方向键移动始终可用；也可拖动战场、使用虚拟摇杆或点击技能栏。
+          Esc 暂停。每个技能可独立切换自动施放与手动施放。
         </p>
         <p className="muted">
           秘境限时 5 分钟，收集进度球召唤守关魔王。低于 100 秒通关最高层可跳升 3 层。

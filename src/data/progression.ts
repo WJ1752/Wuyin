@@ -100,12 +100,25 @@ export function starterSkills(classId: ClassId): Record<string, number> {
 }
 
 type SkillSave = Pick<SaveData, 'classId' | 'level' | 'skills'>;
+/** Keep the familiar opening, then award meaningful choices through level 100. */
+export function skillPointBudget(level: number) {
+  level = Math.max(1, Math.min(100, Math.floor(level)));
+  return level <= 15 ? 1 + (level - 1) * 2 : 29 + Math.floor(((level - 15) * 21) / 85);
+}
+
+export function nextSkillPointLevel(level: number): number | null {
+  const budget = skillPointBudget(level);
+  for (let next = Math.floor(level) + 1; next <= 100; next++)
+    if (skillPointBudget(next) > budget) return next;
+  return null;
+}
+
 export function availableSkillPoints(save: SkillSave) {
   const spent = SKILLS.filter((skill) => skill.classId === save.classId).reduce(
     (sum, skill) => sum + (save.skills[skill.id] ?? 0),
     0,
   );
-  return Math.max(0, 1 + (save.level - 1) * 2 - spent);
+  return Math.max(0, skillPointBudget(save.level) - spent);
 }
 
 export function skillUnlockLevel(skill: SkillDef): number {
@@ -134,9 +147,92 @@ export function skillLearningStatus(save: SkillSave, skill: SkillDef) {
           : skill.parent && (save.skills[skill.parent] ?? 0) < parentRank
             ? `前置「${SKILLS.find((node) => node.id === skill.parent)!.name}」需达到 2 级`
             : availableSkillPoints(save) < 1
-              ? '升级角色获得技能点（每级 2 点）'
+              ? nextSkillPointLevel(save.level)
+                ? `角色 Lv.${nextSkillPointLevel(save.level)} 获得下一点；可免费洗点调整`
+                : '技能点已分配，可免费洗点调整流派取舍'
               : '';
   return { rank, unlockLevel, requiredLevel, maxRank, parentRank, canLearn: !reason, reason };
+}
+
+/** A legal build spends points on its chosen attacks before optional alternatives. */
+export function recommendedSkills(
+  save: Pick<SaveData, 'classId' | 'level' | 'progression'>,
+  previous?: Record<string, number>,
+) {
+  const nodes = SKILLS.filter((node) => node.classId === save.classId);
+  const focus = progressionSet(save).skillId;
+  const basic =
+    nodes.find((node) => node.id === focus && node.kind === 'basic')?.id ??
+    nodes.find((node) => node.kind === 'basic')!.id;
+  const chosenCore =
+    nodes.find((node) => node.id === focus && node.kind === 'core')?.id ??
+    nodes.find((node) => node.kind === 'core')?.id;
+  const alternatives = nodes
+    .filter(
+      (node) =>
+        (node.kind === 'basic' && node.id !== basic && node.id !== focus) ||
+        (node.kind === 'core' && node.id !== chosenCore),
+    )
+    .map((node) => node.id);
+  const ordered = [...nodes].sort((a, b) => {
+    const score = (node: SkillDef) =>
+      node.id === focus
+        ? 100
+        : node.parent === focus
+          ? 90
+          : alternatives.includes(node.id) || (node.parent && alternatives.includes(node.parent))
+            ? 0
+            : node.kind === 'passive'
+              ? 60
+              : node.kind === 'movement'
+                ? 80
+                : 70;
+    return score(b) - score(a) || skillUnlockLevel(a) - skillUnlockLevel(b);
+  });
+  const skills = starterSkills(save.classId);
+  const view = { ...save, skills };
+  // Make the full action bar usable before specializing ranks. Parent nodes are
+  // admitted before dependent passives by the same learning gate used by the UI.
+  for (const node of ordered)
+    if (
+      node.kind !== 'passive' &&
+      !alternatives.includes(node.id) &&
+      (!previous || previous[node.id]) &&
+      skillLearningStatus(view, node).canLearn
+    )
+      skills[node.id] = (skills[node.id] ?? 0) + 1;
+  // Unlock the build's resource and defensive loops before buying more ranks.
+  // Otherwise a fifty-point recommendation can spend everything on early
+  // attacks and omit a later keystone such as Night Hunt's resource/CD recovery.
+  for (const node of ordered) {
+    if (
+      node.kind !== 'passive' ||
+      alternatives.includes(node.id) ||
+      (node.parent && alternatives.includes(node.parent)) ||
+      (previous && !previous[node.id])
+    )
+      continue;
+    const parent = nodes.find((candidate) => candidate.id === node.parent);
+    if (parent)
+      while (
+        (skills[parent.id] ?? 0) < 2 &&
+        (!previous || (skills[parent.id] ?? 0) < (previous[parent.id] ?? 0)) &&
+        skillLearningStatus(view, parent).canLearn
+      )
+        skills[parent.id] = (skills[parent.id] ?? 0) + 1;
+    if (skillLearningStatus(view, node).canLearn) skills[node.id] = (skills[node.id] ?? 0) + 1;
+  }
+  for (let pass = 0; pass < 5; pass++)
+    for (const node of ordered)
+      while (
+        (!previous || (skills[node.id] ?? 0) < (previous[node.id] ?? 0)) &&
+        (previous ||
+          (!alternatives.includes(node.id) &&
+            (!node.parent || !alternatives.includes(node.parent)))) &&
+        skillLearningStatus(view, node).canLearn
+      )
+        skills[node.id] = (skills[node.id] ?? 0) + 1;
+  return skills;
 }
 
 export const PROGRESSION_MILESTONES = [

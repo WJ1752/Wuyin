@@ -3,8 +3,18 @@ import { formatBigNumber } from '../engine/CombatSystem';
 export class FloatingText {
   private active: { view: Text; age: number; life: number; vy: number; y: number }[] = [];
   private pool: Text[] = [];
-  constructor(private layer: Container) {}
+  constructor(
+    private layer: Container,
+    private mode: 'all' | 'critical' | 'off' = 'all',
+    private render = true,
+  ) {}
   show(x: number, y: number, value: number | string, critical = false, color?: number) {
+    if (!this.render) return;
+    if (
+      (typeof value === 'number' || /^[−+-]?\d/.test(value)) &&
+      (this.mode === 'off' || (this.mode === 'critical' && !critical))
+    )
+      return;
     if (this.active.length > 65) return;
     const view =
       this.pool.pop() ??

@@ -1,0 +1,31 @@
+[Unit]
+Description=Wuyin game service
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=wuyin
+Group=wuyin
+WorkingDirectory=/opt/wuyin/current
+EnvironmentFile=/etc/wuyin/app.env
+Environment=PATH=/opt/wuyin/runtime/bin:/usr/bin:/bin
+Environment=NODE_OPTIONS=--max-old-space-size=256
+ExecStart=/opt/wuyin/runtime/bin/node --import tsx server/index.ts
+Restart=on-failure
+RestartSec=3
+TimeoutStopSec=30
+MemoryMax=450M
+NoNewPrivileges=true
+AmbientCapabilities=CAP_NET_BIND_SERVICE
+CapabilityBoundingSet=CAP_NET_BIND_SERVICE
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/wuyin
+RestrictSUIDSGID=true
+LockPersonality=true
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target

@@ -8,7 +8,7 @@ export function openDatabase(path: string) {
   const db = new DatabaseSync(path);
   db.exec('PRAGMA foreign_keys = ON; PRAGMA journal_mode = WAL; PRAGMA busy_timeout = 5000;');
   const version = db.prepare('PRAGMA user_version').get()?.user_version;
-  if (version !== 0 && version !== 1 && version !== 2) {
+  if (![0, 1, 2, 3].includes(Number(version))) {
     db.close();
     throw new Error('数据库版本不受支持，请使用匹配的服务器版本。');
   }
@@ -46,7 +46,42 @@ export function openDatabase(path: string) {
       updated_at INTEGER NOT NULL
     ) STRICT;
     CREATE INDEX IF NOT EXISTS lobby_expiry ON lobby_presence(updated_at);
-    PRAGMA user_version = 2;
+    CREATE TABLE IF NOT EXISTS account_recovery (
+      user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+      recovery_hash TEXT NOT NULL
+    ) STRICT;
+    CREATE TABLE IF NOT EXISTS coop_results (
+      run_id TEXT NOT NULL,
+      user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      character_id TEXT NOT NULL,
+      result_json TEXT NOT NULL,
+      created_at INTEGER NOT NULL,
+      claimed_at INTEGER,
+      PRIMARY KEY (run_id, user_id)
+    ) STRICT;
+    CREATE INDEX IF NOT EXISTS coop_results_pending ON coop_results(user_id, claimed_at);
+    CREATE TABLE IF NOT EXISTS verified_runs (
+      run_id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      character_id TEXT NOT NULL,
+      name TEXT NOT NULL,
+      class_id TEXT NOT NULL,
+      level INTEGER NOT NULL,
+      stage INTEGER NOT NULL,
+      seconds REAL NOT NULL CHECK(seconds > 0),
+      kills INTEGER NOT NULL,
+      set_name TEXT,
+      created_at INTEGER NOT NULL
+    ) STRICT;
+    CREATE INDEX IF NOT EXISTS verified_runs_ranking ON verified_runs(class_id, stage DESC, seconds);
+    CREATE TABLE IF NOT EXISTS player_feedback (
+      id TEXT PRIMARY KEY,
+      user_id TEXT REFERENCES users(id) ON DELETE SET NULL,
+      category TEXT NOT NULL,
+      message TEXT NOT NULL,
+      created_at INTEGER NOT NULL
+    ) STRICT;
+    PRAGMA user_version = 3;
     COMMIT;
   `);
   db.prepare('INSERT OR IGNORE INTO metadata(key, value) VALUES (?, ?)').run(

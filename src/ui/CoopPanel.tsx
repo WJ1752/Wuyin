@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import type { CoopRoom } from '../core/coopRoom';
+import type { CoopReward, CoopRoom } from '../core/coopRoom';
 import { CLASSES } from '../data/classes';
 import { coopBalance } from '../data/coopBalance';
 import { apiRequest, useCloudStore } from '../state/cloudStore';
@@ -8,6 +8,7 @@ import { CHARACTER_ART } from '../render/CharacterTextures';
 import { Compass, Crown, Swords, X } from './PixelIcons';
 import { useDialog } from './useDialog';
 import './coop.css';
+import './secondary-pixel.css';
 
 export function CoopPanel({
   onClose,
@@ -26,6 +27,7 @@ export function CoopPanel({
   const save = useGameStore((state) => state.save);
   const lab = useGameStore((state) => state.labBackup);
   const [room, setRoom] = useState<CoopRoom | null>(null);
+  const [rewards, setRewards] = useState<CoopReward[]>([]);
   const [code, setCode] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -69,10 +71,14 @@ export function CoopPanel({
       const before = revision.current;
       try {
         if (operating.current) return;
-        const response = await apiRequest<{ room: CoopRoom | null }>('/coop/room');
+        const [response, pending] = await Promise.all([
+          apiRequest<{ room: CoopRoom | null }>('/coop/room'),
+          apiRequest<{ rewards: CoopReward[] }>('/coop/results'),
+        ]);
         if (cancelled || !active.current || operating.current || before !== revision.current)
           return;
         setRoom(response.room);
+        setRewards(pending.rewards);
         if (response.room?.status === 'playing' && !started.current) {
           started.current = true;
           onStartRef.current(response.room);
@@ -153,6 +159,48 @@ export function CoopPanel({
           <p className="coop-error" role="alert">
             {error}
           </p>
+        )}
+        {rewards.length > 0 && (
+          <section className="cloud-choice" aria-label="待领取远征奖励">
+            <h3>远征奖励待领取</h3>
+            <p className="muted">
+              通关结果已在服务器保存。掉线或服务重启后仍可领取，每次远征仅结算一次。
+            </p>
+            {rewards.map((reward) => (
+              <div className="coop-actions" key={reward.runId}>
+                <span>
+                  第 {reward.result.stage} 层 · {reward.result.won ? '通关' : '挑战结束'} ·{' '}
+                  {reward.result.items.length} 件战利品
+                </span>
+                <button
+                  className="gold-button"
+                  disabled={busy}
+                  onClick={async () => {
+                    if (operating.current) return;
+                    operating.current = true;
+                    revision.current++;
+                    setBusy(true);
+                    setError('');
+                    try {
+                      await useCloudStore.getState().claimCoopReward(reward.runId);
+                      if (active.current)
+                        setRewards((previous) =>
+                          previous.filter((entry) => entry.runId !== reward.runId),
+                        );
+                    } catch (e) {
+                      if (active.current)
+                        setError(e instanceof Error ? e.message : '奖励领取失败，可稍后重试。');
+                    } finally {
+                      operating.current = false;
+                      if (active.current) setBusy(false);
+                    }
+                  }}
+                >
+                  领取到原角色
+                </button>
+              </div>
+            ))}
+          </section>
         )}
         {room ? (
           <>
@@ -279,7 +327,9 @@ export function CoopPanel({
                 <button
                   className="gold-button full-width"
                   disabled={busy}
-                  onClick={() => void action('create', { stage: save.selectedStage })}
+                  onClick={() =>
+                    void action('create', { stage: save.selectedStage, authority: 'server' })
+                  }
                 >
                   {busy ? '正在同步角色…' : `创建远征 · 第 ${save.selectedStage} 层`}
                 </button>
@@ -331,6 +381,11 @@ export function CoopPanel({
           限时 300 秒 · 倒地 8 秒后半血复苏 · 全队倒地则失败
           <br />
           联机战斗持续进行，菜单与切出窗口不会暂停全队。任意成员离队将结束远征。
+          <br />
+          {room && room.authority !== 'server'
+            ? '旧版房主模式：队长失联 30 秒或停止同步 20 秒后中止，刷新队长页面会安全中止。'
+            : '服务器托管：可刷新并重连原战场，单人成员掉线不终止；全队离线 30 秒才中止。'}
+          已完成奖励可在此补领。
         </footer>
       </div>
     </div>

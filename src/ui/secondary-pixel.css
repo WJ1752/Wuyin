@@ -1,0 +1,281 @@
+/* Shared layout polish for secondary dialogs; palette and pixel texture come from game-theme. */
+.app .coop-panel,
+.app .trial-panel {
+  gap: 18px;
+  width: min(900px, 100%);
+  padding: clamp(20px, 4vw, 36px);
+}
+
+.app .coop-panel button,
+.app .trial-panel button,
+.app .cloud-account-panel button,
+.app .journey-panel button,
+.app .preferences-panel button,
+.app .combat-report button {
+  min-height: 48px;
+}
+
+.coop-create-join,
+.trial-builds,
+.cloud-actions,
+.account-forms,
+.journey-challenge-list {
+  display: grid;
+  gap: 14px;
+}
+
+.coop-roster {
+  gap: 12px;
+}
+
+.coop-member {
+  min-height: 82px;
+  padding: 14px 12px;
+}
+
+.coop-actions,
+.coop-room-code,
+.coop-create-join form > div {
+  flex-wrap: wrap;
+}
+
+.coop-actions > button,
+.coop-create-join form > div > button {
+  min-width: min(180px, 100%);
+}
+
+.trial-builds {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.trial-builds > article {
+  display: grid;
+  align-content: start;
+  gap: 10px;
+  padding: 18px;
+}
+
+.trial-builds > article p {
+  line-height: 1.65;
+}
+
+.cloud-account-panel,
+.preferences-panel {
+  display: grid;
+  gap: 14px;
+  padding: clamp(16px, 3vw, 26px);
+}
+
+.cloud-account-panel .section-heading,
+.preferences-panel .section-heading {
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.cloud-account-panel .cloud-choice,
+.cloud-account-panel .cloud-confirm {
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+}
+
+.cloud-account-panel .cloud-recovery-code {
+  display: block;
+  padding: 14px;
+  font-size: clamp(16px, 3vw, 22px);
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+  user-select: all;
+}
+
+.journey-panel {
+  align-items: start;
+}
+
+.journey-panel > .journey-current,
+.journey-panel > .journey-build {
+  grid-column: 1 / -1;
+}
+
+.journey-panel .journey-build .button-row {
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.journey-panel details > summary,
+.combat-report > summary {
+  min-height: 48px;
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  font-size: 16px;
+}
+
+.journey-panel .journey-challenges,
+.journey-panel .journey-endgame,
+.journey-panel .journey-milestone-list {
+  grid-column: 1 / -1;
+}
+
+.journey-panel .journey-challenges[open] > summary,
+.journey-panel .journey-endgame[open] > summary,
+.journey-panel .journey-milestone-list[open] > summary {
+  margin-bottom: 14px;
+}
+
+.journey-panel .journey-milestones {
+  padding-top: 8px;
+}
+
+.combat-report {
+  line-height: 1.7;
+}
+
+.combat-report-metrics {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 8px 16px;
+}
+
+@media (max-width: 650px) {
+  .app .coop-backdrop .coop-panel {
+    gap: 14px;
+    padding-inline: 18px;
+  }
+
+  .trial-builds {
+    grid-template-columns: 1fr;
+  }
+
+  .coop-actions > button,
+  .coop-create-join form > div > button {
+    width: 100%;
+  }
+
+  .coop-create-join form > div {
+    display: grid;
+  }
+
+  .coop-room-code strong {
+    font-size: 24px;
+  }
+}
+
+/* Overrides the legacy expedition dialog's more specific gradients and borders. */
+.app .coop-backdrop .coop-panel.coop-panel {
+  min-width: 0;
+  border: 12px solid transparent;
+  border-image: url('/assets/ui/pixel-panel.webp') 65 fill / 12px stretch;
+  border-radius: 0;
+  background: #111e30;
+  box-shadow:
+    0 12px 0 #02061166,
+    0 24px 70px #0009;
+}
+
+.app .coop-backdrop .coop-panel .coop-heading {
+  top: -20px;
+  margin: -4px -4px 0;
+  padding: 14px 12px;
+  border: 0;
+  border-bottom: 2px solid #496275;
+  background: #162940;
+  box-shadow: inset 0 -3px #0b182a;
+}
+
+.app .coop-backdrop .coop-panel .coop-heading > div {
+  min-width: 0;
+}
+
+.app .coop-backdrop .coop-panel .coop-heading::after {
+  display: none;
+}
+
+.app .coop-backdrop .coop-panel .coop-heading h2 {
+  margin: 0;
+  color: #f4d68b;
+  font-size: 23px;
+  letter-spacing: 1px;
+}
+
+.app .coop-backdrop .coop-panel .coop-heading .eyebrow {
+  color: #87b6bd;
+  font: 11px/1.6 var(--ui-mono, Consolas, monospace);
+}
+
+.app .coop-backdrop .coop-panel .coop-solo {
+  box-sizing: border-box;
+  min-width: 0;
+  min-height: 76px;
+  margin-top: 8px;
+  padding: 12px 14px;
+  border: 10px solid transparent;
+  border-image: url('/assets/ui/pixel-primary.webp') 64 90 fill / 12px stretch;
+  background: transparent;
+  box-shadow: 0 3px #030913;
+  color: #fff4ce;
+}
+
+.app .coop-backdrop .coop-panel .coop-solo > span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.app .coop-backdrop .coop-panel .coop-solo > svg {
+  box-sizing: border-box;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.app .coop-backdrop .coop-panel .coop-solo small {
+  color: #d6d9ca;
+  line-height: 1.5;
+  letter-spacing: 0;
+}
+
+@media (max-width: 600px) {
+  .app .coop-backdrop .coop-panel.coop-panel {
+    width: 100%;
+    min-width: 0;
+    height: 100dvh;
+    min-height: 0;
+    max-height: 100dvh;
+    overflow-x: hidden;
+    overflow-y: auto;
+    padding: max(18px, env(safe-area-inset-top)) 14px max(18px, env(safe-area-inset-bottom));
+    border-width: 8px;
+    border-image-width: 10px;
+  }
+
+  .app .coop-backdrop .coop-panel .coop-heading {
+    top: -14px;
+    margin: 0;
+    padding: 10px 4px 12px;
+  }
+
+  .app .coop-backdrop .coop-panel .coop-heading h2 {
+    font-size: 20px;
+  }
+
+  .app .coop-backdrop .coop-panel .coop-heading .eyebrow {
+    overflow-wrap: anywhere;
+    font-size: 10px;
+    letter-spacing: 0.5px;
+  }
+
+  .app .coop-backdrop .coop-panel .coop-solo {
+    gap: 10px;
+    padding: 10px 8px;
+  }
+
+  .app .coop-backdrop .coop-panel .coop-solo > svg {
+    flex: 0 0 28px;
+    width: 28px;
+    height: 28px;
+  }
+}

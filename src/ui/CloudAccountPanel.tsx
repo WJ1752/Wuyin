@@ -1,6 +1,7 @@
 import { useState } from 'react';
-import { useCloudStore } from '../state/cloudStore';
+import { apiRequest, useCloudStore } from '../state/cloudStore';
 import { useGameStore } from '../state/gameStore';
+import './secondary-pixel.css';
 
 const labels = {
   guest: '访客 · 本地保存',
@@ -14,9 +15,13 @@ const labels = {
 export function CloudAccountPanel({ onEnterHall }: { onEnterHall?: () => void }) {
   const cloud = useCloudStore();
   const game = useGameStore();
-  const [mode, setMode] = useState<'login' | 'register'>('login');
+  const [mode, setMode] = useState<'login' | 'register' | 'recover'>('login');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  const [recoveryInput, setRecoveryInput] = useState('');
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [deleteName, setDeleteName] = useState('');
   const [confirmOverwrite, setConfirmOverwrite] = useState(false);
   const locked = game.inCombat || !!game.labBackup || game.cloudTransition || cloud.busy;
   const authenticated = !!cloud.user && cloud.status !== 'expired';
@@ -25,6 +30,7 @@ export function CloudAccountPanel({ onEnterHall }: { onEnterHall?: () => void })
     if (
       current.status === 'online' &&
       !current.error &&
+      !current.recoveryCode &&
       !current.busy &&
       !useGameStore.getState().cloudTransition
     )
@@ -47,6 +53,29 @@ export function CloudAccountPanel({ onEnterHall }: { onEnterHall?: () => void })
         一个云账号最多创建 6
         个角色，角色背包独立，仓库账号内共享。已有云档且本机无该账号缓存时，登录后备份当前进度并进入大厅；有缓存或空账号时先选择进度。
       </p>
+      {typeof location !== 'undefined' &&
+        location.protocol === 'http:' &&
+        !['localhost', '127.0.0.1'].includes(location.hostname) && (
+          <p className="cloud-error" role="note">
+            当前为未加密的公网 /
+            局域网测试入口。请仅使用测试账号与独立密码，不要复用其它网站的密码。
+          </p>
+        )}
+      {cloud.recoveryCode && (
+        <div className="cloud-choice" role="status">
+          <p>请现在保存恢复码。忘记密码时可凭它重设密码；服务器只保存摘要，关闭后无法再次查看。</p>
+          <code className="cloud-recovery-code">{cloud.recoveryCode}</code>
+          <button
+            className="ghost-button"
+            onClick={() => {
+              useCloudStore.setState({ recoveryCode: '' });
+              enterHallWhenReady();
+            }}
+          >
+            已另行保存
+          </button>
+        </div>
+      )}
       {cloud.error && (
         <p className="cloud-error" role="alert">
           {cloud.error}
@@ -58,10 +87,12 @@ export function CloudAccountPanel({ onEnterHall }: { onEnterHall?: () => void })
           className="cloud-login-form"
           onSubmit={async (event) => {
             event.preventDefault();
-            await cloud.authenticate(mode, username, password);
+            if (mode === 'recover') await cloud.recover(username, recoveryInput, password);
+            else await cloud.authenticate(mode, username, password);
             const current = useCloudStore.getState();
             if (current.error) return;
             setPassword('');
+            setRecoveryInput('');
             if (
               current.status === 'choosing' &&
               current.pending?.account &&
@@ -81,6 +112,15 @@ export function CloudAccountPanel({ onEnterHall }: { onEnterHall?: () => void })
               onClick={() => setMode('login')}
             >
               登录
+            </button>
+            <button
+              type="button"
+              className="ghost-button"
+              aria-pressed={mode === 'recover'}
+              disabled={locked}
+              onClick={() => setMode('recover')}
+            >
+              恢复码找回
             </button>
             <button
               type="button"
@@ -108,12 +148,12 @@ export function CloudAccountPanel({ onEnterHall }: { onEnterHall?: () => void })
               />
             </label>
             <label>
-              密码
+              {mode === 'recover' ? '新密码' : '密码'}
               <input
                 type="password"
                 value={password}
                 onChange={(event) => setPassword(event.target.value)}
-                autoComplete={mode === 'register' ? 'new-password' : 'current-password'}
+                autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
                 minLength={12}
                 maxLength={128}
                 required
@@ -121,8 +161,27 @@ export function CloudAccountPanel({ onEnterHall }: { onEnterHall?: () => void })
                 placeholder="至少12位"
               />
             </label>
+            {mode === 'recover' && (
+              <label>
+                恢复码
+                <input
+                  value={recoveryInput}
+                  onChange={(event) => setRecoveryInput(event.target.value)}
+                  autoComplete="off"
+                  maxLength={100}
+                  required
+                  disabled={locked}
+                />
+              </label>
+            )}
             <button className="gold-button" disabled={locked}>
-              {cloud.busy ? '处理中…' : mode === 'login' ? '登录云账号' : '注册云账号'}
+              {cloud.busy
+                ? '处理中…'
+                : mode === 'login'
+                  ? '登录云账号'
+                  : mode === 'recover'
+                    ? '重设密码并登录'
+                    : '注册云账号'}
             </button>
           </div>
           <p className="muted">
@@ -250,8 +309,155 @@ export function CloudAccountPanel({ onEnterHall }: { onEnterHall?: () => void })
           <p className="muted">
             自动同步前先保存本机副本；断线或登录过期时继续保留待同步进度。退出不会删除此云账号的本机缓存。
           </p>
+          {authenticated && (
+            <details className="cloud-choice">
+              <summary>账号安全与注销</summary>
+              <p className="muted">
+                修改密码、更新恢复码、撤销其它设备都需要当前密码。恢复码应离线保存。
+              </p>
+              <div className="account-forms">
+                <label>
+                  当前密码
+                  <input
+                    type="password"
+                    autoComplete="current-password"
+                    value={currentPassword}
+                    onChange={(event) => setCurrentPassword(event.target.value)}
+                    maxLength={128}
+                    disabled={locked}
+                  />
+                </label>
+                <label>
+                  新密码
+                  <input
+                    type="password"
+                    autoComplete="new-password"
+                    value={newPassword}
+                    onChange={(event) => setNewPassword(event.target.value)}
+                    maxLength={128}
+                    disabled={locked}
+                  />
+                </label>
+              </div>
+              <div className="cloud-actions">
+                <button
+                  className="ghost-button"
+                  disabled={locked || newPassword.length < 12 || currentPassword.length < 12}
+                  onClick={async () => {
+                    await cloud.manageSecurity('password', currentPassword, newPassword);
+                    setCurrentPassword('');
+                    setNewPassword('');
+                  }}
+                >
+                  修改密码
+                </button>
+                <button
+                  className="ghost-button"
+                  disabled={locked || currentPassword.length < 12}
+                  onClick={async () => {
+                    await cloud.manageSecurity('recovery-code', currentPassword);
+                    setCurrentPassword('');
+                  }}
+                >
+                  重新生成恢复码
+                </button>
+                <button
+                  className="ghost-button"
+                  disabled={locked || currentPassword.length < 12}
+                  onClick={async () => {
+                    await cloud.manageSecurity('sessions/revoke', currentPassword);
+                    setCurrentPassword('');
+                  }}
+                >
+                  退出其它设备
+                </button>
+              </div>
+              <details>
+                <summary>永久注销云账号</summary>
+                <p>
+                  注销将永久删除服务器账号、云档、远征奖励和验证成绩，无法通过恢复码找回。操作前会在本机保留替换备份，也可先导出存档。
+                </p>
+                <label>
+                  输入账号名确认
+                  <input
+                    value={deleteName}
+                    onChange={(event) => setDeleteName(event.target.value)}
+                    autoComplete="off"
+                    disabled={locked}
+                  />
+                </label>
+                <button
+                  className="outline-button"
+                  disabled={
+                    locked || currentPassword.length < 12 || deleteName !== cloud.user?.username
+                  }
+                  onClick={async () => {
+                    await cloud.deleteAccount(currentPassword, deleteName);
+                    setCurrentPassword('');
+                    setDeleteName('');
+                  }}
+                >
+                  永久注销并返回访客
+                </button>
+              </details>
+            </details>
+          )}
+          {cloud.securityNotice && <p role="status">{cloud.securityNotice}</p>}
         </>
       )}
+      <FeedbackForm />
     </section>
+  );
+}
+
+export function FeedbackForm() {
+  const [feedback, setFeedback] = useState('');
+  const [feedbackStatus, setFeedbackStatus] = useState('');
+  const [busy, setBusy] = useState(false);
+  return (
+    <details className="cloud-choice">
+      <summary>提交问题与建议</summary>
+      <p className="muted">
+        请说明遇到的问题、设备和复现步骤；不要填写密码或恢复码。反馈保留 30 天。
+      </p>
+      <form
+        onSubmit={async (event) => {
+          event.preventDefault();
+          if (busy) return;
+          setBusy(true);
+          setFeedbackStatus('正在提交…');
+          try {
+            const response = await apiRequest<{ id: string }>('/feedback', 'POST', {
+              category: 'bug',
+              message: feedback,
+            });
+            setFeedbackStatus(`已提交，编号 ${response.id.slice(0, 8)}`);
+            setFeedback('');
+          } catch (error) {
+            setFeedbackStatus(
+              error instanceof Error ? error.message : '暂时无法提交，请稍后重试。',
+            );
+          } finally {
+            setBusy(false);
+          }
+        }}
+      >
+        <label>
+          问题说明
+          <textarea
+            value={feedback}
+            onChange={(event) => setFeedback(event.target.value)}
+            minLength={5}
+            maxLength={2000}
+            required
+            style={{ width: '100%', minHeight: 90 }}
+          />
+        </label>
+        <button className="ghost-button" disabled={busy || feedback.trim().length < 5}>
+          发送反馈
+        </button>
+      </form>
+      {feedbackStatus && <p role="status">{feedbackStatus}</p>}
+    </details>
   );
 }

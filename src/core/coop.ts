@@ -96,6 +96,8 @@ export interface CoopFrame {
 }
 
 export interface CoopEngineOptions {
+  inputSequenceBase?: number;
+  commandSequenceBase?: number;
   seed?: number;
   localId: string;
   hostId: string;

@@ -4,6 +4,7 @@ import { LEGENDARIES } from '../src/data/legendaries';
 import { SETS } from '../src/data/sets';
 import {
   BUILD_RELICS,
+  craftRecipe,
   itemClass,
   newAccountSave,
   newSave,
@@ -48,12 +49,17 @@ function prepare() {
   const before = game().save;
   const have = Object.values(before.equipment).map((item) => item?.legendaryId);
   if (policy === 'targeted' && before.shards >= 500 && before.inventory.length <= 230) {
-    const missing = [...target.worn, ...target.cube].find(
-      (id) =>
-        !have.includes(id) &&
-        !before.extracted.includes(id) &&
-        !before.inventory.some((i) => i.legendaryId === id),
-    );
+    const missing =
+      target.worn.find(
+        (id) => !have.includes(id) && !before.inventory.some((item) => item.legendaryId === id),
+      ) ??
+      target.cube.find(
+        (id) =>
+          !before.extracted.includes(id) &&
+          !before.inventory.some((item) => item.legendaryId === id),
+      );
+    // Use the player's actual thirty-draw guarantee rather than only choosing a slot.
+    if (missing) game().trackLegendary(missing);
     const slot = LEGENDARIES.find((def) => def.id === missing)?.slot ?? 'weapon';
     game().gamble(slot, 10);
   }
@@ -65,6 +71,41 @@ function prepare() {
     if (worn) choices.unshift(worn);
     choices.sort((a, b) => priority(b) - priority(a) || b.attack + b.armor - a.attack - a.armor);
     if (choices[0] && choices[0] !== worn) game().equip(choices[0].id);
+  }
+  // Before spending every shard on legendary gear, use at most one available
+  // rare inscription per visit. Keep a material reserve for weapon forging.
+  if (policy === 'targeted') {
+    const current = game().save;
+    const base = Object.values(current.equipment).find(
+      (item) => item?.rarity === 'rare' && item.affixes.length < 4,
+    );
+    if (base) {
+      const donors = current.inventory.filter(
+        (item) =>
+          item.id !== base.id &&
+          (!itemClass(item) || itemClass(item) === classId) &&
+          ['rare', 'epic'].includes(item.rarity),
+      );
+      const wanted = [
+        'critChance',
+        'critDamage',
+        'attackSpeed',
+        'mainStat',
+        'bonusDamage',
+        'attack',
+      ];
+      const recipe = donors
+        .flatMap((donor) =>
+          wanted.map((id) => ({ donor, id, recipe: craftRecipe(base, donor, id) })),
+        )
+        .find(
+          (entry) =>
+            entry.recipe &&
+            current.gold >= entry.recipe.gold + 1000 &&
+            current.crystals >= entry.recipe.crystals + 20,
+        );
+      if (recipe) game().craftRare(base.id, recipe.donor.id, recipe.id);
+    }
   }
   for (const id of policy === 'targeted' ? target.cube : []) {
     const item = game().save.inventory.find((i) => i.legendaryId === id);

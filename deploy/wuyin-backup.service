@@ -1,0 +1,19 @@
+[Unit]
+Description=Back up Wuyin database and verify a recovery copy
+After=wuyin.service
+
+[Service]
+Type=oneshot
+User=wuyin
+Group=wuyin
+WorkingDirectory=/opt/wuyin/current
+EnvironmentFile=/etc/wuyin/app.env
+Environment=PATH=/opt/wuyin/runtime/bin:/usr/bin:/bin
+Environment=BACKUP_DIRECTORY=/var/lib/wuyin/backups
+ExecStart=/opt/wuyin/runtime/bin/node --import tsx server/dailyBackup.ts
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/wuyin
+UMask=0077

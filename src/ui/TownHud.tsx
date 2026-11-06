@@ -10,6 +10,8 @@ import { formatBigNumber } from '../core/format';
 import { CHARACTER_ART } from '../render/CharacterTextures';
 import { MAX_INVENTORY, useGameStore } from '../state/gameStore';
 import { useCloudStore } from '../state/cloudStore';
+import { onboardingTasks } from './OnboardingChecklist';
+import './mobile-camp.css';
 import {
   ArrowRight,
   BookOpen,
@@ -30,6 +32,7 @@ import {
   Swords,
   Volume2,
   VolumeX,
+  X,
 } from './PixelIcons';
 
 const SERVICES = [
@@ -87,6 +90,8 @@ export function TownHud({
     updateSettings,
   } = useGameStore();
   const cloud = useCloudStore();
+  const tasks = onboardingTasks(save);
+  const nextTask = tasks.find((task) => !task.done);
   const onlineExpedition = cloud.status === 'online' && !labBackup;
   const account = accounts.find((entry) => entry.id === activeAccountId);
   const character = account?.characters.find((entry) => entry.id === account.activeCharacterId);
@@ -149,6 +154,46 @@ export function TownHud({
       </header>
 
       <CampWallet />
+
+      <div className="mobile-camp-topline">
+        <span className="mobile-camp-save">{cloudLabel}</span>
+        {nextTask && !labBackup && !save.tutorialSeen && (
+          <button className="mobile-task-chip" onClick={onGuide}>
+            <BookOpen size={14} /> 下一步：{nextTask.title}
+          </button>
+        )}
+      </div>
+
+      {!labBackup && !save.tutorialSeen && nextTask && (
+        <aside className="camp-next-step" aria-label="下一步实操任务">
+          <button className="next-step-guide" onClick={onGuide} title="查看全部实操任务">
+            <BookOpen size={16} />
+            <span>
+              {tasks.filter((task) => task.done).length}/{tasks.length}
+            </span>
+          </button>
+          <button
+            className="next-step-action"
+            onClick={() =>
+              nextTask.panel === 'expedition' && !onlineExpedition
+                ? onSolo()
+                : onNavigate(nextTask.panel)
+            }
+            disabled={cloudTransition}
+          >
+            <small>下一步</small>
+            <strong>{nextTask.title}</strong>
+            <ChevronRight size={14} />
+          </button>
+          <button
+            className="icon-button"
+            aria-label="跳过营地实操提醒，可在冒险指南恢复"
+            onClick={() => updateSettings({ tutorialSeen: true })}
+          >
+            <X size={15} />
+          </button>
+        </aside>
+      )}
 
       <nav className="hall-service-rail" aria-label="大厅侧边功能">
         <span className="rail-caption">营地服务</span>
@@ -272,6 +317,71 @@ export function TownHud({
           <ArrowRight size={19} />
         </button>
       </section>
+
+      <div className="mobile-expedition-bar">
+        <div className="mobile-stage-picker">
+          <span>秘境层数</span>
+          <div className="expedition-tier">
+            <button
+              aria-label="降低秘境层数"
+              disabled={cloudTransition || save.selectedStage <= 1}
+              onClick={() => selectStage(save.selectedStage - 1)}
+            >
+              <ChevronLeft size={18} />
+            </button>
+            <label>
+              <span className="sr-only">选择已解锁秘境</span>
+              <input
+                aria-label="选择已解锁秘境"
+                type="number"
+                inputMode="numeric"
+                min={1}
+                max={save.highestStage}
+                value={save.selectedStage}
+                onChange={(event) => selectStage(Number(event.target.value))}
+                disabled={cloudTransition}
+              />
+              <span>层</span>
+            </label>
+            <button
+              aria-label="提高秘境层数"
+              disabled={cloudTransition || save.selectedStage >= save.highestStage}
+              onClick={() => selectStage(save.selectedStage + 1)}
+            >
+              <ChevronRight size={18} />
+            </button>
+          </div>
+        </div>
+        <button
+          className="mobile-expedition-button"
+          onClick={() => onNavigate('expedition')}
+          disabled={cloudTransition}
+        >
+          <Compass size={21} />
+          <span>
+            启程出征<small>第 {save.selectedStage} 层</small>
+          </span>
+          <ArrowRight size={18} />
+        </button>
+      </div>
+
+      <nav className="mobile-camp-nav" aria-label="常用系统">
+        {[
+          { id: 'character', label: '装备', icon: Shield },
+          { id: 'skills', label: '技能', icon: BookOpen },
+          { id: 'journey', label: '旅程', icon: Compass },
+          { id: 'services', label: '服务', icon: Hexagon },
+        ].map(({ id, label, icon: Icon }) => (
+          <button
+            key={id}
+            onClick={() => onNavigate(id)}
+            aria-label={id === 'skills' && canLearn ? `技能，${points} 点可分配` : label}
+          >
+            <Icon size={21} /> <span>{label}</span>
+            {id === 'skills' && canLearn && <i className="rail-alert">{points}</i>}
+          </button>
+        ))}
+      </nav>
 
       {labBackup && (
         <div className="hall-lab-status">

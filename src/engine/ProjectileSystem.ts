@@ -28,7 +28,10 @@ export interface Projectile {
 }
 export class ProjectileSystem {
   items: Projectile[] = [];
-  constructor(private layer: Container) {}
+  constructor(
+    private layer: Container,
+    private render = true,
+  ) {}
   spawn(
     x: number,
     y: number,
@@ -43,7 +46,7 @@ export class ProjectileSystem {
     if (view instanceof Sprite) {
       view.anchor.set(0.5);
       view.tint = tint;
-    } else {
+    } else if (this.render) {
       const palette = { o: 0x20303c, c: color, h: 0xf5e9ca, b: 0x8b9c9c };
       const rows = skillId.includes('orb')
         ? [

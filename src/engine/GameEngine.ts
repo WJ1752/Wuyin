@@ -3,6 +3,7 @@ import type {
   BossDef,
   CombatConfig,
   CombatSnapshot,
+  CombatStats,
   GameCallbacks,
   Item,
   MonsterDef,
@@ -56,12 +57,24 @@ import type {
   CoopEngineOptions,
   CoopFrame,
   CoopInput,
+  CoopMemberConfig,
   MonsterAttackPose,
 } from '../core/coop';
 import { coopBalance } from '../data/coopBalance';
 import { PET_ART } from '../data/petVisuals';
 import { preloadPetTexture, getPetTexture } from '../render/PetTextures';
 import type { RunResult } from '../core/types';
+import { DEFAULT_KEYS, getPreferences } from '../core/preferences';
+import { CHALLENGES } from '../data/challenges';
+import { isSkillAutoEnabled } from '../data/progression';
+
+/** Rendering-free actors keep the production simulation usable by the server. */
+class SimulationActor extends Container {
+  attack(..._args: unknown[]) {}
+  update(..._args: unknown[]) {}
+  hit() {}
+  drawHealth(..._args: unknown[]) {}
+}
 
 const arenaLimit = 780;
 const pylonReach = 190;
@@ -210,6 +223,26 @@ interface SummonState {
 
 /** Owns one run. Browser listeners, ticker, Pixi resources and timers are disposed together. */
 export class GameEngine {
+  private headless = false;
+  private simulationResult?: RunResult;
+  private simulationCommand = 0;
+  private report: CombatStats = {
+    seconds: 0,
+    damageDealt: 0,
+    damageTaken: 0,
+    casts: 0,
+    criticalHits: 0,
+    kills: 0,
+    damageBySkill: {},
+    damageBySource: {},
+    resourceStarvedSeconds: 0,
+  };
+  private objectiveProgress = 0;
+  private environmentClock = 0;
+  private hazards: { x: number; y: number; delay: number; radius: number; view: Graphics }[] = [];
+  private objectiveMarker?: Graphics;
+  private chargeWindow = 0;
+  private bloodWindow = 0;
   private app?: Application;
   private initialized = false;
   private disposed = false;
@@ -334,15 +367,101 @@ export class GameEngine {
   }
 
   /** Configure before init: no peer ever starts an independent solo simulation. */
+  initHeadless(config: CombatConfig, callbacks: GameCallbacks) {
+    if (this.initialized) throw new Error('战斗已经初始化。');
+    this.headless = true;
+    this.setupCharacter(config, callbacks);
+    this.random = createRng(config.seed ?? 4107);
+    this.hero = new SimulationActor() as unknown as CharacterRig;
+    this.pet.addChild(new Container());
+    this.pet.position.set(-38, 32);
+    this.vfx = new VFXManager(
+      this.effectsLayer,
+      (cue) => {
+        this.recentEffects.push({ ...cue, sequence: ++this.effectSequence, time: this.elapsed });
+        if (this.recentEffects.length > 32) this.recentEffects.shift();
+      },
+      'off',
+    );
+    this.numbers = new FloatingText(this.textLayer, 'off', false);
+    this.projectiles = new ProjectileSystem(this.effectsLayer, false);
+    if (config.classId === 'ranger' && this.learned('raven'))
+      this.ravens = [new Graphics(), new Graphics()];
+    if (config.classId === 'necromancer') this.createSummons();
+    this.createPylons();
+    this.initialized = true;
+    this.startEncounter();
+  }
+  initHeadlessCoop(members: CoopMemberConfig[], seed: number, callbacks: GameCallbacks) {
+    if (!members.length || members.length > 4) throw new Error('远征需要1至4名角色。');
+    const leader = members[0];
+    this.configureCoop({ localId: leader.id, hostId: leader.id, seed, members });
+    this.initHeadless({ ...leader.config, seed }, callbacks);
+    for (const [index, member] of members.entries()) {
+      const actor = index === 0 ? this : new GameEngine();
+      if (actor !== this) {
+        actor.headless = true;
+        actor.setupCharacter(member.config, {
+          onSnapshot: () => {},
+          onSound: () => {},
+          onFinish: () => {},
+        });
+        this.linkCoopActor(actor);
+        actor.hero = new SimulationActor() as unknown as CharacterRig;
+        actor.pet.addChild(new Container());
+        actor.projectiles = new ProjectileSystem(this.effectsLayer, false);
+        actor.initialized = true;
+        if (member.config.classId === 'ranger' && actor.learned('raven'))
+          actor.ravens = [new Graphics(), new Graphics()];
+        if (member.config.classId === 'necromancer') actor.createSummons();
+      }
+      actor.x = (index - (members.length - 1) / 2) * 55;
+      actor.hero.position.set(actor.x, actor.y);
+      this.coopActors.set(member.id, actor);
+    }
+  }
+  stepHeadless(input?: CoopInput) {
+    if (!this.headless || this.finished || this.disposed) return;
+    if (this.coop) {
+      this.updateCoop(1 / 30);
+      return;
+    }
+    if (input) {
+      this.setMovement(input.movement.x, input.movement.y);
+      if (input.autoSkills) this.config.autoSkills = { ...input.autoSkills };
+      for (const command of input.commands ?? []) {
+        if (command.sequence <= this.simulationCommand) continue;
+        if (command.id.startsWith('pylon:')) this.activatePylon(command.id.slice(6));
+        else this.cast(command.id);
+        this.simulationCommand = command.sequence;
+      }
+    } else this.setMovement(0, 0);
+    this.update(1 / 30);
+  }
+  headlessFrame(actorId: string): CoopFrame {
+    if (!this.coop) this.coopActors.set(actorId, this);
+    if (this.simulationResult) this.coopResults = { [actorId]: this.simulationResult };
+    if (!this.coop)
+      this.coopControls.set(actorId, {
+        input: this.coopInput,
+        receivedAt: 0,
+        consumed: 0,
+        command: this.simulationCommand,
+      });
+    return this.coopFrame();
+  }
   configureCoop(options: CoopEngineOptions) {
     if (this.initialized) throw new Error('请在初始化战场前配置队伍。');
     this.coop = options;
+    this.coopInput.sequence = options.inputSequenceBase ?? 0;
+    this.coopActionSequence = options.commandSequenceBase ?? 0;
   }
   async init(host: HTMLElement, config: CombatConfig, callbacks: GameCallbacks): Promise<void> {
     this.host = host;
     this.portraitHud = window.matchMedia('(max-width: 760px) and (orientation: portrait)');
     this.setupCharacter(config, callbacks);
-    if (this.coop?.seed !== undefined) this.random = createRng(this.coop.seed);
+    if (this.coop?.seed !== undefined || config.seed !== undefined)
+      this.random = createRng(this.coop?.seed ?? config.seed!);
     const stage = STAGES[config.stage - 1] ?? STAGES[0];
     await Promise.all([
       preloadCharacterTextures(config.classId),
@@ -368,7 +487,10 @@ export class GameEngine {
       resizeTo: host,
       antialias: false,
       background: 0x142426,
-      resolution: Math.min(window.devicePixelRatio || 1, 2),
+      resolution:
+        getPreferences(config.preferences).quality === 'low'
+          ? 1
+          : Math.min(window.devicePixelRatio || 1, 2),
       roundPixels: true,
       autoDensity: true,
       powerPreference: 'high-performance',
@@ -399,8 +521,14 @@ export class GameEngine {
             if (this.recentEffects.length > 32) this.recentEffects.shift();
           }
         : undefined,
+      getPreferences(config.preferences).quality === 'low'
+        ? 'reduced'
+        : getPreferences(config.preferences).effects,
     );
-    this.numbers = new FloatingText(this.textLayer);
+    this.numbers = new FloatingText(
+      this.textLayer,
+      getPreferences(config.preferences).damageNumbers,
+    );
     this.projectiles = new ProjectileSystem(this.effectsLayer);
     this.createPet();
     this.createPylons();
@@ -409,7 +537,7 @@ export class GameEngine {
     if (this.disposed) return;
     if (!this.isCoopGuest) this.startEncounter();
     this.app.ticker.add(this.tick);
-    this.app.ticker.maxFPS = 120;
+    this.app.ticker.maxFPS = getPreferences(config.preferences).quality === 'low' ? 30 : 60;
     window.addEventListener('keydown', this.onKeyDown);
     window.addEventListener('keyup', this.onKeyUp);
     window.addEventListener('blur', this.onBlur);
@@ -534,7 +662,12 @@ export class GameEngine {
   }
 
   receiveCoopInput(id: string, input: CoopInput) {
-    if (!this.coop || this.isCoopGuest || id === this.coop.localId || !this.coopActors.has(id))
+    if (
+      !this.coop ||
+      this.isCoopGuest ||
+      (!this.headless && id === this.coop.localId) ||
+      !this.coopActors.has(id)
+    )
       return;
     const previous = this.coopControls.get(id);
     if (
@@ -634,7 +767,7 @@ export class GameEngine {
         } else continue;
       }
       const control = this.coopControls.get(id);
-      if (actor !== this) {
+      if (actor !== this || this.headless) {
         const live = control && performance.now() - control.receivedAt < 750;
         actor.setMovement(live ? control.input.movement.x : 0, live ? control.input.movement.y : 0);
         if (control && live) {
@@ -660,6 +793,7 @@ export class GameEngine {
       this.updateEnemies(dt);
       this.updateWarningAnimations(dt);
       this.updateOrbs(dt);
+      this.updateEnvironment(dt);
       if (this.progress >= 100 && !this.bossSpawned) this.summonBoss();
       for (const actor of this.coopActors.values())
         if (actor.hp <= 0 && !actor.coopDownSeconds) {
@@ -756,17 +890,31 @@ export class GameEngine {
         slot: o.item?.slot,
         appearanceKey: o.item ? getItemAppearanceKey(o.item) : undefined,
       })),
-      warnings: [...this.warningAnimations].map(([id, w]) => ({
-        id,
-        x: w.event.x,
-        y: w.event.y,
-        radius: w.event.radius,
-        angle: w.event.angle,
-        range: w.event.range,
-        width: w.event.width,
-        shape: w.event.shape,
-        color: w.event.color,
-      })),
+      warnings: [...this.warningAnimations]
+        .map(([id, w]) => ({
+          id,
+          x: w.event.x,
+          y: w.event.y,
+          radius: w.event.radius,
+          angle: w.event.angle,
+          range: w.event.range,
+          width: w.event.width,
+          shape: w.event.shape,
+          color: w.event.color,
+        }))
+        .concat(
+          this.hazards.map((hazard, i) => ({
+            id: 1000000 + i,
+            x: hazard.x,
+            y: hazard.y,
+            radius: hazard.radius,
+            angle: 0,
+            range: 0,
+            width: 0,
+            shape: 'circle',
+            color: 0xea8b68,
+          })),
+        ),
       pylons: this.pylons.map((p) => ({ id: p.id, used: p.used })),
       results: this.coopResults,
     };
@@ -780,6 +928,7 @@ export class GameEngine {
         id,
         {
           partySize: this.coopActors.size,
+          stats: actor.combatStats(),
           won,
           stage: this.config.stage,
           seconds: Math.min(300, this.elapsed),
@@ -1116,6 +1265,27 @@ export class GameEngine {
       !!document.querySelector('[role="dialog"][aria-modal="true"]')
     );
   }
+  private inputKey(e: KeyboardEvent) {
+    const code =
+      e.code ||
+      (e.key === ' '
+        ? 'Space'
+        : /^[a-z]$/i.test(e.key)
+          ? `Key${e.key.toUpperCase()}`
+          : /^\d$/.test(e.key)
+            ? `Digit${e.key}`
+            : e.key);
+    const bindings = { ...DEFAULT_KEYS, ...getPreferences(this.config.preferences).keyBindings };
+    const action = Object.entries(bindings).find(([, bound]) => bound === code)?.[0];
+    if (action?.startsWith('skill')) return action.slice(5);
+    if (action)
+      return (
+        { up: 'w', down: 's', left: 'a', right: 'd', movement: ' ' } as Record<string, string>
+      )[action];
+    return ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Escape'].includes(code)
+      ? code.toLowerCase()
+      : '';
+  }
   private onKeyDown = (e: KeyboardEvent) => {
     const target = e.target as HTMLElement | null;
     if (
@@ -1130,7 +1300,7 @@ export class GameEngine {
       this.hasInputDialog()
     )
       return;
-    const key = e.key.toLowerCase();
+    const key = this.inputKey(e);
     if (this.paused && key !== 'escape') return;
     if (key === ' ' && target?.closest?.('button,a[href],[role="button"]')) return;
     if (
@@ -1150,7 +1320,7 @@ export class GameEngine {
     if (key === 'escape' && !e.repeat) this.togglePause();
   };
   private onKeyUp = (e: KeyboardEvent) => {
-    this.keys.delete(e.key.toLowerCase());
+    this.keys.delete(this.inputKey(e));
   };
   private onBlur = () => {
     this.setPaused(true);
@@ -1216,9 +1386,16 @@ export class GameEngine {
     this.updateEnemies(dt);
     this.updateWarningAnimations(dt);
     this.updateOrbs(dt);
+    this.updateEnvironment(dt);
     this.vfx.tick(dt);
     this.numbers.tick(dt);
-    if (this.progress >= 100 && !this.bossSpawned && !this.config.training) this.summonBoss();
+    if (
+      this.progress >= 100 &&
+      !this.bossSpawned &&
+      !this.config.training &&
+      this.objectiveComplete()
+    )
+      this.summonBoss();
     if (this.hp <= 0 && !this.config.training) this.finish(false);
     if (this.elapsed >= 300 && !this.config.training) this.finish(false);
     if (this.config.training) this.hp = this.config.stats.hp;
@@ -1248,7 +1425,7 @@ export class GameEngine {
     const gamepadSkills: SkillDef[] = [];
     const pad =
       !this.coopParent && !this.paused
-        ? navigator.getGamepads?.()?.find((p) => p?.connected)
+        ? globalThis.navigator?.getGamepads?.()?.find((p) => p?.connected)
         : undefined;
     if (pad && !this.hasInputDialog() && this.gamepadBlocked) {
       // Require neutral input after a pause or reconnect before accepting a held action.
@@ -1319,6 +1496,17 @@ export class GameEngine {
     this.hp = Math.min(this.config.stats.hp, this.hp + this.config.stats.regen * dt);
     this.castTimer -= dt;
     const targets = this.enemies.filter((e) => e.hp > 0 && this.distance(e) < 420);
+    if (
+      targets.length &&
+      this.skills.some(
+        (skill) =>
+          skill.kind === 'core' &&
+          isSkillAutoEnabled(this.config.autoSkills, skill) &&
+          !this.cooldowns[skill.id] &&
+          this.resource < this.getSkillCost(skill.id),
+      )
+    )
+      this.report.resourceStarvedSeconds! += dt;
     if (this.castTimer <= 0 && targets.length) {
       const selected = selectAutoCast(this.skills, {
         hpRatio: this.hp / this.config.stats.hp,
@@ -1428,6 +1616,73 @@ export class GameEngine {
     this.updatePet(dt);
     this.periodic(dt);
   }
+  private objectiveComplete() {
+    const rule = CHALLENGES.find((c) => c.id === this.config.challenge?.id);
+    return !rule || this.objectiveProgress >= rule.target;
+  }
+  private updateEnvironment(dt: number) {
+    if (this.config.training || this.finished) return;
+    const mode = this.config.challenge?.id;
+    if (mode === 'ward' && this.objectiveProgress < 18) {
+      if (!this.headless && !this.objectiveMarker) {
+        this.objectiveMarker = new Graphics()
+          .circle(0, 0, 140)
+          .fill({ color: 0x70c5e8, alpha: 0.12 })
+          .stroke({ color: 0xb9e5f5, width: 4 });
+        this.floorLayer.addChild(this.objectiveMarker);
+      }
+      if (this.hp > 0 && Math.hypot(this.x, this.y) <= 140)
+        this.objectiveProgress = Math.min(18, this.objectiveProgress + dt);
+    }
+    this.environmentClock += dt;
+    const interval = mode === 'hazards' ? 4 : 13;
+    if ((mode === 'hazards' || this.config.stage >= 16) && this.environmentClock >= interval) {
+      this.environmentClock = 0;
+      const view = new Graphics();
+      const radius = mode === 'hazards' ? 110 : 85;
+      const x = this.x,
+        y = this.y;
+      if (!this.headless) {
+        view
+          .circle(x, y, radius)
+          .fill({ color: 0xea8b68, alpha: 0.15 })
+          .stroke({ color: 0xffb68b, width: 4 });
+        view
+          .moveTo(x - 10, y)
+          .lineTo(x + 10, y)
+          .moveTo(x, y - 10)
+          .lineTo(x, y + 10)
+          .stroke({ color: 0xffedc5, width: 3 });
+        this.floorLayer.addChild(view);
+      }
+      this.hazards.push({ x, y, radius, delay: 1.2, view });
+    }
+    for (let i = this.hazards.length - 1; i >= 0; i--) {
+      const hazard = this.hazards[i];
+      hazard.delay -= dt;
+      if (hazard.delay > 0) continue;
+      if (mode === 'hazards') this.objectiveProgress = Math.min(6, this.objectiveProgress + 1);
+      for (const actor of this.coop ? this.coopActors.values() : [this]) {
+        if (actor.hp <= 0 || Math.hypot(actor.x - hazard.x, actor.y - hazard.y) > hazard.radius)
+          continue;
+        const theme = STAGES[this.config.stage - 1].theme;
+        actor.takeDamage(
+          (actor.config.stats.hp * 0.2) / STAGES[this.config.stage - 1].damageMultiplier,
+          ['荆棘蔓生', '墓穴寒潮', '熔岩喷涌', '虚空震荡'][theme],
+        );
+        if (theme === 0 || theme === 1) {
+          actor.slowUntil = this.elapsed + 2;
+          actor.slowRatio = 0.35;
+        }
+        if (theme === 3) {
+          actor.x = clampArena(actor.x + (actor.x >= hazard.x ? 70 : -70));
+        }
+      }
+      this.vfx.ring(hazard.x, hazard.y, 0xea8b68, hazard.radius);
+      hazard.view.destroy();
+      this.hazards.splice(i, 1);
+    }
+  }
   private updateCamera(dt: number) {
     if (!this.app) return;
     this.mapClock -= dt;
@@ -1440,9 +1695,14 @@ export class GameEngine {
     const scale = Math.min(1.2, Math.max(0.72, Math.min(w / 700, h / 660)));
     this.world.scale.set(scale);
     this.shake = Math.max(0, this.shake - dt * 22);
+    const shake =
+      getPreferences(this.config.preferences).screenShake &&
+      !globalThis.matchMedia?.('(prefers-reduced-motion: reduce)').matches
+        ? this.shake
+        : 0;
     this.world.position.set(
-      w / 2 - this.x * scale + (this.random() - 0.5) * this.shake,
-      h * 0.52 - this.y * scale + (this.random() - 0.5) * this.shake,
+      w / 2 - this.x * scale + (Math.random() - 0.5) * shake,
+      h * 0.52 - this.y * scale + (Math.random() - 0.5) * shake,
     );
   }
   private drawMinimap() {
@@ -1497,7 +1757,9 @@ export class GameEngine {
     x = clampArena(x);
     y = clampArena(y);
     const stage = STAGES[this.config.stage - 1] ?? STAGES[0];
-    const view = new MonsterRig(def, elite, boss, minion);
+    const view = this.headless
+      ? (new SimulationActor() as unknown as MonsterRig)
+      : new MonsterRig(def, elite, boss, minion);
     const balance = coopBalance(this.coopHost.coop?.members.length ?? 1);
     const hp =
       def.hp *
@@ -1948,7 +2210,7 @@ export class GameEngine {
       if (state.hp <= 0) this.defeatSummon(summon);
     }
     if (this.hp > 0 && attackContains(event, this.x, this.y)) {
-      this.takeDamage(event.damage);
+      this.takeDamage(event.damage, e.def.name);
       if (event.slow && !this.buffs.has('ultimate') && !this.buffs.has('invulnerable')) {
         this.slowUntil = this.elapsed + event.slow.duration;
         this.slowRatio = event.slow.ratio;
@@ -1963,6 +2225,9 @@ export class GameEngine {
           this.hitThorns(e, this.skills[0], this.config.stats.thorns);
         else {
           const damage = this.config.stats.thorns * (1 + this.power('shield_of_ancients'));
+          const dealt = Math.min(e.hp, damage);
+          this.report.damageDealt += dealt;
+          this.report.damageBySkill.thorns = (this.report.damageBySkill.thorns ?? 0) + dealt;
           e.hp -= damage;
           this.numbers.show(e.x, e.y, damage);
           if (e.hp <= 0) this.kill(e);
@@ -1970,7 +2235,7 @@ export class GameEngine {
       }
     }
   }
-  private takeDamage(raw: number) {
+  private takeDamage(raw: number, source = '环境冲击') {
     if (this.hp <= 0 || this.buffs.has('invulnerable')) return;
     raw *= coopBalance(this.coopHost.coop?.members.length ?? 1).monsterDamage;
     if (this.random() < this.config.stats.dodge) {
@@ -1990,6 +2255,9 @@ export class GameEngine {
       damage -= absorbed;
     }
     if (damage > 0) {
+      const received = Math.min(this.hp, damage);
+      this.report.damageTaken += received;
+      this.report.damageBySource[source] = (this.report.damageBySource[source] ?? 0) + received;
       this.hp -= damage;
       this.lastDamage = this.elapsed;
       this.numbers.show(this.x, this.y, `−${Math.round(damage)}`, false, 0xef8b98);
@@ -2084,6 +2352,9 @@ export class GameEngine {
       this.castTimer = Math.max(0.09, 0.38 / speed);
       this.attackStacks = Math.min(15, this.attackStacks + 1);
       this.attackCount++;
+      this.report.casts++;
+      if (skill.effect === 'charge') this.chargeWindow = this.elapsed + 4;
+      if (skill.effect === 'bloodstep') this.bloodWindow = this.elapsed + 4;
     }
     const targets = this.enemies
       .filter((e) => e.hp > 0 && this.distance(e) < 600)
@@ -2104,7 +2375,7 @@ export class GameEngine {
     const color = ELEMENT_COLORS[skill.element];
     if (!free) {
       this.hero.attack(skill, angle, this.castTimer);
-      if (this.coopHost.coop)
+      if (this.coopHost.coop || this.headless)
         this.lastCast = { sequence: this.attackCount, skillId: skill.id, angle, tx, ty };
     }
     this.vfx.signature(skill, this.x, this.y, angle, tx, ty);
@@ -2706,6 +2977,10 @@ export class GameEngine {
       damage -= absorbed;
     }
     e.hp -= damage;
+    const dealt = Math.max(0, Math.min(e.hp + damage, damage));
+    this.report.damageDealt += dealt;
+    this.report.damageBySkill[skill.id] = (this.report.damageBySkill[skill.id] ?? 0) + dealt;
+    if (crit) this.report.criticalHits++;
     e.view.hit();
     this.hp = Math.min(stats.hp, this.hp + stats.lifeOnHit * (dot ? 0.1 : 1));
     if (!dot) this.numbers.show(e.x, e.y, damage, crit);
@@ -2783,7 +3058,13 @@ export class GameEngine {
                 (this.learned('poison_scythe') ? 1 + 0.5 * this.rankScale('poison_scythe') : 1),
             }
           : skill;
-      e.poisonStacks = Math.min(5, e.poisonStacks + 1);
+      e.poisonStacks = Math.min(
+        5,
+        e.poisonStacks +
+          (skill.effect === 'scythe' && this.set('trang_oul', 4) && this.elapsed < this.bloodWindow
+            ? 2
+            : 1),
+      );
       if (e.poisonStacks === 5 && this.set('trang_oul', 4) && canProc) {
         e.poisonStacks = 0;
         for (const other of this.enemies)
@@ -2858,6 +3139,7 @@ export class GameEngine {
     if (e.deadTime !== undefined) return;
     e.deadTime = 0.4;
     this.kills++;
+    if (this.config.challenge?.id === 'pursuit' && e.elite && !e.minion) this.objectiveProgress++;
     this.combo++;
     this.comboTimer = 3;
     this.gold += 3;
@@ -3065,25 +3347,27 @@ export class GameEngine {
         z.x = this.x;
         z.y = this.y;
       }
-      z.view.clear();
-      if (z.art) {
-        z.art.position.set(z.x, z.y);
-        z.art.alpha = (0.4 + 0.12 * Math.sin(z.age * 4)) * Math.min(1, (z.life - z.age) * 4);
-      }
-      pixelEllipse(z.view, z.x, z.y, z.radius, z.radius * 0.68, color, 6, 0.08);
-      pixelEllipse(z.view, z.x, z.y, z.radius, z.radius * 0.68, color, 6, 0.4, true);
-      for (let j = 0; j < 5; j++) {
-        const a = this.elapsed * 2 + j * Math.PI * 0.4;
-        pixelLine(
-          z.view,
-          z.x + Math.cos(a) * z.radius * 0.7,
-          z.y + Math.sin(a) * z.radius * 0.5,
-          z.x + Math.cos(a + 0.4) * z.radius * 0.9,
-          z.y + Math.sin(a + 0.4) * z.radius * 0.6,
-          color,
-          3,
-          0.7,
-        );
+      if (!this.headless) {
+        z.view.clear();
+        if (z.art) {
+          z.art.position.set(z.x, z.y);
+          z.art.alpha = (0.4 + 0.12 * Math.sin(z.age * 4)) * Math.min(1, (z.life - z.age) * 4);
+        }
+        pixelEllipse(z.view, z.x, z.y, z.radius, z.radius * 0.68, color, 6, 0.08);
+        pixelEllipse(z.view, z.x, z.y, z.radius, z.radius * 0.68, color, 6, 0.4, true);
+        for (let j = 0; j < 5; j++) {
+          const a = this.elapsed * 2 + j * Math.PI * 0.4;
+          pixelLine(
+            z.view,
+            z.x + Math.cos(a) * z.radius * 0.7,
+            z.y + Math.sin(a) * z.radius * 0.5,
+            z.x + Math.cos(a + 0.4) * z.radius * 0.9,
+            z.y + Math.sin(a + 0.4) * z.radius * 0.6,
+            color,
+            3,
+            0.7,
+          );
+        }
       }
       if (z.pull)
         for (const e of this.enemies)
@@ -3131,16 +3415,26 @@ export class GameEngine {
                 e.x += (this.x - e.x) * 0.15;
                 e.y += (this.y - e.y) * 0.15;
               }
-          if (this.set('wasteland', 4) && Math.floor(z.age) > Math.floor(Math.max(0, z.age - 0.4)))
+          if (
+            this.set('wasteland', 4) &&
+            Math.floor(z.age) > Math.floor(Math.max(0, z.age - 0.4))
+          ) {
+            const nearest = this.enemies
+              .filter((e) => e.hp > 0)
+              .sort((a, b) => this.distance(a) - this.distance(b))[0];
+            const heading = nearest
+              ? Math.atan2(nearest.y - this.y, nearest.x - this.x)
+              : this.elapsed;
             for (let j = 0; j < 4; j++)
               this.projectiles.spawn(
                 this.x,
                 this.y,
-                this.elapsed + (j * Math.PI) / 2,
+                heading + (j * Math.PI) / 2,
                 color,
                 z.skill.id,
-                { pierce: 10 },
+                { pierce: 10, homing: j === 0 || this.elapsed < this.chargeWindow, life: 1.6 },
               );
+          }
         }
       }
       if (z.age >= z.life) {
@@ -3477,10 +3771,9 @@ export class GameEngine {
   private createSummons() {
     const count = this.set('inarius', 2) ? 16 : 10;
     for (let i = 0; i < count; i++) {
-      const rig = new CharacterRig(
-        isSkeletonWarrior(i) ? 'necromancer' : 'sorcerer',
-        { summon: true },
-      );
+      const rig = this.headless
+        ? (new SimulationActor() as unknown as CharacterRig)
+        : new CharacterRig(isSkeletonWarrior(i) ? 'necromancer' : 'sorcerer', { summon: true });
       rig.scale.set(0.45);
       rig.alpha = 0.65;
       rig.tint = isSkeletonWarrior(i) ? 0xc1c4aa : 0xb4cdce;
@@ -3498,6 +3791,7 @@ export class GameEngine {
         g = new Graphics(),
         color = Number.parseInt(p.color.slice(1), 16);
       const { x, y } = RIFT_PYLON_SITES[i];
+      if (this.headless) return { id: p.id, name: p.name, used: false, x, y, view };
       pixelEllipse(g, 0, 8, 30, 12, color, 3, 0.7, true);
       view.addChild(g);
       const shrine = createPropSprite(p.id, 91);
@@ -3673,7 +3967,11 @@ export class GameEngine {
     this.finished = true;
     this.callbacks.onSound(won ? 'victory' : 'defeat');
     this.emit();
-    this.callbacks.onFinish({
+    const result: RunResult = {
+      stats: this.combatStats(),
+      ...(this.config.challenge
+        ? { challenge: { ...this.config.challenge, completed: this.objectiveComplete() } }
+        : {}),
       won,
       stage: this.config.stage,
       seconds: Math.min(300, this.elapsed),
@@ -3681,11 +3979,32 @@ export class GameEngine {
       gold: this.gold,
       shards: this.shards,
       items: [...this.earned],
-    });
+    };
+    this.simulationResult = result;
+    this.callbacks.onFinish(result);
+  }
+  private combatStats(): CombatStats {
+    const boss = this.enemies.find((e) => e.boss);
+    return {
+      ...this.report,
+      seconds: this.elapsed,
+      kills: this.kills,
+      damageBySkill: { ...this.report.damageBySkill },
+      damageBySource: { ...this.report.damageBySource },
+      bossRemaining: boss ? Math.max(0, boss.hp / boss.maxHp) : undefined,
+    };
   }
   private snapshot(): CombatSnapshot {
     const boss = this.enemies.find((e) => e.boss && e.hp > 0);
     const snapshot: CombatSnapshot = {
+      stats: this.combatStats(),
+      objective: this.config.challenge
+        ? {
+            name: CHALLENGES.find((c) => c.id === this.config.challenge!.id)!.name,
+            progress: this.objectiveProgress,
+            target: CHALLENGES.find((c) => c.id === this.config.challenge!.id)!.target,
+          }
+        : undefined,
       hp: Math.max(0, this.hp),
       maxHp: this.config.stats.hp,
       resource: this.resource,
@@ -3727,6 +4046,28 @@ export class GameEngine {
     clearInterval(this.coopTimer);
     this.coopTimer = undefined;
     this.resizeObserver?.disconnect();
+    if (this.headless) {
+      for (const actor of this.coopActors.values()) if (actor !== this) actor.destroy();
+      this.coopActors.clear();
+      if (this.hero && !this.hero.destroyed) this.hero.destroy({ children: true });
+      for (const raven of this.ravens) if (!raven.destroyed) raven.destroy({ children: true });
+      for (const layer of [
+        this.world,
+        this.floorLayer,
+        this.entityLayer,
+        this.effectsLayer,
+        this.textLayer,
+        this.minimap,
+        this.coopVisuals,
+        this.pet,
+      ])
+        if (!layer.destroyed) layer.destroy({ children: true });
+      this.hazards.forEach((h) => {
+        if (!h.view.destroyed) h.view.destroy();
+      });
+      this.hazards = [];
+      return;
+    }
     window.removeEventListener('keydown', this.onKeyDown);
     window.removeEventListener('keyup', this.onKeyUp);
     window.removeEventListener('blur', this.onBlur);

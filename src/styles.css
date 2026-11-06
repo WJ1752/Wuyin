@@ -1530,12 +1530,12 @@ small {
 }
 .skill-illustration > img {
   position: absolute;
-  width: 500%;
-  height: 300%;
+  width: 400%;
+  height: 400%;
   max-width: none;
   max-height: none;
   pointer-events: none;
-  image-rendering: auto;
+  image-rendering: pixelated;
 }
 .skill-symbol .asset-icon,
 .skill-symbol .pixel-icon {

@@ -1,6 +1,6 @@
 import { settleCamp } from '../data/progression';
 import { create } from 'zustand';
-import type { AccountData, AccountSave } from '../core/types';
+import type { AccountData, AccountSave, RunResult } from '../core/types';
 import {
   newAccountSave,
   readDisk,
@@ -41,6 +41,8 @@ interface CloudState {
   error: string;
   pending: CloudSave | null;
   hasLocalCopy: boolean;
+  recoveryCode: string;
+  securityNotice: string;
   initialize: () => Promise<void>;
   authenticate: (mode: 'login' | 'register', username: string, password: string) => Promise<void>;
   choose: (mode: 'download' | 'migrate' | 'new' | 'resume') => Promise<void>;
@@ -48,6 +50,14 @@ interface CloudState {
   overwriteCloud: () => Promise<void>;
   logout: () => Promise<void>;
   exportBackup: (source?: 'local' | 'remote') => Promise<void>;
+  claimCoopReward: (runId: string) => Promise<RunResult>;
+  recover: (username: string, recoveryCode: string, newPassword: string) => Promise<void>;
+  manageSecurity: (
+    action: 'password' | 'recovery-code' | 'sessions/revoke',
+    password: string,
+    newPassword?: string,
+  ) => Promise<void>;
+  deleteAccount: (password: string, confirmation: string) => Promise<void>;
 }
 
 const ACTIVE_KEY = 'mist-continent-cloud-active';
@@ -277,6 +287,18 @@ function canReplace() {
 }
 function fail(error: unknown) {
   const message = error instanceof Error ? error.message : '云服务暂时不可用，本机进度已保留。';
+  if (
+    error instanceof RequestError &&
+    [
+      'INVALID_CREDENTIALS',
+      'INVALID_CREDENTIALS_FORMAT',
+      'CONFIRMATION_REQUIRED',
+      'RATE_LIMITED',
+    ].includes(error.code ?? '')
+  ) {
+    useCloudStore.setState({ error: message });
+    return;
+  }
   const cloud = useCloudStore.getState();
   const status: Status =
     error instanceof RequestError && error.code === 'SAVE_CONFLICT'
@@ -341,6 +363,8 @@ export const useCloudStore = create<CloudState>((set, get) => ({
   error: '',
   pending: null,
   hasLocalCopy: false,
+  recoveryCode: '',
+  securityNotice: '',
   initialize() {
     if (initialized) return initialized;
     initialized = (async () => {
@@ -423,7 +447,7 @@ export const useCloudStore = create<CloudState>((set, get) => ({
       if (get().localUser && get().localUser!.username.toLowerCase() !== username.toLowerCase())
         throw new Error('请先退出当前云账号，再登录其他账号；本机未同步进度会保留。');
       await session();
-      const auth = await apiRequest<{ user: CloudUser; csrfToken: string }>(
+      const auth = await apiRequest<{ user: CloudUser; csrfToken: string; recoveryCode?: string }>(
         `/auth/${mode}`,
         'POST',
         {
@@ -432,7 +456,7 @@ export const useCloudStore = create<CloudState>((set, get) => ({
         },
       );
       csrfToken = auth.csrfToken;
-      set({ user: auth.user });
+      set({ user: auth.user, recoveryCode: auth.recoveryCode ?? '', securityNotice: '' });
       const remote = await remoteSave(auth.user);
       set({ pending: remote, error: '' });
       if (get().localUser?.id === auth.user.id) {
@@ -497,6 +521,111 @@ export const useCloudStore = create<CloudState>((set, get) => ({
       });
     });
     if (get().status === 'online') queueSync();
+  },
+  async recover(username, recoveryCode, newPassword) {
+    await transition(async () => {
+      username = username.trim();
+      if (get().localUser && get().localUser!.username.toLowerCase() !== username.toLowerCase())
+        throw new Error('请先退出当前云账号，再找回其他账号。');
+      await session();
+      const result = await apiRequest<{ user: CloudUser; csrfToken: string; recoveryCode: string }>(
+        '/auth/recover',
+        'POST',
+        { username, recoveryCode, newPassword },
+      );
+      csrfToken = result.csrfToken;
+      const remote = await remoteSave(result.user);
+      set({
+        user: result.user,
+        pending: remote,
+        recoveryCode: result.recoveryCode,
+        hasLocalCopy: !!(await loadCloudCache(result.user.id)),
+        status: 'choosing',
+        error: '',
+        securityNotice: '密码已重置，旧会话和旧恢复码均已失效。请保存新恢复码。',
+      });
+    });
+  },
+  async manageSecurity(action, password, newPassword) {
+    await transition(async () => {
+      const result = await apiRequest<{
+        csrfToken?: string;
+        recoveryCode?: string;
+        revoked?: number;
+      }>(`/auth/${action}`, 'POST', {
+        password,
+        currentPassword: password,
+        ...(newPassword ? { newPassword } : {}),
+      });
+      if (result.csrfToken) csrfToken = result.csrfToken;
+      set({
+        ...(result.recoveryCode ? { recoveryCode: result.recoveryCode } : {}),
+        securityNotice:
+          action === 'password'
+            ? '密码已修改，其它设备已退出登录。'
+            : action === 'recovery-code'
+              ? '已生成新恢复码，旧恢复码立即失效。请妥善保存。'
+              : `已撤销其它 ${result.revoked ?? 0} 个会话。`,
+        error: '',
+      });
+    });
+  },
+  async deleteAccount(password, confirmation) {
+    let deleted = false;
+    await transition(async () => {
+      await replacementBackup(await remoteSave(get().user!));
+      const result = await apiRequest<{ csrfToken: string }>('/auth/delete', 'POST', {
+        password,
+        confirmation,
+      });
+      csrfToken = result.csrfToken;
+      deleted = true;
+    });
+    if (deleted) await get().logout();
+  },
+  async claimCoopReward(runId) {
+    const initial = get();
+    if (
+      !initial.user ||
+      initial.user.id !== initial.localUser?.id ||
+      useGameStore.getState().labBackup
+    )
+      throw new Error('请登录奖励所属账号并结束流派体验后领取。');
+    await get().sync();
+    if (get().status !== 'online' || get().dirty || get().busy)
+      throw new Error(get().error || '请先处理云端进度分歧，再从远征面板补领奖励。');
+    set({ busy: true });
+    useGameStore.setState({ cloudTransition: true });
+    try {
+      await replacementBackup();
+      const response = await apiRequest<
+        CloudSave & { result: RunResult; alreadyClaimed: boolean; notice?: string }
+      >('/coop/claim', 'POST', { runId, revision: get().revision });
+      if (
+        !response.account ||
+        response.account.id !== initial.user.id ||
+        response.revision < get().revision
+      )
+        throw new Error('奖励返回的云端存档无效，本机备份已保留。');
+      install({
+        version: 1,
+        user: initial.user,
+        account: response.account,
+        revision: response.revision,
+        updatedAt: response.updatedAt,
+        dirty: false,
+      });
+      set({ status: 'online', pending: response, error: '' });
+      if (response.notice) useGameStore.setState({ notice: response.notice });
+      await persistLocal();
+      return response.result;
+    } catch (error) {
+      fail(error);
+      throw error;
+    } finally {
+      useGameStore.setState({ cloudTransition: false });
+      set({ busy: false });
+    }
   },
   sync() {
     if (syncing) return syncing;
@@ -610,6 +739,8 @@ export const useCloudStore = create<CloudState>((set, get) => ({
         updatedAt: null,
         pending: null,
         hasLocalCopy: false,
+        recoveryCode: '',
+        securityNotice: '',
         error: '',
       });
       suppressChanges = false;

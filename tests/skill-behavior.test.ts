@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import type { ClassId } from '../src/core/types';
 import { SKILLS } from '../src/data/skillTrees';
+import { MONSTERS } from '../src/data/monsters';
 import { createMonsterBrain } from '../src/engine/MonsterAI';
 import { GameEngine } from '../src/engine/GameEngine';
 import { BuffManager } from '../src/engine/BuffAndPylon';
@@ -13,7 +14,7 @@ const noop = () => {};
 test('settlement keeps an immutable loot list when frame-end pickups continue', () => {
   let result: { items: unknown[] } | undefined;
   const earned = [{ id: 'boss-loot' }];
-  const engine = Object.assign(Object.create(GameEngine.prototype), {
+  const engine = Object.assign(new GameEngine() as any, {
     config: { stage: 1, training: false },
     finished: false,
     elapsed: 20,
@@ -42,7 +43,7 @@ function engineFor(classId: ClassId) {
   const projectiles: { id: string; options: Record<string, any> }[] = [];
   const hits: { damage: number; crit: boolean }[] = [];
   const zones: any[][] = [];
-  const engine = Object.assign(Object.create(GameEngine.prototype), {
+  const engine = Object.assign(new GameEngine() as any, {
     config: {
       ...save,
       stats,
@@ -103,6 +104,7 @@ function engineFor(classId: ClassId) {
 
 function enemy(id: number, x: number, y = 0) {
   return {
+    def: MONSTERS[0],
     id,
     x,
     y,

@@ -146,6 +146,8 @@ export class SynthAudio {
   private step = 0;
   private volume = 0.45;
   private muted = false;
+  private musicVolume = 1;
+  private sfxVolume = 1;
   private last = new Map<string, number>();
   async unlock() {
     if (!this.context) {
@@ -176,9 +178,11 @@ export class SynthAudio {
     }
     if (this.context.state === 'suspended') await this.context.resume();
   }
-  settings(volume: number, muted: boolean) {
+  settings(volume: number, muted: boolean, musicVolume = 1, sfxVolume = 1) {
     this.volume = volume;
     this.muted = muted;
+    this.musicVolume = musicVolume;
+    this.sfxVolume = sfxVolume;
     if (this.master && this.context)
       this.master.gain.setTargetAtTime(muted ? 0 : volume, this.context.currentTime, 0.08);
   }
@@ -200,6 +204,8 @@ export class SynthAudio {
   private voice(v: Voice, music: boolean) {
     const ctx = this.context;
     if (!ctx || !this.master) return;
+    const relativeVolume = music ? this.musicVolume : this.sfxVolume;
+    if (!relativeVolume) return;
     const t = ctx.currentTime + (v.delay ?? 0);
     const env = ctx.createGain();
     const filter = ctx.createBiquadFilter();
@@ -207,7 +213,7 @@ export class SynthAudio {
     filter.frequency.value = v.noise ? v.frequency : music ? 1300 : 6500;
     filter.Q.value = v.noise ? 0.7 : 0.3;
     env.gain.setValueAtTime(0.0001, t);
-    env.gain.exponentialRampToValueAtTime(v.gain ?? 0.3, t + 0.008);
+    env.gain.exponentialRampToValueAtTime((v.gain ?? 0.3) * relativeVolume, t + 0.008);
     env.gain.exponentialRampToValueAtTime(0.0001, t + v.duration);
     filter.connect(env);
     env.connect(music ? this.musicBus! : this.master);

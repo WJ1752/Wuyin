@@ -6,8 +6,17 @@ import { createApp } from './app';
 const localPlay = process.argv.includes('--play');
 const lanPlay = localPlay && process.argv.includes('--lan');
 const production = !localPlay && process.env.NODE_ENV === 'production';
+const publicHttpTest = production && process.env.ALLOW_INSECURE_PUBLIC_TEST === '1';
 if (production && !process.env.APP_ORIGINS)
   throw new Error('生产环境必须配置 APP_ORIGINS，例如 https://game.example.com。');
+if (
+  publicHttpTest &&
+  !process.env.APP_ORIGINS?.split(',').every((origin) => {
+    const parsed = new URL(origin.trim());
+    return parsed.protocol === 'http:' && parsed.origin === origin.trim();
+  })
+)
+  throw new Error('公网 HTTP 测试必须显式配置精确的 HTTP APP_ORIGINS。');
 // Keep the usual frontend address so returning guests retain their browser saves.
 const port = localPlay ? 5173 : Number(process.env.PORT ?? 3001);
 function lanAddress() {
@@ -36,11 +45,15 @@ const app = await createApp({
     : process.env.APP_ORIGINS?.split(',')
         .map((origin) => origin.trim())
         .filter(Boolean),
-  secureCookies: production,
+  secureCookies: production && !publicHttpTest,
   staticDir: production || localPlay ? resolve('dist') : undefined,
   logger: !localPlay,
   trustProxy: proxyHops || false,
 });
+if (publicHttpTest)
+  console.warn(
+    '已显式启用未加密的公网 HTTP 测试入口。仅使用独立测试密码；接入 HTTPS 后移除 ALLOW_INSECURE_PUBLIC_TEST。',
+  );
 const shutdown = async () => {
   await app.close();
   process.exit(0);

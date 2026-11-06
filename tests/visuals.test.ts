@@ -56,6 +56,8 @@ test('all seven hall residents resolve to distinct cells of a bundled high resol
 test('every skill has an illustrated tile and every active skill has a distinct cast sprite', () => {
   const active = SKILLS.filter((skill) => skill.kind !== 'passive');
   assert.deepEqual(Object.keys(SKILL_ART).sort(), SKILLS.map((s) => s.id).sort());
+  for (const frame of Object.values(SKILL_ART))
+    assert.ok(frame.column < 4 && frame.row < 4, 'skill icons must fit the published 4×4 sheet');
   assert.deepEqual(Object.keys(CAST_ART).sort(), active.map((s) => s.id).sort());
   for (const frames of [SKILL_ART, CAST_ART]) {
     const all = Object.values(frames);

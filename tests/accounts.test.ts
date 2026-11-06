@@ -64,6 +64,39 @@ test('legacy migration preserves the complete character and validates all accoun
   }
 });
 
+test('new account placeholder is replaced by first character and legacy saves migrate as created', () => {
+  const data = newAccountSave();
+  const prior = data.accounts[0].characters[0].id;
+  assert.equal(data.accounts[0].characters[0].save.characterCreated, false);
+  reset(data);
+  assert.equal(useGameStore.getState().createFirstCharacter('雾中旅人', 'sorcerer'), true);
+  assert.equal(account().characters.length, 1);
+  assert.equal(account().characters[0].id, prior);
+  assert.equal(account().characters[0].save.characterCreated, true);
+  assert.equal(account().characters[0].save.storyChapter, 'arrival');
+  const historical = newSave();
+  delete historical.characterCreated;
+  delete historical.storyChapter;
+  delete historical.storySkipped;
+  const migrated = validateAccountSave(historical).accounts[0].characters[0].save;
+  assert.equal(migrated.characterCreated, true);
+  assert.equal(migrated.storyChapter, 'arrival');
+});
+
+test('deleting the final character creates an empty onboarding placeholder and preserves stash', () => {
+  const data = newAccountSave();
+  const item = generateLoot('ranger', 10);
+  data.accounts[0].stash.push(item);
+  reset(data);
+  const oldId = account().activeCharacterId;
+  useGameStore.getState().deleteCharacter(oldId);
+  assert.equal(account().characters.length, 1);
+  assert.notEqual(account().activeCharacterId, oldId);
+  assert.equal(account().characters[0].save.characterCreated, false);
+  assert.equal(account().stash[0].id, item.id);
+  assert.doesNotThrow(() => validateAccountSave(snapshotAccounts(useGameStore.getState())));
+});
+
 test('six character limit is per account and progress, materials, and backpacks remain independent', () => {
   reset();
   const firstId = account().activeCharacterId;

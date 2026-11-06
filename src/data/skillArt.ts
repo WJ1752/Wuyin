@@ -96,9 +96,9 @@ export const SKILL_ART = Object.fromEntries(
         [
           id,
           {
-            src: `./assets/skills/${classId}.webp`,
-            column: index % 5,
-            row: Math.floor(index / 5),
+            src: `./assets/ui/skills-${classId}.webp`,
+            column: index % 4,
+            row: Math.floor(index / 4),
           },
         ] as const,
     ),

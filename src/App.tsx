@@ -41,9 +41,18 @@ import type { CombatConfig, CombatSnapshot, RunResult } from './core/types';
 import { RARITY_COLORS, RARITY_NAMES } from './core/types';
 import { formatBigNumber, formatTime } from './core/format';
 import { audio } from './audio/SynthAudio';
+import { getPreferences } from './core/preferences';
+import type { InputAction } from './core/types';
+import { CombatReport } from './ui/CombatReport';
+import { actionKey } from './ui/inputLabels';
+import { TrialPanel } from './ui/TrialPanel';
+import { reportClientEvent } from './state/telemetry';
+import { CharacterCreation } from './ui/CharacterCreation';
+import { StoryGuide } from './ui/StoryGuide';
 import './styles.css';
 import './ui/town-hud.css';
 import './ui/game-theme.css';
+import './ui/pixel-fantasy.css';
 
 function App() {
   const {
@@ -65,9 +74,10 @@ function App() {
     (RunResult & { nextStage: number; unlocked: number; summary: string }) | null
   >(null);
   const [showGuide, setShowGuide] = useState(false);
+  const [storyReview, setStoryReview] = useState<'arrival' | 'mentor' | 'first-clear' | null>(null);
+  const preferences = getPreferences(save.preferences);
   const localReady = useCloudStore((state) => state.localReady);
   const closeGuide = () => {
-    updateSettings({ tutorialSeen: true });
     setShowGuide(false);
   };
   const returnToCamp = () => {
@@ -79,8 +89,17 @@ function App() {
     void hydrate().then(() => useCloudStore.getState().initialize());
   }, [hydrate]);
   useEffect(() => {
-    audio.settings(save.volume, save.muted);
-  }, [save.volume, save.muted]);
+    const report = () => reportClientEvent('runtime', 'unhandled-browser-error');
+    window.addEventListener('error', report);
+    window.addEventListener('unhandledrejection', report);
+    return () => {
+      window.removeEventListener('error', report);
+      window.removeEventListener('unhandledrejection', report);
+    };
+  }, []);
+  useEffect(() => {
+    audio.settings(save.volume, save.muted, preferences.musicVolume, preferences.sfxVolume);
+  }, [save.volume, save.muted, preferences.musicVolume, preferences.sfxVolume]);
   useEffect(() => {
     if (!notice) return;
     const timer = setTimeout(() => setNotice(''), 6500);
@@ -99,6 +118,11 @@ function App() {
   }, []);
   const open = (id: string) => {
     audio.play('click');
+    if (id === 'story') {
+      setPanel(null);
+      setStoryReview('arrival');
+      return;
+    }
     setPanel(id);
   };
   const enter = (training = false) => {
@@ -107,7 +131,7 @@ function App() {
       setNotice('正在切换云端档案，请稍候再开始远征。');
       return;
     }
-    if (!training) current.beginSummit();
+    if (!training && !current.save.progression?.challenges?.pending) current.beginSummit();
     useGameStore.getState().setInCombat(true);
     setNotice('');
     audio.play('pylon');
@@ -120,7 +144,11 @@ function App() {
     });
   };
   const leave = () => {
-    if (coop) void apiRequest('/coop/leave', 'POST', {}).catch(() => {});
+    if (coop)
+      void apiRequest(coop.code === 'TRIAL' ? '/trials/leave' : '/coop/leave', 'POST', {}).catch(
+        () => {},
+      );
+    useGameStore.getState().cancelChallenge();
     useGameStore.getState().setInCombat(false);
     setConfig(null);
     setCoop(null);
@@ -134,12 +162,24 @@ function App() {
     setPanel(null);
     setResult(null);
     setCoop(room);
-    setConfig(member.config);
+    setConfig({ ...member.config, preferences: useGameStore.getState().save.preferences });
     audio.setTrack('rift');
   };
-  const finish = (r: RunResult) => {
+  const finish = async (r: RunResult) => {
     const before = useGameStore.getState().save.highestStage;
-    if (!config?.training) completeRun(r);
+    if (coop?.code === 'TRIAL') {
+      setNotice(
+        r.won
+          ? '官方配装试炼已完成，成绩由服务器记录；试炼不改变开荒进度。'
+          : '官方试炼结束，可继续练习并挑战验证榜。',
+      );
+    } else if (coop) {
+      try {
+        r = await useCloudStore.getState().claimCoopReward(coop.runId);
+      } catch {
+        setNotice('本次奖励尚未领取，回营后可从组队远征中补领。');
+      }
+    } else if (!config?.training) completeRun(r);
     const current = useGameStore.getState();
     const unlocked = current.save.highestStage - before;
     // A fast frontier clear can unlock several floors. A lower-floor replay
@@ -154,7 +194,11 @@ function App() {
   };
   const summit = result?.won && result.stage === RIFT_RULES.maxLevel;
   const advance = result?.won && !summit;
-  const continueLabel = advance ? `挑战第 ${result.nextStage} 层` : '再次挑战本层';
+  const continueLabel = result?.challenge
+    ? '再次挑战本轮契约'
+    : advance
+      ? `挑战第 ${result.nextStage} 层`
+      : '再次挑战本层';
   const quickItems = result && !coop && !labBackup ? emptySlotItems(save) : [];
   const offerSkills =
     result &&
@@ -166,6 +210,14 @@ function App() {
     if (!result) return;
     if (equip) useGameStore.getState().equipEmptySlots();
     selectStage(result.nextStage);
+    if (result.challenge) {
+      leave();
+      if (!useGameStore.getState().beginChallenge(result.challenge.id)) {
+        setResult(null);
+        open('journey');
+        return;
+      }
+    }
     enter();
   };
   if (!ready || !localReady)
@@ -180,8 +232,48 @@ function App() {
         </p>
       </div>
     );
+  if (save.characterCreated === false && !labBackup)
+    return (
+      <div
+        className="app character-entry"
+        style={{ '--font-scale': preferences.fontScale } as CSSProperties}
+      >
+        <CharacterCreation
+          onAccount={() => setPanel('accounts')}
+          onCreated={() => setPanel(null)}
+        />
+        <SystemsModal
+          panel={panel === 'accounts' ? panel : null}
+          onClose={() => setPanel(null)}
+          onNavigate={setPanel}
+          onEnterHall={() => setPanel(null)}
+        />
+        {notice && (
+          <div className="toast" role="status">
+            {notice}
+          </div>
+        )}
+      </div>
+    );
+  const automaticStory =
+    !config &&
+    !result &&
+    !panel &&
+    !showGuide &&
+    !labBackup &&
+    !save.storySkipped &&
+    (save.storyChapter === 'arrival' ||
+      save.storyChapter === 'mentor' ||
+      (save.storyChapter === 'first-clear' && save.clears > 0))
+      ? save.storyChapter
+      : null;
+  const visibleStory = storyReview ?? automaticStory;
   return (
-    <div className={`app ${config ? 'in-combat' : 'in-town'} orientation-${save.orientation}`}>
+    <div
+      className={`app ${config ? 'in-combat' : 'in-town'} orientation-${save.orientation}`}
+      style={{ '--font-scale': preferences.fontScale } as CSSProperties}
+      data-color-assist={preferences.colorAssist}
+    >
       {!config && (
         <main className="game-hall" aria-label="游戏大厅">
           <NpcHall onNavigate={open} active={!panel && !showGuide} />
@@ -206,14 +298,27 @@ function App() {
           onAccount={() => setPanel('accounts')}
         />
       )}
+      {panel === 'trial' && (
+        <TrialPanel
+          onClose={() => setPanel(null)}
+          onStart={enterCoop}
+          onAccount={() => setPanel('accounts')}
+        />
+      )}
       <SystemsModal
-        panel={['coop', 'expedition'].includes(panel ?? '') ? null : panel}
+        panel={['coop', 'expedition', 'trial'].includes(panel ?? '') ? null : panel}
         onClose={() => setPanel(null)}
         onNavigate={(id) => {
           if (id === 'training' || id === 'guide') {
             setPanel(null);
             if (id === 'training') enter(true);
             else setShowGuide(true);
+          } else if (id === 'challenge') {
+            setPanel(null);
+            enter();
+          } else if (id === 'story') {
+            setPanel(null);
+            setStoryReview('arrival');
           } else setPanel(id);
         }}
         onEnterHall={() => setPanel(null)}
@@ -240,6 +345,27 @@ function App() {
           }}
         />
       )}
+      {visibleStory && (
+        <StoryGuide
+          key={`${storyReview ? 'review' : 'story'}-${visibleStory}`}
+          chapter={visibleStory}
+          onAdvance={() => {
+            const next =
+              visibleStory === 'arrival'
+                ? 'mentor'
+                : visibleStory === 'mentor'
+                  ? 'first-clear'
+                  : 'complete';
+            if (storyReview) setStoryReview(next === 'complete' ? null : next);
+            else updateSettings({ storyChapter: next });
+          }}
+          onSkip={() => {
+            if (storyReview) setStoryReview(null);
+            else updateSettings({ storySkipped: true, storyChapter: 'complete' });
+          }}
+          onClose={() => setStoryReview(null)}
+        />
+      )}
       {result && (
         <div className="modal-backdrop result-backdrop">
           <div
@@ -254,15 +380,23 @@ function App() {
               {result.won ? <Crown size={52} /> : <Skull size={52} />}
             </div>
             <h2>
-              {summit
-                ? '秘境之巅 · 已登顶'
-                : result.won
-                  ? '秘境已征服'
-                  : result.seconds >= RIFT_RULES.timeLimit
-                    ? '远征时间已尽'
-                    : coop
-                      ? '队伍已倒下'
-                      : '行者倒下了'}
+              {coop?.code === 'TRIAL'
+                ? result.won
+                  ? '官方配装试炼完成'
+                  : '官方配装试炼结束'
+                : result.challenge
+                  ? result.won
+                    ? '契约挑战完成'
+                    : '契约挑战结束'
+                  : summit
+                    ? '秘境之巅 · 已登顶'
+                    : result.won
+                      ? '秘境已征服'
+                      : result.seconds >= RIFT_RULES.timeLimit
+                        ? '远征时间已尽'
+                        : coop
+                          ? '队伍已倒下'
+                          : '行者倒下了'}
             </h2>
             <p>
               {STAGES[result.stage - 1]?.name} · 第 {result.stage} 层
@@ -309,6 +443,16 @@ function App() {
               </details>
             )}
             <p className="run-progression-summary">{result.summary}</p>
+            {result.stats && (
+              <CombatReport
+                stats={result.stats}
+                failed={!result.won}
+                onNavigate={(id) => {
+                  returnToCamp();
+                  open(id);
+                }}
+              />
+            )}
             <div className="result-actions">
               {quickItems.length > 0 && (
                 <button
@@ -324,11 +468,12 @@ function App() {
                 onClick={() => {
                   if (coop) {
                     returnToCamp();
-                    open('coop');
+                    open(coop.code === 'TRIAL' ? 'trial' : 'coop');
                   } else continueRun(false);
                 }}
               >
-                {coop ? '重新集结队伍' : continueLabel} <Swords size={16} />
+                {coop ? (coop.code === 'TRIAL' ? '返回官方试炼' : '重新集结队伍') : continueLabel}{' '}
+                <Swords size={16} />
               </button>
               <button
                 className="outline-button full-width"
@@ -386,7 +531,7 @@ function CombatView({
   const basic = skills.find((skill) => skill.kind === 'basic');
   const openingHint =
     basic && auto[basic.id] === false
-      ? '靠近敌人，点击技能或开启 AUTO'
+      ? '靠近敌人，点击技能或开启自动施放'
       : '靠近敌人自动攻击，走出地面预警';
   const cancelLeave = () => {
     setLeaveDialog(false);
@@ -419,7 +564,9 @@ function CombatView({
     if (coop)
       game.configureCoop({
         localId: coop.selfId,
-        hostId: coop.hostId,
+        hostId: coop.authority === 'server' ? 'server' : coop.hostId,
+        inputSequenceBase: coop.inputSequenceBase,
+        commandSequenceBase: coop.commandSequenceBase,
         seed: coop.seed,
         members: coop.members,
         onInput: (next) => {
@@ -434,9 +581,15 @@ function CombatView({
       if (!coop || cancelled || stopped) return;
       try {
         const response = await apiRequest<{ room: CoopRoom }>(
-          '/coop/exchange',
+          coop.code === 'TRIAL' ? '/trials/exchange' : '/coop/exchange',
           'POST',
-          coop.selfId === coop.hostId ? (frame ? { snapshot: frame } : {}) : input ? { input } : {},
+          coop.authority !== 'server' && coop.selfId === coop.hostId
+            ? frame
+              ? { snapshot: frame }
+              : {}
+            : input
+              ? { input }
+              : {},
         );
         if (cancelled) return;
         const room = response.room;
@@ -448,7 +601,7 @@ function CombatView({
         }
         lastSuccess = Date.now();
         setNetwork('');
-        if (coop.selfId === coop.hostId) {
+        if (coop.authority !== 'server' && coop.selfId === coop.hostId) {
           for (const [id, next] of Object.entries(room.inputs ?? {}))
             game.receiveCoopInput(id, next);
           if (room.status === 'finished' && pendingResult && !resultDelivered) {
@@ -462,11 +615,12 @@ function CombatView({
       } catch (e) {
         if (!cancelled) {
           setNetwork('连接不稳定，正在重连…');
-          if (Date.now() - lastSuccess > 15000) {
+          if (Date.now() - lastSuccess > 30000) {
+            reportClientEvent('network', 'battle-exchange-disconnected');
             stopped = true;
             game.destroy();
             setError(
-              `连接已中断，本次远征不发放未结算收益。${e instanceof Error ? e.message : ''}`,
+              `连接已中断，请回营重新连接；服务器已保存的远征结果可在组队页补领。${e instanceof Error ? e.message : ''}`,
             );
           }
         }
@@ -481,7 +635,8 @@ function CombatView({
         },
         onFinish: (r) => {
           if (!cancelled) {
-            if (coop && coop.selfId === coop.hostId) pendingResult = r;
+            if (coop && coop.authority !== 'server' && coop.selfId === coop.hostId)
+              pendingResult = r;
             else onFinishRef.current(r);
           }
         },
@@ -495,6 +650,7 @@ function CombatView({
         else if (coop) void exchange();
       })
       .catch((e) => {
+        reportClientEvent('runtime', 'battle-initialization-failed');
         if (!cancelled) setError(`战场加载失败：${e instanceof Error ? e.message : String(e)}`);
       });
     return () => {
@@ -532,7 +688,7 @@ function CombatView({
             <span>
               {config.training
                 ? '秘境演武场'
-                : `${STAGES[config.stage - 1]?.name} · 第 ${config.stage} 层`}
+                : `${coop?.code === 'TRIAL' ? '官方配装试炼' : STAGES[config.stage - 1]?.name} · 第 ${config.stage} 层`}
             </span>
             <b>{config.training ? '∞' : formatTime(snapshot?.seconds ?? RIFT_RULES.timeLimit)}</b>
           </div>
@@ -552,11 +708,13 @@ function CombatView({
                 ? '正在布置战场…'
                 : config.training
                   ? '练习移动与施法 · 训练无收益'
-                  : snapshot.boss
-                    ? '目标 · 击败守关首领'
-                    : snapshot.kills === 0
-                      ? openingHint
-                      : '击败敌人，拾取紫色进度球'}
+                  : snapshot.objective && snapshot.objective.progress < snapshot.objective.target
+                    ? `${snapshot.objective.name} · ${Math.floor(snapshot.objective.progress)}/${snapshot.objective.target}${config.challenge?.id === 'ward' ? ' · 留在中央光圈充能' : ''}`
+                    : snapshot.boss
+                      ? '目标 · 击败守关首领'
+                      : snapshot.kills === 0
+                        ? openingHint
+                        : '击败敌人，拾取紫色进度球'}
             </span>
             <span>
               {Math.floor(snapshot?.progress ?? 0)}% · {snapshot?.kills ?? 0} 击败
@@ -572,6 +730,33 @@ function CombatView({
         >
           {snapshot?.paused ? <Play /> : <Pause />}
         </button>
+      </div>
+      <div className="combat-vitals" aria-label="生命与资源">
+        <div className="vital-health">
+          <span>
+            生命{' '}
+            <b>
+              {formatBigNumber(snapshot?.hp ?? config.stats.hp)} /{' '}
+              {formatBigNumber(snapshot?.maxHp ?? config.stats.hp)}
+            </b>
+          </span>
+          <i
+            style={{
+              width: `${(100 * (snapshot?.hp ?? config.stats.hp)) / (snapshot?.maxHp ?? config.stats.hp)}%`,
+            }}
+          />
+        </div>
+        <div className="vital-energy">
+          <span>
+            {CLASSES.find((c) => c.id === config.classId)?.resource}{' '}
+            <b>{Math.floor(snapshot?.resource ?? config.stats.maxResource)}</b>
+          </span>
+          <i
+            style={{
+              width: `${(100 * (snapshot?.resource ?? config.stats.maxResource)) / (snapshot?.maxResource ?? config.stats.maxResource)}%`,
+            }}
+          />
+        </div>
       </div>
       {coop && (
         <div className="coop-team-hud" aria-label="远征队友">
@@ -679,7 +864,7 @@ function CombatView({
           <b>{formatBigNumber(snapshot?.hp ?? config.stats.hp)}</b>
           <small>生命</small>
         </div>
-        <div className="skills-bar">
+        <div className="skills-bar" style={{ '--skill-count': skills.length } as CSSProperties}>
           {skills.map((s, i) => {
             const cd = snapshot?.cooldowns[s.id] ?? 0;
             const cost = engine.current?.getSkillCost(s.id) ?? s.cost;
@@ -709,11 +894,11 @@ function CombatView({
                   title={automatic ? '点击改为手动施放' : '点击启用自动施法'}
                   onClick={() => toggleAuto(s.id)}
                 >
-                  {automatic ? 'AUTO' : '手动'}
+                  {automatic ? '自动' : '手动'}
                 </button>
                 <button
                   className="skill-cast"
-                  title={`${s.description}\n${reason}${s.kind === 'movement' ? ' · 空格' : ''}`}
+                  title={`${s.description}\n${reason}${s.kind === 'movement' ? ` · ${actionKey(save.preferences, 'movement')}` : ''}`}
                   aria-label={`施放${s.name} · ${reason}`}
                   disabled={unavailable}
                   onClick={() => engine.current?.cast(s.id)}
@@ -725,7 +910,9 @@ function CombatView({
                   {!cd && lacksResource && (
                     <span className="cooldown-overlay resource-warning">缺能</span>
                   )}
-                  <small className="keybind">{i + 1}</small>
+                  <small className="keybind">
+                    {actionKey(save.preferences, `skill${i + 1}` as InputAction)}
+                  </small>
                 </button>
                 <span className="skill-name">{s.name}</span>
               </div>
@@ -764,12 +951,22 @@ function CombatView({
         onMove={(x, y) => engine.current?.setMovement(x, y)}
       />
       <div className="combat-help">
-        WASD / 拖动移动 · {movement ? `空格 ${movement.name}` : 'Lv.3 回营学习位移'} · Esc{' '}
-        {coop ? '菜单' : '暂停'}
+        {(['up', 'left', 'down', 'right'] as InputAction[])
+          .map((action) => actionKey(save.preferences, action))
+          .join('')}{' '}
+        / 拖动移动 ·{' '}
+        {movement
+          ? `${actionKey(save.preferences, 'movement')} ${movement.name}`
+          : 'Lv.3 回营学习位移'}{' '}
+        · Esc {coop ? '菜单' : '暂停'}
       </div>
       {config.training && !snapshot?.paused && (
         <div className="training-hint">
-          训练不发放奖励 · 试着移动并切换 AUTO / 手动，左上角返回营地
+          训练无收益 · 每秒伤害{' '}
+          {formatBigNumber(
+            (snapshot?.stats?.damageDealt ?? 0) / Math.max(1, snapshot?.stats?.seconds ?? 1),
+          )}{' '}
+          · 暂停查看完整战斗统计
         </div>
       )}
       {snapshot?.paused && !leaveDialog && (
@@ -799,6 +996,7 @@ function CombatView({
               </small>
             </div>
           )}
+          {snapshot.stats && <CombatReport stats={snapshot.stats} />}
           <button className="gold-button" onClick={() => engine.current?.togglePause()}>
             继续征途 <Play size={16} />
           </button>
@@ -806,9 +1004,15 @@ function CombatView({
             返回营地 <ArrowLeft size={16} />
           </button>
           <p>
-            WASD / 方向键移动 · 1–6 施法
+            {(['up', 'left', 'down', 'right'] as InputAction[])
+              .map((action) => actionKey(save.preferences, action))
+              .join('')}{' '}
+            / 方向键移动 · 战斗栏对应键施法
             <br />
-            {movement ? `空格施放${movement.name}` : '位移需 Lv.3 在技能之书学习'} · Esc 继续
+            {movement
+              ? `${actionKey(save.preferences, 'movement')}施放${movement.name}`
+              : '位移需 Lv.3 在技能之书学习'}{' '}
+            · Esc 继续
           </p>
         </div>
       )}

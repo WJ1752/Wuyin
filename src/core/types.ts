@@ -4,6 +4,42 @@ export type Rarity = 'common' | 'uncommon' | 'rare' | 'epic' | 'legendary' | 'se
 export type Element = 'physical' | 'fire' | 'ice' | 'lightning' | 'arcane' | 'poison';
 export type SkillKind =
   'basic' | 'core' | 'control' | 'ultimate' | 'passive' | 'defense' | 'movement';
+export type InputAction =
+  | 'up'
+  | 'down'
+  | 'left'
+  | 'right'
+  | 'movement'
+  | 'skill1'
+  | 'skill2'
+  | 'skill3'
+  | 'skill4'
+  | 'skill5'
+  | 'skill6';
+export interface GamePreferences {
+  musicVolume: number;
+  sfxVolume: number;
+  screenShake: boolean;
+  damageNumbers: 'all' | 'critical' | 'off';
+  effects: 'full' | 'reduced';
+  quality: 'high' | 'low';
+  fontScale: 1 | 1.15 | 1.3;
+  colorAssist: boolean;
+  keyBindings: Partial<Record<InputAction, string>>;
+}
+export type ChallengeId = 'pursuit' | 'ward' | 'hazards';
+export interface CombatStats {
+  seconds: number;
+  damageDealt: number;
+  damageTaken: number;
+  casts: number;
+  criticalHits: number;
+  kills: number;
+  damageBySkill: Record<string, number>;
+  damageBySource: Record<string, number>;
+  bossRemaining?: number;
+  resourceStarvedSeconds?: number;
+}
 export interface ClassDef {
   id: ClassId;
   name: string;
@@ -181,6 +217,10 @@ export interface SaveData {
   keepRareAffix?: string;
   orientation: 'portrait' | 'landscape';
   tutorialSeen: boolean;
+  characterCreated?: boolean;
+  storyChapter?: 'arrival' | 'mentor' | 'first-clear' | 'complete';
+  storySkipped?: boolean;
+  preferences?: GamePreferences;
   progression?: {
     version: 1;
     clearedStage: number;
@@ -189,6 +229,12 @@ export interface SaveData {
     summit?: { wins: number; pending: boolean };
     hunt?: { legendaryId: string; misses: number };
     campFocus?: 'crystals' | 'shards';
+    skillBudgetVersion?: 2;
+    challenges?: {
+      claimed: string[];
+      best: Partial<Record<ChallengeId, number>>;
+      pending?: { id: ChallengeId; key: string; stage: number };
+    };
   };
   runRecords?: RunRecord[];
 }
@@ -231,6 +277,8 @@ export interface RunRecord {
   >;
 }
 export interface RunResult {
+  stats?: CombatStats;
+  challenge?: { id: ChallengeId; key: string; completed: boolean };
   /** Cooperative clears grant progression but are excluded from solo rankings. */
   partySize?: number;
   won: boolean;
@@ -242,6 +290,9 @@ export interface RunResult {
   items: Item[];
 }
 export interface CombatConfig {
+  preferences?: GamePreferences;
+  challenge?: { id: ChallengeId; key: string };
+  seed?: number;
   classId: ClassId;
   level: number;
   stage: number;
@@ -256,6 +307,8 @@ export interface CombatConfig {
   ownedSetPieces?: string[];
 }
 export interface CombatSnapshot {
+  stats?: CombatStats;
+  objective?: { name: string; progress: number; target: number };
   hp: number;
   maxHp: number;
   resource: number;
@@ -300,7 +353,7 @@ export interface LeaderboardResponse {
   classId: ClassId;
   entries: LeaderboardEntry[];
   total: number;
-  source: 'cloud';
+  source: 'cloud' | 'verified';
   updatedAt: number;
 }
 export type LobbyActivity =
