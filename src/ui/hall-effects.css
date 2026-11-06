@@ -1,0 +1,177 @@
+.hall-effects {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  pointer-events: none;
+}
+.hall-map.awaiting-art .hall-effects {
+  visibility: hidden;
+}
+.hall-portal-glow {
+  animation: hall-portal-glow 4s ease-in-out infinite;
+}
+.hall-portal-current {
+  transform-origin: 649px 243px;
+  animation: hall-vortex-turn 9s linear infinite;
+}
+.hall-portal-stream {
+  animation: hall-energy-flow 2.8s linear infinite;
+}
+.hall-portal-mote {
+  animation: hall-portal-rise 4.5s linear var(--effect-delay) infinite;
+}
+.hall-plaza-runes {
+  opacity: 0.5;
+  animation: hall-rune-flow 11s linear infinite;
+}
+.hall-flame {
+  transform-origin: 0 0;
+}
+.hall-flame-outer {
+  animation: hall-flame-flicker 0.72s steps(3, end) var(--effect-delay, -0.2s) infinite;
+}
+.hall-flame-inner {
+  animation: hall-flame-flicker 0.51s steps(3, end) var(--effect-delay, -0.4s) infinite reverse;
+}
+.hall-roof-fire {
+  --effect-delay: -0.39s;
+}
+.hall-forge-glow {
+  animation: hall-lantern-glow 1.7s ease-in-out -0.4s infinite;
+}
+.hall-forge-spark {
+  animation: hall-ember-rise 2.7s linear var(--effect-delay) infinite;
+}
+.hall-forge-smoke {
+  opacity: 0;
+  animation: hall-smoke-rise 4.8s linear var(--effect-delay) infinite;
+}
+.hall-lantern-glow {
+  animation: hall-lantern-glow var(--light-period) ease-in-out var(--effect-delay) infinite;
+}
+.hall-lantern-wick {
+  opacity: 0.45;
+  animation: hall-wick-flicker var(--light-period) steps(4, end) var(--effect-delay) infinite;
+}
+.npc-hall[data-motion-paused] .hall-effects * {
+  animation-play-state: paused;
+}
+@keyframes hall-vortex-turn {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@keyframes hall-energy-flow {
+  to {
+    stroke-dashoffset: -120;
+  }
+}
+@keyframes hall-portal-glow {
+  0%,
+  100% {
+    opacity: 0.5;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+@keyframes hall-portal-rise {
+  0% {
+    opacity: 0;
+    transform: translate(0, 20px);
+  }
+  25%,
+  65% {
+    opacity: 0.85;
+  }
+  100% {
+    opacity: 0;
+    transform: translate(9px, -52px);
+  }
+}
+@keyframes hall-rune-flow {
+  to {
+    stroke-dashoffset: -216;
+  }
+}
+@keyframes hall-flame-flicker {
+  0%,
+  100% {
+    transform: scale(1, 0.86);
+    opacity: 0.85;
+  }
+  33% {
+    transform: skewX(-5deg) scale(0.9, 1.1);
+    opacity: 1;
+  }
+  67% {
+    transform: skewX(4deg) scale(1.06, 0.95);
+    opacity: 0.92;
+  }
+}
+@keyframes hall-ember-rise {
+  0% {
+    opacity: 0;
+    transform: translate(0, 0);
+  }
+  15% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translate(var(--spark-drift), -85px);
+  }
+}
+@keyframes hall-smoke-rise {
+  0% {
+    opacity: 0;
+    transform: translate(0, 0) scale(0.7);
+  }
+  20% {
+    opacity: 0.16;
+  }
+  75% {
+    opacity: 0.08;
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-18px, -77px) scale(1.8);
+  }
+}
+@keyframes hall-lantern-glow {
+  0%,
+  100% {
+    opacity: 0.55;
+  }
+  35% {
+    opacity: 0.9;
+  }
+  65% {
+    opacity: 0.68;
+  }
+}
+@keyframes hall-wick-flicker {
+  0%,
+  100% {
+    opacity: 0.28;
+  }
+  24%,
+  76% {
+    opacity: 0.65;
+  }
+  52% {
+    opacity: 0.42;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .hall-effects * {
+    animation: none;
+  }
+  .hall-portal-mote,
+  .hall-forge-spark,
+  .hall-forge-smoke {
+    opacity: 0;
+  }
+}

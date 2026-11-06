@@ -22,8 +22,11 @@ import {
   X,
 } from './PixelIcons';
 import { CAMP_ART, HallScene } from './HallScene';
+import { HeroArt } from './SceneArt';
 import { VirtualJoystick } from './VirtualJoystick';
 import { useDialog } from './useDialog';
+import { usePageVisible } from './usePageVisible';
+import './actor-motion.css';
 import './npc-hall.css';
 import { DEFAULT_KEYS } from '../core/preferences';
 import { actionKey } from './inputLabels';
@@ -67,6 +70,7 @@ export function NpcHall({
   onNavigate: (panel: string) => void;
   active: boolean;
 }) {
+  const pageVisible = usePageVisible();
   const save = useGameStore((state) => state.save);
   const bindings = { ...DEFAULT_KEYS, ...save.preferences?.keyBindings };
   const bindingRef = useRef(bindings);
@@ -421,7 +425,12 @@ export function NpcHall({
         ? '寻觅同行旅人…'
         : `${onlineCount} 位同行旅人`;
   return (
-    <section ref={viewport} className="npc-hall" aria-label="守望者营地，可走动与NPC交互">
+    <section
+      ref={viewport}
+      className="npc-hall"
+      data-motion-paused={!active || !pageVisible || undefined}
+      aria-label="守望者营地，可走动与NPC交互"
+    >
       <header className="hall-header">
         <div>
           <h2>守望者营地</h2>
@@ -543,13 +552,14 @@ export function NpcHall({
             <button
               key={npc.id}
               className={`hall-actor hall-npc npc-${npc.id} ${selectedNpcId === npc.id ? 'selected' : ''} ${near ? 'in-reach' : ''}`}
+              data-actor-class={npc.classId}
+              data-actor-role={npc.id}
               style={
                 {
                   left: `${npc.x * 100}%`,
                   top: `${npc.y * 100}%`,
                   zIndex: Math.round(npc.y * 100),
                   '--npc-color': npc.color,
-                  '--idle-period': `${2.9 + (index % 4) * 0.35}s`,
                   '--idle-delay': `${-index * 0.73}s`,
                 } as CSSProperties
               }
@@ -562,35 +572,41 @@ export function NpcHall({
                 {npc.service}
               </span>
               <span className="hall-sprite">
-                <img
-                  className="npc-atlas-art"
-                  style={{
-                    left: `${-NPC_ART[npc.id].column * 100}%`,
-                    top: `${-NPC_ART[npc.id].row * 100}%`,
-                  }}
-                  src={npcArt}
-                  onLoad={() => markArt(npcArt, 'ready')}
-                  onError={() => markArt(npcArt, 'error')}
-                  alt={`${npc.name}，${NPC_ART[npc.id].description}`}
-                  draggable={false}
-                />
+                <span className="hall-idle-body actor-idle">
+                  <img
+                    className="npc-atlas-art"
+                    style={{
+                      left: `${-NPC_ART[npc.id].column * 100}%`,
+                      top: `${-NPC_ART[npc.id].row * 100}%`,
+                    }}
+                    src={npcArt}
+                    onLoad={() => markArt(npcArt, 'ready')}
+                    onError={() => markArt(npcArt, 'error')}
+                    alt={`${npc.name}，${NPC_ART[npc.id].description}`}
+                    draggable={false}
+                  />
+                </span>
               </span>
               <span className="hall-actor-name">{npc.name}</span>
             </button>
           );
         })}
-        {otherPlayers.map((player) => {
+        {otherPlayers.map((player, index) => {
           const location = clampHallPosition(player.x, player.y);
           return (
             <button
               key={player.id}
               className="hall-actor hall-player hall-character"
-              style={{
-                ...characterOrigin(player.classId),
-                left: `${location.x * 100}%`,
-                top: `${location.y * 100}%`,
-                zIndex: Math.round(location.y * 100) + 1,
-              }}
+              data-actor-class={player.classId}
+              style={
+                {
+                  ...characterOrigin(player.classId),
+                  left: `${location.x * 100}%`,
+                  top: `${location.y * 100}%`,
+                  zIndex: Math.round(location.y * 100) + 1,
+                  '--idle-delay': `${-0.8 - index * 0.67}s`,
+                } as CSSProperties
+              }
               onClick={() => setInspectedPlayer(player)}
               aria-label={`查看在线旅人${player.name}的配装与成就`}
             >
@@ -598,7 +614,9 @@ export function NpcHall({
                 {player.name} · Lv.{player.level}
               </span>
               <span className="hall-sprite">
-                <img src={CHARACTER_ART[player.classId].src} alt="" draggable={false} />
+                <span className="hall-idle-body actor-idle">
+                  <img src={CHARACTER_ART[player.classId].src} alt="" draggable={false} />
+                </span>
               </span>
               <span className="hall-actor-name">{ACTIVITIES[player.activity] ?? '营地休整'}</span>
             </button>
@@ -614,6 +632,7 @@ export function NpcHall({
         )}
         <div
           className={`hall-actor hall-self hall-character ${walking ? 'walking' : ''}`}
+          data-actor-class={save.classId}
           style={
             {
               ...characterOrigin(save.classId),
@@ -630,13 +649,15 @@ export function NpcHall({
             <b>你</b>
           </span>
           <span className="hall-sprite">
-            <img
-              src={heroArt}
-              onLoad={() => markArt(heroArt, 'ready')}
-              onError={() => markArt(heroArt, 'error')}
-              alt="你的营地角色"
-              draggable={false}
-            />
+            <span className="hall-idle-body actor-idle">
+              <img
+                src={heroArt}
+                onLoad={() => markArt(heroArt, 'ready')}
+                onError={() => markArt(heroArt, 'error')}
+                alt="你的营地角色"
+                draggable={false}
+              />
+            </span>
           </span>
           <span className="hall-self-ring" />
         </div>
@@ -729,7 +750,7 @@ export function NpcHall({
             </header>
             <div className="modal-body">
               <div className="hall-profile-hero">
-                <img src={CHARACTER_ART[inspectedPlayer.classId].src} alt="旅人职业角色" />
+                <HeroArt classId={inspectedPlayer.classId} />
                 <div>
                   <h3>
                     {CLASSES.find((hero) => hero.id === inspectedPlayer.classId)?.name} · Lv.

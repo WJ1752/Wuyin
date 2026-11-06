@@ -1,0 +1,76 @@
+/* The image moves inside its fixed ground contact, shadow and nameplate. */
+.actor-idle {
+  transform-origin: var(--idle-origin, 50% 100%);
+}
+[data-actor-class='ranger'] {
+  --idle-period: 3.8s;
+  --idle-delay: -1.3s;
+  --idle-lean: 0.9deg;
+  --idle-breath: 1.03;
+}
+[data-actor-class='barbarian'] {
+  --idle-period: 3.2s;
+  --idle-delay: -0.7s;
+  --idle-lean: 0.65deg;
+  --idle-breath: 1.04;
+}
+[data-actor-class='sorcerer'] {
+  --idle-period: 4.6s;
+  --idle-delay: -2.8s;
+  --idle-lean: 1.3deg;
+  --idle-breath: 1.035;
+}
+[data-actor-class='necromancer'] {
+  --idle-period: 4.9s;
+  --idle-delay: -1.9s;
+  --idle-lean: 1.1deg;
+  --idle-breath: 1.03;
+}
+[data-actor-class='druid'] {
+  --idle-period: 4.1s;
+  --idle-delay: -3.2s;
+  --idle-lean: 1deg;
+  --idle-breath: 1.04;
+}
+[data-actor-role='smith'],
+[data-actor-role='keeper'] {
+  --idle-lean: 1.35deg;
+  --idle-breath: 1.045;
+}
+[data-actor-role='cube'],
+[data-actor-role='mentor'] {
+  --idle-period: 4.8s;
+  --idle-lean: 1.55deg;
+}
+[data-actor-role='mia'] {
+  --idle-lean: 1.7deg;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .actor-idle {
+    animation: camp-breathe var(--idle-period, 4s) ease-in-out var(--idle-delay, -1s) infinite;
+  }
+}
+@keyframes camp-breathe {
+  0%,
+  100% {
+    transform: rotate(calc(-1 * var(--idle-lean, 1deg))) scale(1.01, 0.985);
+  }
+  42% {
+    transform: rotate(var(--idle-lean, 1deg)) scale(0.99, var(--idle-breath, 1.035));
+  }
+  68% {
+    transform: rotate(calc(var(--idle-lean, 1deg) * 0.3)) scale(1, 1.01);
+  }
+  82% {
+    transform: rotate(calc(-0.6 * var(--idle-lean, 1deg))) scale(1.005, 0.995);
+  }
+}
+.actor-idle[data-motion-paused],
+.npc-hall[data-motion-paused] .actor-idle,
+.npc-hall[data-motion-paused] .hall-self.walking .hall-sprite {
+  animation-play-state: paused;
+}
+.hall-self.walking .actor-idle {
+  animation: none;
+  transform: none;
+}

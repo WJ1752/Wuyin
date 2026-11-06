@@ -306,7 +306,17 @@
   --sprite-width: 68px;
   --sprite-height: 68px;
 }
-.hall-npc .hall-sprite {
+.hall-idle-body {
+  position: absolute;
+  inset: 0;
+  display: block;
+}
+.hall-character .hall-idle-body {
+  /* The image's bottom offset already places its artwork anchor at this footpoint. */
+  --idle-origin: 50% 100%;
+}
+.hall-npc .hall-idle-body {
+  --idle-origin: 50% 92%;
   overflow: hidden;
 }
 .hall-npc .hall-sprite .npc-atlas-art {
@@ -398,22 +408,6 @@
 }
 .hall-self.walking .hall-sprite {
   animation: hall-walk 0.3s steps(2) infinite;
-}
-@media (prefers-reduced-motion: no-preference) {
-  .hall-npc .hall-sprite,
-  .hall-character:not(.walking) .hall-sprite {
-    transform-origin: 50% 96%;
-    animation: camp-breathe var(--idle-period, 3.4s) ease-in-out var(--idle-delay, -1s) infinite;
-  }
-}
-@keyframes camp-breathe {
-  0%,
-  100% {
-    transform: rotate(-0.9deg) scale(1.01, 0.985);
-  }
-  50% {
-    transform: rotate(1deg) scale(0.99, 1.025);
-  }
 }
 @keyframes hall-walk {
   0%,

@@ -1,5 +1,8 @@
+import type { CSSProperties } from 'react';
 import type { ClassId } from '../core/types';
 import { CHARACTER_ART } from '../render/CharacterTextures';
+import { usePageVisible } from './usePageVisible';
+import './actor-motion.css';
 
 export function HeroArt({
   classId = 'ranger',
@@ -8,12 +11,22 @@ export function HeroArt({
   classId?: ClassId;
   small?: boolean;
 }) {
+  const pageVisible = usePageVisible();
   return (
     <img
       src={CHARACTER_ART[classId].src}
-      className={small ? 'hero-art small' : 'hero-art'}
+      className={`hero-art actor-idle${small ? ' small' : ''}`}
+      data-actor-class={classId}
+      data-motion-paused={!pageVisible || undefined}
       alt="职业角色立绘"
-      style={{ objectFit: 'contain', objectPosition: 'center bottom', imageRendering: 'pixelated' }}
+      style={
+        {
+          objectFit: 'contain',
+          objectPosition: 'center bottom',
+          imageRendering: 'pixelated',
+          '--idle-origin': `${CHARACTER_ART[classId].anchorX * 100}% ${CHARACTER_ART[classId].ground * 100}%`,
+        } as CSSProperties
+      }
       decoding="async"
       draggable={false}
     />
