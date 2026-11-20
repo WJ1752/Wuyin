@@ -138,7 +138,7 @@
   position: absolute;
   left: 0;
   top: 0;
-  aspect-ratio: 1296 / 1216;
+  aspect-ratio: 1;
   min-height: 0;
   overflow: hidden;
   isolation: isolate;
@@ -155,9 +155,9 @@
   width: 100%;
   height: 100%;
   opacity: 1;
-  filter: saturate(0.72) brightness(0.86) contrast(1.06);
   transform: none;
   pointer-events: none;
+  image-rendering: pixelated;
 }
 .hall-ground-light {
   position: absolute;
@@ -166,6 +166,11 @@
     radial-gradient(ellipse at 50% 48%, transparent 30%, #08151b77 100%),
     linear-gradient(180deg, #07141b99, transparent 22% 74%, #08151ba6);
   pointer-events: none;
+}
+.app.in-town[data-campaign-complete] .hall-ground-light {
+  background:
+    radial-gradient(ellipse at 56% 0%, #e5a46b35, transparent 58%),
+    radial-gradient(ellipse at 50% 55%, transparent 52%, #08151b67 100%);
 }
 .hall-map.awaiting-art .hall-actor,
 .hall-map.awaiting-art .hall-portal {
@@ -296,7 +301,7 @@
   object-position: center bottom;
   image-rendering: pixelated;
   pointer-events: none;
-  filter: saturate(0.82) drop-shadow(1px 2px 0 #101d26);
+  filter: drop-shadow(0 1px 1px #10191dbf);
 }
 .hall-character {
   --sprite-width: 88px;
@@ -405,18 +410,6 @@
   border-radius: 50%;
   z-index: -1;
   opacity: 0.7;
-}
-.hall-self.walking .hall-sprite {
-  animation: hall-walk 0.3s steps(2) infinite;
-}
-@keyframes hall-walk {
-  0%,
-  100% {
-    transform: translateY(0) rotate(-2deg);
-  }
-  50% {
-    transform: translateY(-3px) rotate(2deg);
-  }
 }
 .hall-destination {
   position: absolute;
@@ -752,9 +745,6 @@
   }
 }
 @media (prefers-reduced-motion: reduce) {
-  .hall-self.walking .hall-sprite {
-    animation: none;
-  }
   .hall-player {
     transition: none;
   }

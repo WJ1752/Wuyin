@@ -340,6 +340,7 @@ export function JourneyPanel({
       {hasPending && !labBackup && (
         <button
           className="gold-button"
+          data-sound="equip"
           disabled={save.inventory.length >= MAX_INVENTORY}
           onClick={claimJourneyRewards}
         >

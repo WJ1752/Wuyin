@@ -88,8 +88,7 @@
   justify-content: center;
   gap: 8px;
   padding: 12px 20px;
-  border: 10px solid transparent;
-  border-image: url('/assets/ui/pixel-secondary.webp') 64 90 fill / 12px stretch;
+  border: 1px solid #4b5150;
   background: transparent;
   box-shadow: 0 3px #030913;
   color: #e8eef1;
@@ -99,7 +98,6 @@
 }
 .app
   :is(.gold-button, .enter-button, .hall-depart, .mobile-hall-depart, .mobile-expedition-button) {
-  border-image-source: url('/assets/ui/pixel-primary.webp');
   color: #fff4ce;
 }
 .app .mobile-expedition-button {
@@ -115,8 +113,6 @@
 }
 .app .ghost-button {
   box-shadow: none;
-  border-width: 7px;
-  border-image-width: 8px;
 }
 .app :is(input:not([type='checkbox']):not([type='range']), select, textarea) {
   min-height: 46px;
@@ -141,8 +137,7 @@
   min-height: 36px;
 }
 .app :is(.modal, .result-card, .coop-panel, .story-book, .character-creation) {
-  border: 12px solid transparent;
-  border-image: url('/assets/ui/pixel-panel.webp') 65 fill / 16px stretch;
+  border: 1px solid #4b5150;
   background: #111e30;
   border-radius: 0;
   box-shadow:
@@ -355,9 +350,6 @@
   min-height: 100dvh;
   overflow: auto;
   padding: 20px 0;
-  background:
-    linear-gradient(#06111ce8, #0c182ce8),
-    url('/assets/maps/watchers-camp-v3.png') center/cover;
 }
 .app.character-entry .character-creation {
   margin: 0 auto;
@@ -654,7 +646,7 @@
 .app .skill-cast {
   border: 0;
   border-radius: 0;
-  background: url('/assets/ui/pixel-slot.webp') center/100% 100% no-repeat;
+  background: #171d20;
   padding: 6px;
   box-shadow: none;
 }

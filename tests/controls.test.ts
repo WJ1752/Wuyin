@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { GameEngine } from '../src/engine/GameEngine';
 import { SKILLS } from '../src/data/skillTrees';
+import { boundCamera } from '../src/render/viewport';
 import { buildHarness } from './helpers/combatHarness';
 
 function controls() {
@@ -10,6 +11,13 @@ function controls() {
   engine.emit = () => {};
   return engine;
 }
+
+test('combat framing cannot reveal the blank space beyond the terrain at a map edge', () => {
+  assert.equal(boundCamera(1350, 844, 900), 900);
+  assert.equal(boundCamera(-720, 844, 900), -56);
+  assert.equal(boundCamera(410, 844, 900), 410);
+  assert.equal(boundCamera(690, 1800, 900), 900);
+});
 
 test('touch dragging reaches full movement at the floating thumb radius and releases cleanly', () => {
   const engine = controls();

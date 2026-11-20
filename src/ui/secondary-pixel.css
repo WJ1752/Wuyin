@@ -164,8 +164,7 @@
 /* Overrides the legacy expedition dialog's more specific gradients and borders. */
 .app .coop-backdrop .coop-panel.coop-panel {
   min-width: 0;
-  border: 12px solid transparent;
-  border-image: url('/assets/ui/pixel-panel.webp') 65 fill / 12px stretch;
+  border: 1px solid #4b5150;
   border-radius: 0;
   background: #111e30;
   box-shadow:
@@ -209,8 +208,7 @@
   min-height: 76px;
   margin-top: 8px;
   padding: 12px 14px;
-  border: 10px solid transparent;
-  border-image: url('/assets/ui/pixel-primary.webp') 64 90 fill / 12px stretch;
+  border: 1px solid #4b5150;
   background: transparent;
   box-shadow: 0 3px #030913;
   color: #fff4ce;

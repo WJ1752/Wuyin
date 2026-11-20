@@ -11,3 +11,8 @@ export function combatFraming(width: number, height: number, compact: boolean) {
     y: landscape ? height * 0.62 : compact ? 144 + Math.max(0, height - 230) * 0.5 : height * 0.5,
   };
 }
+
+export function boundCamera(target: number, viewport: number, halfMap: number) {
+  if (viewport >= halfMap * 2) return viewport / 2;
+  return Math.max(viewport - halfMap, Math.min(halfMap, target));
+}

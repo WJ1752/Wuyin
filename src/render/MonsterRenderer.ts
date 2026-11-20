@@ -1,4 +1,4 @@
-import { Container, Graphics, ColorMatrixFilter, Sprite } from 'pixi.js';
+import { Container, Graphics, Sprite } from 'pixi.js';
 import { getAtlasTexture } from './TextureAtlas';
 import type { MonsterAttackPose } from '../core/coop';
 import type { MonsterDef } from '../core/types';
@@ -395,16 +395,21 @@ export function drawPixelCreature(g: Graphics, family: string, color: number, bo
 
 export class MonsterRig extends Container {
   private form = new Container();
+  private shadow = new Graphics();
   private bar = new Graphics();
+  private motionMarks = new Graphics();
   private flash = 0;
   private stride = 0;
-  private facing = -1;
+  private facing = 1;
   private pace = 0;
+  private footfall = 0;
+  private defeatAge = 0;
+  private priorBarWidth = -1;
   private readonly motion = globalThis.matchMedia?.('(prefers-reduced-motion: reduce)').matches
-    ? 0.25
+    ? 0
     : 1;
   private readonly gait: 'hover' | 'slither' | 'walk' | 'still';
-  private hitFilter = new ColorMatrixFilter();
+  private readonly attackReach: number;
   constructor(
     def: MonsterDef,
     public elite = false,
@@ -415,29 +420,22 @@ export class MonsterRig extends Container {
     if (['ghost', 'eye', 'bat', 'drake', 'imp'].includes(def.family)) this.gait = 'hover';
     else if (['serpent', 'worm'].includes(def.family)) this.gait = 'slither';
     else this.gait = def.family === 'dummy' ? 'still' : 'walk';
+    this.attackReach = this.gait === 'hover' ? 7 : def.behavior === 'charge' ? 16 : 11;
     const color = Number.parseInt(def.color.replace('#', ''), 16);
-    const shadow = new Graphics();
-    pixelEllipse(shadow, 0, 8, boss ? 54 : 23, boss ? 18 : 9, 0x09151f, 3, 0.6);
+    this.shadow.ellipse(0, 5, boss ? 59 : 25, boss ? 17 : 9).fill({ color: 0x0c1418, alpha: 0.48 });
+    this.shadow.ellipse(0, 5, boss ? 42 : 17, boss ? 11 : 6).fill({ color: 0x0a1318, alpha: 0.36 });
     if (elite || boss || minion)
-      pixelEllipse(
-        shadow,
-        0,
-        8,
-        boss ? 60 : 27,
-        boss ? 21 : 12,
-        boss ? 0xdf7680 : minion ? 0x8fc8d8 : 0xdfbd77,
-        3,
-        0.85,
-        true,
-      );
-    this.addChild(shadow, this.form);
-    this.hitFilter.matrix = [0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 1, 0];
+      this.shadow.ellipse(0, 5, boss ? 56 : 26, boss ? 18 : 11).stroke({
+        color: boss ? 0xcf6f57 : minion ? 0x87bcc8 : 0xcfb17d,
+        width: boss ? 2 : 1.4,
+        alpha: 0.86,
+      });
+    this.addChild(this.shadow, this.form, this.motionMarks);
     const texture = getAtlasTexture(`monster:${def.id}`);
     if (texture) {
       const body = new Sprite(texture);
-      body.anchor.set(0.5, 251 / 256);
+      body.anchor.set(0.5, 0.956);
       body.width = body.height = boss ? 90 : 42 + def.radius * 1.3;
-      body.y = 8;
       this.form.addChild(body);
     } else {
       const body = new Graphics();
@@ -446,40 +444,65 @@ export class MonsterRig extends Container {
     }
     if (boss) this.form.scale.set(2);
     this.addChild(this.bar);
+    this.motionMarks.visible = false;
     this.drawHealth(1);
   }
   hit() {
-    if (this.flash <= 0) this.form.filters = [this.hitFilter];
     this.flash = 0.12;
+  }
+  defeat(dt: number) {
+    this.defeatAge += dt;
+    const fall = Math.min(1, this.defeatAge / 0.34);
+    const size = this.boss ? 2 : 1;
+    const settle = fall * (2 - fall);
+    this.bar.visible = false;
+    this.form.alpha = 1 - fall * 0.62;
+    this.form.rotation = this.facing * settle * 0.48 * this.motion;
+    this.form.y = settle * 7 * size * this.motion;
+    this.form.scale.set(this.facing * size, size * (1 - 0.45 * settle * this.motion));
+    this.shadow.alpha = 1 - fall;
+    this.motionMarks.visible = this.motion > 0 && fall < 1;
+    if (!this.motionMarks.visible) return;
+    this.motionMarks.clear();
+    for (const direction of [-1, 1]) {
+      const distance = (5 + 18 * fall) * size;
+      this.motionMarks.ellipse(direction * distance, -4 - 6 * fall, 4 + 3 * fall, 2).fill({
+        color: 0xa69a89,
+        alpha: (1 - fall) * 0.45,
+      });
+    }
   }
   drawHealth(ratio: number) {
     const w = this.boss ? 90 : 36,
       y = this.boss ? -183 : -81;
+    const filled = Math.round(w * Math.max(0, Math.min(1, ratio)));
+    this.bar.alpha = ratio < 1 || this.elite || this.boss ? 1 : 0;
+    if (filled === this.priorBarWidth) return;
+    this.priorBarWidth = filled;
     this.bar
       .clear()
       .rect(-w / 2 - 2, y - 2, w + 4, 8)
       .fill(INK)
       .rect(-w / 2, y, w, 4)
       .fill(0x3c3644)
-      .rect(-w / 2, y, Math.round(w * Math.max(0, Math.min(1, ratio))), 4)
+      .rect(-w / 2, y, filled, 4)
       .fill(this.boss ? 0xe97c81 : this.elite ? 0xe9c680 : 0xc87a83);
-    this.bar.alpha = ratio < 1 || this.elite || this.boss ? 1 : 0;
   }
   update(time: number, dt: number, dx: number, dy: number, id: number, pose?: MonsterAttackPose) {
-    if (this.flash > 0) {
-      this.flash = Math.max(0, this.flash - dt);
-      if (this.flash === 0) this.form.filters = null;
-    }
-    if (this.gait === 'still') return;
+    this.flash = Math.max(0, this.flash - dt);
+    this.footfall = Math.max(0, this.footfall - dt);
     const heading = pose ? Math.cos(pose.angle) : dx / Math.max(0.001, Math.hypot(dx, dy));
     if (Math.abs(heading) > 0.18) this.facing = Math.sign(heading);
     // Cap displacement so a teleport cannot skip through multiple steps in one frame.
     const distance = Math.min(Math.hypot(dx, dy), 180 * dt);
+    const previousStep = Math.floor(this.stride / Math.PI);
     this.stride += distance / (this.boss ? 12 : 7);
+    if (this.motion && this.gait === 'walk' && Math.floor(this.stride / Math.PI) !== previousStep)
+      this.footfall = 0.13;
     const activity = Math.min(1, distance / Math.max(45 * dt, 0.001));
     this.pace += (activity - this.pace) * (1 - Math.exp(-dt * 14));
 
-    const breath = Math.sin(time * 2.6 + id) * this.motion;
+    const breath = this.gait === 'still' ? 0 : Math.sin(time * 2.6 + id) * this.motion;
     const sway = Math.sin(this.stride + id) * this.pace * this.motion;
     let lift = Math.abs(sway) * 2.8;
     let drift = sway * 0.8;
@@ -498,18 +521,47 @@ export class MonsterRig extends Container {
       const windup = t * t * (3 - 2 * t);
       // Release from the held pose, extend quickly, then settle back on the feet.
       const reach = pose.strike
-        ? 8 * Math.sin(Math.PI * t) * (1 - t) - 3 * Math.exp(-15 * t)
-        : -3 * windup;
+        ? this.attackReach * Math.sin(Math.PI * t) * (1 - t) - 4 * Math.exp(-15 * t)
+        : -4 * windup;
       reachX = Math.cos(pose.angle) * reach * this.motion;
       reachY = Math.sin(pose.angle) * reach * this.motion;
       crouch = (pose.strike ? Math.exp(-15 * t) : windup) * 0.055 * this.motion;
     }
     const size = this.boss ? 2 : 1;
-    this.form.position.set((drift + reachX) * size, (reachY - lift) * size);
+    const recoil = this.flash / 0.12;
+    this.form.position.set(
+      (drift + reachX - 3 * recoil * this.facing * this.motion) * size,
+      (reachY - lift) * size,
+    );
     this.form.rotation = sway * 0.034 + reachX * 0.012;
     this.form.scale.set(
-      -this.facing * size * (1 - breath * 0.006 + crouch),
+      this.facing * size * (1 - breath * 0.006 + crouch),
       size * (1 + breath * 0.014 - crouch),
     );
+    this.shadow.alpha = 1 - Math.min(0.3, lift * 0.035);
+    this.motionMarks.visible = this.footfall > 0 || this.flash > 0;
+    if (!this.motionMarks.visible) return;
+    this.motionMarks.clear();
+    if (this.footfall > 0) {
+      const spread = (1 - this.footfall / 0.13) * 9 * size;
+      this.motionMarks.ellipse(-this.facing * (12 + spread), 4, 3 + spread, 1.7).fill({
+        color: 0xa99b84,
+        alpha: this.footfall * 2,
+      });
+    }
+    if (this.flash > 0) {
+      const x = this.facing * (9 + (1 - recoil) * 12) * size;
+      const y = this.gait === 'still' ? -36 : -28 * size;
+      this.motionMarks
+        .moveTo(x - 7, y - 6)
+        .lineTo(x + 6, y + 5)
+        .moveTo(x + 3, y - 8)
+        .lineTo(x + 9, y - 4)
+        .stroke({
+          color: 0xf2d4a6,
+          width: 1.8,
+          alpha: recoil * 0.88,
+        });
+    }
   }
 }

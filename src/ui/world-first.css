@@ -65,8 +65,7 @@
   background: linear-gradient(0deg, #07111dd9, #0a1a2588 68%, transparent);
 }
 .app .camp-hud-bottom .camp-hud-depart {
-  border: 8px solid transparent;
-  border-image: url('/assets/ui/pixel-primary.webp') 64 90 fill / 10px stretch;
+  border: 1px solid #4b5150;
   background: transparent;
   color: #f5dc9b;
   padding: 4px 8px;

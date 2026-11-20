@@ -116,7 +116,6 @@ export function TrialPanel({
       >
         <header className="coop-heading">
           <div>
-            <span className="eyebrow">THE WATCHER'S TRIAL · VERIFIED</span>
             <h2 id="trial-title">守望者验证试炼</h2>
           </div>
           <button className="icon-button" aria-label="关闭官方试炼" disabled={busy} onClick={close}>

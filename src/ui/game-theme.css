@@ -7,7 +7,7 @@
   --panel: #1a202b;
   --pixel-bevel: inset 1px 1px 0 #e3d5b018, inset -2px -2px 0 #070a10aa, 3px 3px 0 #070a10;
   --ui-slate: #17282e;
-  --watch-frame: url('./art/watch-frame.svg') 11 / 11px stretch;
+  --watch-frame: none;
   --ui-violet: #282634;
   --ui-bone: #e0dac9;
   --ui-mono: 'Consolas', 'Courier New', monospace;
@@ -679,20 +679,6 @@ select:focus-visible,
   max-height: none;
   image-rendering: pixelated;
   pointer-events: none;
-}
-.app .hall-depart,
-.app .gold-button,
-.app .enter-button {
-  border-image: url('./art/brass-button.png') 9 fill / 9px stretch;
-  color: #fff2cf;
-  text-shadow:
-    1px 1px #362718,
-    -1px -1px #67461d;
-}
-.app .outline-button,
-.app .modal-close,
-.app .combat-tools .icon-button {
-  border-image: url('./art/iron-button.png') 9 fill / 8px stretch;
 }
 .app :is(.hall-depart, .gold-button, .enter-button, .outline-button):hover:not(:disabled) {
   filter: brightness(1.12);

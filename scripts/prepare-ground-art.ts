@@ -2,11 +2,14 @@ import { mkdir } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import sharp from 'sharp';
 
-const sourcePath = resolve('public/assets/maps/rift-ground-atlas-v2.png');
-const outputDirectory = resolve('public/assets/maps/hd');
+const paintedSource = process.argv[2];
+const sourcePath = resolve(paintedSource ?? 'docs/art/legacy-maps/rift-ground-atlas-v2.png');
+const outputDirectory = resolve(
+  paintedSource ? 'public/assets/maps/painted' : 'public/assets/maps/hd',
+);
 const atlasSize = 1254;
 const quadrantSize = atlasSize / 2;
-const baseSize = 512;
+const baseSize = paintedSource ? 384 : 512;
 const variantSize = baseSize * 2;
 const names = ['forest', 'crypt', 'ember', 'void'] as const;
 
@@ -68,11 +71,11 @@ for (const [index, name] of names.entries()) {
     .composite(
       variantBuffers.map((input, column) => ({ input, left: column * variantSize, top: 0 })),
     )
-    .webp({ quality: 94, alphaQuality: 100 })
+    .webp({ quality: paintedSource ? 87 : 94, alphaQuality: 100 })
     .toFile(outputPath);
 
   const result = await sharp(outputPath).metadata();
-  if (result.width !== 3072 || result.height !== 1024) {
+  if (result.width !== variantSize * 3 || result.height !== variantSize) {
     throw new Error(`${name}-floors.webp: unexpected size ${result.width}x${result.height}`);
   }
   console.log(`${name}-floors.webp: ${result.width}x${result.height}, alpha=${result.hasAlpha}`);

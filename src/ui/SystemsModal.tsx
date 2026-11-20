@@ -56,7 +56,6 @@ import { AccountPanel } from './AccountPanel';
 import { formatBigNumber } from '../core/format';
 import './systems.css';
 import './mobile-camp.css';
-import { audio } from '../audio/SynthAudio';
 import { CharacterPreview } from './CharacterPreview';
 import { ItemIcon, PetIcon, SkillIcon } from './AssetIcon';
 import { JourneyPanel, LootChances } from './JourneyPanel';
@@ -86,36 +85,34 @@ const icons: Record<Slot, typeof Sword> = {
   feet: Footprints,
   jewelry: Gem,
 };
-const TITLES: Record<string, [string, string, typeof Sword]> = {
-  services: ['营地服务', 'CAMP SERVICES', Compass],
-  accounts: ['旅人名册', 'ACCOUNTS & CHARACTERS', BookOpen],
-  stash: ['账号共享仓库', 'SHARED STASH', Package],
-  character: ['行者档案', 'CHARACTER & INVENTORY', Sword],
-  skills: ['命运之树', 'THE PATH OF POWER', BookOpen],
-  journey: ['行者旅程', 'THE ROAD TO RESONANCE', BookOpen],
-  cube: ['魔盒共鸣', 'THE ARCHIVE OF RELICS', WandSparkles],
-  gamble: ['米娅的秘藏', 'FORTUNE FAVORS THE BOLD', Dices],
-  forge: ['余烬铁砧', 'THE EMBER FORGE', Hammer],
-  pets: ['守望契约', 'COMPANIONS & SEASON', PawPrint],
-  leaderboard: ['职业远征榜', 'CLASS LEADERBOARDS', Crown],
-  settings: ['远征设置', 'SETTINGS & CHRONICLE', Settings],
-  lab: ['秘境演武场', 'THE BUILD LABORATORY', FlaskConical],
+const TITLES: Record<string, [string, typeof Sword]> = {
+  services: ['营地服务', Compass],
+  accounts: ['旅人名册', BookOpen],
+  stash: ['账号共享仓库', Package],
+  character: ['行者档案', Sword],
+  skills: ['命运之树', BookOpen],
+  journey: ['行者旅程', BookOpen],
+  cube: ['魔盒共鸣', WandSparkles],
+  gamble: ['米娅的秘藏', Dices],
+  forge: ['余烬铁砧', Hammer],
+  pets: ['守望契约', PawPrint],
+  leaderboard: ['职业远征榜', Crown],
+  settings: ['远征设置', Settings],
+  lab: ['秘境演武场', FlaskConical],
 };
 const SYSTEM_GROUPS = [
   {
     label: '行者',
-    numeral: 'Ⅰ',
     icon: Sword,
     panels: ['character', 'skills', 'stash', 'accounts'],
   },
-  { label: '秘器', numeral: 'Ⅱ', icon: WandSparkles, panels: ['forge', 'cube', 'gamble'] },
+  { label: '秘器', icon: WandSparkles, panels: ['forge', 'cube', 'gamble'] },
   {
     label: '征途',
-    numeral: 'Ⅲ',
     icon: Compass,
     panels: ['journey', 'pets', 'leaderboard', 'lab'],
   },
-  { label: '营地', numeral: 'Ⅳ', icon: Settings, panels: ['services', 'settings'] },
+  { label: '营地', icon: Settings, panels: ['services', 'settings'] },
 ];
 const SYSTEM_LINKS: Record<string, string> = {
   character: '角色装备',
@@ -156,14 +153,16 @@ function SalvageButton({ item }: { item: Item }) {
   const keep = useGameStore((state) => state.save.keepRareAffix);
   const [confirm, setConfirm] = useState(false);
   const precious = ['legendary', 'set', 'primal'].includes(item.rarity);
+  const needsConfirmation = !bulkSalvageable(item, keep);
   return (
     <div className="salvage-action">
       {confirm && <p className="negative">将永久分解「{item.name}」，宝石无损返还。</p>}
       <div className="button-row">
         <button
           className={confirm ? 'danger-button' : 'ghost-button'}
+          data-sound={confirm || !needsConfirmation ? 'forge' : undefined}
           onClick={() => {
-            if (!bulkSalvageable(item, keep) && !confirm) setConfirm(true);
+            if (needsConfirmation && !confirm) setConfirm(true);
             else salvage(item.id);
           }}
         >
@@ -190,7 +189,7 @@ function ExtractButton({ item }: { item: Item }) {
         <button
           className="gold-button"
           disabled={collected || !affordable}
-          data-sound="arcane"
+          data-sound={confirm ? 'arcane' : undefined}
           onClick={() => (confirm ? extract(item.id) : setConfirm(true))}
         >
           {collected
@@ -528,7 +527,7 @@ function CharacterPanel({ inspectItem }: { inspectItem?: string }) {
             style={{ '--class-color': hero.color } as CSSProperties}
           >
             <div className="dossier-top">
-              <span className="eyebrow">THE WANDERER</span>
+              <span className="eyebrow">已穿戴</span>
               <span>Lv. {save.level}</span>
             </div>
             <div className="paperdoll-slots">
@@ -1170,7 +1169,6 @@ function GamblePanel() {
       <div className="mia-quote">
         <span className="mia-sigil">✧</span>
         <div>
-          <span className="eyebrow">MIA · THE KEEPER OF CHANCE</span>
           <h3>“命运从不明码标价，亲爱的。”</h3>
           <p>把碎片交给我。也许下一张牌，就能改写你的传说。</p>
         </div>
@@ -1614,6 +1612,7 @@ function ForgePanel() {
                     <div className="button-row">
                       <button
                         className="gold-button"
+                        data-sound="forge"
                         disabled={save.gold < 200 || save.crystals < 8}
                         onClick={() => {
                           store.reforge(item.id, reforgeIndex);
@@ -1644,6 +1643,7 @@ function ForgePanel() {
             <span className="muted">镶嵌宝石会无损返还。</span>
             <button
               className="gold-button"
+              data-sound="forge"
               disabled={!save.inventory.some((item) => bulkSalvageable(item, save.keepRareAffix))}
               onClick={store.salvageLow}
             >
@@ -2088,7 +2088,7 @@ function ServicesPanel({ onNavigate }: { onNavigate?: (panel: string) => void })
       <div className="services-grid">
         {Object.entries(TITLES)
           .filter(([id]) => id !== 'services')
-          .map(([id, [label, , Icon]]) => (
+          .map(([id, [label, Icon]]) => (
             <button
               className="service-card"
               key={id}
@@ -2541,7 +2541,7 @@ export function SystemsModal({
   const ref = useDialog(!!panel && !!title, onClose);
   const notice = useGameStore((state) => state.notice);
   if (!panel || !title) return null;
-  const Icon = title[2];
+  const [heading, Icon] = title;
   const group = SYSTEM_GROUPS.find((entry) => entry.panels.includes(panel)) ?? SYSTEM_GROUPS[0];
   return (
     <div
@@ -2552,10 +2552,6 @@ export function SystemsModal({
     >
       <div
         ref={ref}
-        onClickCapture={(event) => {
-          const button = (event.target as Element).closest('button');
-          if (button && !button.disabled) audio.play(button.dataset.sound ?? 'click');
-        }}
         className={`modal systems-modal system-screen panel-${panel}`}
         role="dialog"
         aria-modal="true"
@@ -2576,10 +2572,7 @@ export function SystemsModal({
             <Icon size={25} />
           </span>
           <div>
-            <span className="eyebrow">
-              {group.label} · {title[1]}
-            </span>
-            <h2 id="system-modal-title">{title[0]}</h2>
+            <h2 id="system-modal-title">{heading}</h2>
           </div>
           {onNavigate && (
             <label className="compact-system-switcher">
@@ -2617,7 +2610,6 @@ export function SystemsModal({
                     aria-current={selected ? 'true' : undefined}
                     onClick={() => onNavigate(selected ? panel : entry.panels[0])}
                   >
-                    <small aria-hidden="true">{entry.numeral}</small>
                     <GroupIcon size={19} />
                     <span>{entry.label}</span>
                   </button>

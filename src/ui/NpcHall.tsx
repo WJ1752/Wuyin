@@ -10,6 +10,7 @@ import { CHARACTER_ART } from '../render/CharacterTextures';
 import { apiRequest, useCloudStore } from '../state/cloudStore';
 import { useGameStore } from '../state/gameStore';
 import { formatBigNumber } from '../core/format';
+import { audio } from '../audio/SynthAudio';
 import {
   BookOpen,
   ChevronRight,
@@ -61,6 +62,7 @@ const characterOrigin = (classId: keyof typeof CHARACTER_ART): CSSProperties =>
     '--art-left': `${(0.5 - CHARACTER_ART[classId].anchorX) * 100}%`,
     '--art-bottom': `${(CHARACTER_ART[classId].ground - 1) * 100}%`,
     '--art-anchor': `${CHARACTER_ART[classId].anchorX * 100}% ${CHARACTER_ART[classId].ground * 100}%`,
+    '--art-walk': `url("${new URL(CHARACTER_ART[classId].walk, document.baseURI).href}")`,
   }) as CSSProperties;
 
 export function NpcHall({
@@ -369,6 +371,8 @@ export function NpcHall({
             positionRef.current.x + ((x / length) * step) / width,
             positionRef.current.y + ((y / length) * step) / height,
           );
+          if (next.x !== positionRef.current.x || next.y !== positionRef.current.y)
+            audio.play('footstep');
           positionRef.current = next;
           setPosition(next);
           if (Math.abs(x) > 0.05) setFacing(x < 0 ? -1 : 1);

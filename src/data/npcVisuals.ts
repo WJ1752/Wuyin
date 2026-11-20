@@ -5,7 +5,7 @@ export interface NpcArt {
   row: number;
 }
 
-export const NPC_ATLAS = './assets/npcs/watchers-v2.png';
+export const NPC_ATLAS = './assets/npcs/watchers-painted.webp';
 
 /** Original service characters; each NPC has its own silhouette and equipment. */
 export const NPC_ART: Record<string, NpcArt> = {
@@ -34,6 +34,6 @@ export const NPC_ART: Record<string, NpcArt> = {
     src: NPC_ATLAS,
     column: 2,
     row: 1,
-    description: '戴鹿角、披叶纹斗篷并带着小狐狸的荒野契约师',
+    description: '佩鹿角饰物、披荒野斗篷并持牧杖的契约师',
   },
 };

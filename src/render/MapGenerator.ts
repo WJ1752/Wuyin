@@ -6,10 +6,15 @@ import { Container, Graphics, Sprite, type Texture, TilingSprite } from 'pixi.js
 import { pixelEllipse, pixelLine, pixelPolygon, pixelStamp, snapPixel } from './PixelArt';
 import { getAtlasTexture, preloadAtlas } from './TextureAtlas';
 
+// Leave scenery beyond the movement boundary so actors stay clear of the combat HUD.
+export const RIFT_MAP_SIZE = 2160;
+
 const scenerySizes = { pine: 104, mushrooms: 40, grave: 52, basalt: 66, crystal: 78 };
 const themeProps = ['pine', 'grave', 'basalt', 'crystal'] as const;
-const sceneryLight = [0x839c9b, 0xa9a6bc, 0xbb9695, 0xa69abd];
-const terrainInk = [0xb1c4ba, 0xb7c4d3, 0xdabcae, 0xc9bedb];
+const sceneryLight = [0xc1c4ba, 0xbcc5ca, 0xc6b7aa, 0xbeb8c8];
+const terrainInk = [0xbec8c1, 0xbcc6ce, 0xd7c6b5, 0xc8bece];
+const landmarks = ['waystone', 'sarcophagus', 'forgeRuin', 'voidArch'] as const;
+const landmarkInks = [0xd4a665, 0xaabfca, 0xcf7c43, 0x8bbec0];
 const propIds = [
   'conduit',
   'power',
@@ -20,14 +25,19 @@ const propIds = [
   'grave',
   'basalt',
   'crystal',
+  'forgeRuin',
+  'voidArch',
+  'chapterSeal',
+  'waystone',
+  'sarcophagus',
 ];
 
 export function preloadPropTextures() {
   return preloadAtlas(
-    'assets/maps/rift-props.webp',
-    3,
-    3,
-    propIds.map((id, i) => [`prop:${id}`, i % 3, Math.floor(i / 3)]),
+    'assets/maps/painted/props.webp',
+    4,
+    4,
+    propIds.map((id, i) => [`prop:${id}`, i % 4, Math.floor(i / 4)]),
     'nearest',
   );
 }
@@ -36,7 +46,7 @@ export function createPropSprite(id: string, size: number) {
   const texture = getAtlasTexture(`prop:${id}`);
   if (!texture) return;
   const sprite = new Sprite(texture);
-  sprite.anchor.set(0.5, 188 / 192);
+  sprite.anchor.set(0.5, 0.956);
   sprite.width = sprite.height = size;
   return sprite;
 }
@@ -46,7 +56,7 @@ const groundId = (theme: number, material: number) => `ground:${theme}:${materia
 
 export function preloadMapTextures(theme: number) {
   return preloadAtlas(
-    `assets/maps/hd/${groundSheets[theme]}-floors.webp`,
+    `assets/maps/painted/${groundSheets[theme]}-floors.webp`,
     3,
     1,
     [0, 1, 2].map((material) => [groundId(theme, material), material, 0]),
@@ -69,13 +79,29 @@ function tileGround(texture: Texture, size: number) {
 }
 
 const PALETTES = [
-  [0x1b302d, 0x233c34, 0x304b3b, 0x536149, 0x8a9d61],
-  [0x242c36, 0x303a42, 0x414b52, 0x647076, 0x9ba6a1],
-  [0x32232c, 0x432b32, 0x57363a, 0xc96b43, 0xffc26d],
-  [0x28243d, 0x352f4b, 0x49415f, 0x8b79b9, 0xd2b8ed],
+  [0x273333, 0x2c3837, 0x394543, 0x797e64],
+  [0x292f38, 0x323a42, 0x41494f, 0x707a86],
+  [0x342d29, 0x413732, 0x54453e, 0x9b684e],
+  [0x302b39, 0x393241, 0x494154, 0x827793],
 ];
 
-export function createMap({ theme, level }: StageDef, size = 1800): Container {
+function landmarkMotes(x: number, y: number, color: number, cadence: number) {
+  const motes = new Graphics();
+  motes.position.set(x, y);
+  motes.onRender = () => {
+    const clock = performance.now() / 1000;
+    motes.clear();
+    for (let i = 0; i < 5; i++) {
+      const flight = (clock * cadence + i * 0.199) % 1;
+      motes
+        .circle(Math.sin(i * 7 + flight * 3) * (12 + flight * 24), -flight * 47, 1.4 - flight * 0.7)
+        .fill({ color, alpha: Math.sin(Math.PI * flight) * 0.42 });
+    }
+  };
+  return motes;
+}
+
+export function createMap({ theme, level }: StageDef, size = RIFT_MAP_SIZE): Container {
   const root = new Container();
   const palette = PALETTES[theme % PALETTES.length];
   const ground = new Graphics().rect(-size / 2, -size / 2, size, size).fill(palette[0]);
@@ -125,7 +151,7 @@ export function createMap({ theme, level }: StageDef, size = 1800): Container {
     terrain.tint = terrainInk[theme];
     root.addChild(terrain);
     const road = tileGround(pathTexture, size);
-    road.tint = terrainInk[theme];
+    road.tint = 0xe7e3dc;
     const mask = new Graphics();
     // Merge contiguous cells per row to keep the stair-stepped boundary inexpensive.
     const cell = 12,
@@ -178,42 +204,24 @@ export function createMap({ theme, level }: StageDef, size = 1800): Container {
     }
   }
   if (getCampaignChapter(level)) {
-    // Inlay on the ground layer, below combat warnings and pickups.
-    const seal = new Graphics();
-    const metal = palette[3];
-    for (const side of [-1, 1]) {
-      const x = side * 96;
-      pixelLine(seal, x, -60, x, 60, metal, 6, 0.65);
-      pixelLine(seal, x, -60, side * 66, -90, metal, 6, 0.65);
-      pixelLine(seal, x, 60, side * 66, 90, metal, 6, 0.65);
+    const seal = createPropSprite('chapterSeal', 162);
+    if (seal) {
+      seal.anchor.set(0.5, 0.52);
+      seal.alpha = 0.68;
+      root.addChild(seal);
     }
-    pixelStamp(
-      seal,
-      [
-        '.....a.....',
-        '....aba....',
-        '..aaaaaaa..',
-        '..abbbbba..',
-        '..abcccba..',
-        '..abcccba..',
-        '..abbbbba..',
-        '..aaaaaaa..',
-        '....aba....',
-        '...aaaaa...',
-      ],
-      { a: metal, b: palette[0], c: 0xc5a275 },
-      -44,
-      -40,
-      8,
-    );
-    root.addChild(seal);
   }
-  for (let i = 0; i < 105; i++) {
+
+  const landmark = createPropSprite(landmarks[theme], theme === 2 || theme === 3 ? 208 : 178);
+  const landmarkX = across ? -410 : 420;
+  const landmarkY = across ? 280 : -250;
+  for (let i = 0; i < 84; i++) {
     const x = snapPixel((rand() - 0.5) * (size - 80));
     const y = snapPixel((rand() - 0.5) * (size - 80));
     if (
       Math.hypot(x, y) < 180 ||
       onPath(x, y) ||
+      (landmark && Math.hypot(x - landmarkX, y - landmarkY) < 135) ||
       RIFT_PYLON_SITES.some((site) => Math.hypot(x - site.x, y - site.y) < 96)
     )
       continue;
@@ -296,6 +304,14 @@ export function createMap({ theme, level }: StageDef, size = 1800): Container {
       g.rect(-6, -27, 3, 12).fill(0xc1a7dd);
     }
     root.addChild(g);
+  }
+  if (landmark) {
+    landmark.position.set(landmarkX, landmarkY);
+    root.addChild(landmark);
+    if (!globalThis.matchMedia?.('(prefers-reduced-motion: reduce)').matches)
+      root.addChild(
+        landmarkMotes(landmarkX, landmarkY - 44, landmarkInks[theme], theme === 2 ? 1.45 : 0.55),
+      );
   }
   return root;
 }

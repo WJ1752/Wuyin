@@ -1,69 +1,869 @@
+:root {
+  --watchers-ink: #111925;
+  --watchers-surface: #1a2736;
+  --watchers-elevation: #26394a;
+  --watchers-rule: #465a6b;
+  --watchers-bone: #f2e8d0;
+  --watchers-muted: #b9c4cb;
+  --watchers-copper: #bd8559;
+  --watchers-copper-lit: #efba83;
+  --watchers-slate: #97bfb5;
+  --watchers-danger: #ef9482;
+  --watchers-material: url('/assets/ui/pixel-slate.webp');
+  --watchers-frame: url('/assets/ui/pixel-panel.webp');
+  --watchers-primary: url('/assets/ui/pixel-primary.webp');
+  --watchers-secondary: url('/assets/ui/pixel-secondary.webp');
+  --watchers-socket: url('/assets/ui/pixel-slot.webp');
+  --watchers-shadow: 0 20px 52px #060912b3;
+  --watchers-ease: cubic-bezier(0.2, 0.7, 0.25, 1);
+}
+
 .app {
-  --watchers-ink: #101c26;
-  --watchers-slate: #90b5b3;
-  --watchers-bronze: #a08455;
-  --watchers-amber: #f3ce86;
+  --gold: var(--watchers-copper-lit);
+  --muted: var(--watchers-muted);
+  --panel: var(--watchers-surface);
+  --line: var(--watchers-rule);
+  --watch-frame: none;
+  color: var(--watchers-bone);
+  background-color: var(--watchers-ink);
 }
 
-.app .hall-map > .town-scene {
-  filter: saturate(0.86) brightness(0.91);
+.app :is(.muted, .eyebrow) {
+  color: var(--watchers-muted);
 }
 
-.app.in-town[data-campaign-complete] .hall-map > .town-scene {
-  filter: saturate(0.92) brightness(1.06);
+.app .eyebrow {
+  font-family: var(--ui-sans, system-ui, sans-serif);
+  letter-spacing: 0.06em;
 }
 
-.app.in-town[data-campaign-complete] .hall-ground-light {
-  background:
-    radial-gradient(ellipse at 50% 6%, #eeb06c38, transparent 57%),
-    radial-gradient(ellipse at 50% 48%, transparent 42%, #08151b66 100%);
+.app
+  :is(
+    .pixel-ui-icon-atlas > image,
+    .traveler-avatar img,
+    .watch-item-icon > img,
+    .skill-illustration > img
+  ) {
+  image-rendering: pixelated;
 }
 
-.app .camp-hud-objective,
-.app .camp-hud-button,
-.app .combat-screen .combat-top .icon-button {
-  border-color: var(--watchers-bronze);
-  background: var(--watchers-ink);
-  box-shadow:
-    inset 0 2px #ffffff0d,
-    0 2px #060d14ad;
+.app button:hover:not(:disabled) {
+  filter: none;
 }
 
-.app .camp-hud-objective-action > svg {
-  color: var(--watchers-amber);
+.app button:active:not(:disabled) {
+  translate: none;
+  filter: none;
 }
 
-.app .combat-screen {
-  --rift-accent: #91b9a4;
+.app :is(button, input, select, textarea, summary):focus-visible {
+  outline: 2px solid var(--watchers-copper-lit);
+  outline-offset: 3px;
 }
 
-.app .combat-screen[data-rift-theme='1'] {
-  --rift-accent: #a8badb;
+.app :is(button, summary, input, select, textarea) {
+  transition:
+    background-color 140ms ease,
+    color 140ms ease,
+    border-color 140ms ease,
+    box-shadow 140ms ease,
+    transform 140ms var(--watchers-ease);
 }
 
-.app .combat-screen[data-rift-theme='2'] {
-  --rift-accent: #e5ac79;
-}
-
-.app .combat-screen[data-rift-theme='3'] {
-  --rift-accent: #bfb0e4;
-}
-
-.app .combat-screen .combat-top {
-  background: linear-gradient(#0b1721f2, #0b1721aa 80%, transparent);
-}
-
-.app .combat-screen .rift-progress > div:first-child > span {
-  color: var(--rift-accent);
-}
-
-.app .combat-screen[data-chapter-gate] .rift-progress > div:first-child > span {
-  color: var(--watchers-amber);
-}
-
-.app .combat-screen .progress-track i {
-  background: repeating-linear-gradient(90deg, var(--rift-accent) 0 8px, transparent 8px 10px);
+.app
+  :is(
+    .gold-button,
+    .enter-button,
+    .hall-depart,
+    .mobile-hall-depart,
+    .mobile-expedition-button,
+    .outline-button,
+    .ghost-button,
+    .danger-button
+  ) {
+  min-height: 44px;
+  padding: 9px 16px;
+  border: 1px solid var(--watchers-rule);
+  border-radius: 0;
+  background: var(--watchers-surface);
   box-shadow: none;
+  color: var(--watchers-bone);
+  text-shadow: none;
+}
+
+.app
+  :is(.gold-button, .enter-button, .hall-depart, .mobile-hall-depart, .mobile-expedition-button) {
+  color: #fff0d7;
+  background: #4c2f20;
+  border: 1px solid var(--watchers-copper-lit);
+  border-image: var(--watchers-primary) 16 20 fill / 8px stretch;
+  font-weight: 700;
+  text-shadow: 0 1px #261611;
+}
+
+.app
+  :is(
+    .gold-button,
+    .enter-button,
+    .hall-depart,
+    .mobile-hall-depart,
+    .mobile-expedition-button
+  ):hover:not(:disabled) {
+  color: #fff7e7;
+  filter: brightness(1.18);
+}
+
+.app .outline-button {
+  border-image: var(--watchers-secondary) 16 20 fill / 7px stretch;
+}
+
+.app .ghost-button {
+  border-color: transparent;
+  background: #131e2a8c;
+}
+
+.app :is(.outline-button, .ghost-button, .text-button):hover:not(:disabled) {
+  color: var(--watchers-bone);
+  border-color: var(--watchers-slate);
+  background: var(--watchers-elevation);
+}
+
+.app .outline-button:hover:not(:disabled) {
+  filter: brightness(1.22);
+}
+
+.app .danger-button {
+  color: #ffd9ca;
+  background: #542e28;
+  border-color: #be735e;
+}
+
+.app .danger-button:hover:not(:disabled) {
+  background: #733a30;
+}
+
+.app
+  :is(
+    .gold-button,
+    .outline-button,
+    .ghost-button,
+    .danger-button,
+    .icon-button,
+    .coop-solo,
+    .camp-hud-bottom > button,
+    .creation-class
+  ):active:not(:disabled) {
+  transform: translateY(1px);
+  box-shadow: inset 0 2px 5px #07090a64;
+}
+
+.app button:disabled {
+  cursor: not-allowed;
+}
+
+.app :is(.icon-button, .modal-close, .camp-back),
+.app .system-screen .modal-header :is(.modal-close, .camp-back) {
+  border: 1px solid var(--watchers-rule);
+  border-image: var(--watchers-secondary) 16 20 fill / 7px stretch;
+  border-radius: 0;
+  background: var(--watchers-surface);
+  color: var(--watchers-bone);
+  box-shadow: none;
+}
+
+.app .system-screen .modal-header .camp-back {
+  transform: none;
+}
+
+.app :is(.icon-button, .modal-close, .camp-back):hover:not(:disabled) {
+  filter: brightness(1.2);
+}
+
+.app :is(input:not([type='checkbox']):not([type='range']), select, textarea) {
+  min-height: 44px;
+  border: 1px solid var(--watchers-rule);
+  border-radius: 1px;
+  background-color: #101925;
+  box-shadow:
+    inset 0 2px #080e16,
+    0 1px #63778354;
+  color: var(--watchers-bone);
+}
+
+.app :is(input, select, textarea):focus {
+  border-color: var(--watchers-slate);
+}
+
+.app :is(input[type='checkbox'], input[type='range']) {
+  accent-color: var(--watchers-copper-lit);
+}
+
+.app :is(.modal-backdrop, .story-backdrop) {
+  background-color: #070d17d9;
+}
+
+.app
+  :is(
+    .modal,
+    .result-card,
+    .story-book,
+    .guide-modal,
+    .paused-label,
+    .exit-card,
+    .character-creation
+  ),
+.app .coop-backdrop .coop-panel.coop-panel {
+  border: 1px solid var(--watchers-rule);
+  border-image: var(--watchers-frame) 16 / 12px stretch;
+  border-radius: 1px;
+  background:
+    linear-gradient(130deg, #10192552, #101925c9 75%),
+    var(--watchers-material) center / 160px;
+  box-shadow: var(--watchers-shadow);
+  color: var(--watchers-bone);
+}
+
+.app :is(.system-screen .modal-header, .modal-header, .coop-backdrop .coop-panel .coop-heading) {
+  background:
+    linear-gradient(104deg, #263b4c5e, #111c2bb8 75%),
+    var(--watchers-material) center / 144px;
+  border-bottom: 1px solid var(--watchers-rule);
+  box-shadow:
+    inset 0 2px #829aab33,
+    0 1px #070d17;
+}
+
+.app :is(.modal-header, .coop-backdrop .coop-panel .coop-heading) h2 {
+  margin: 0;
+  color: var(--watchers-bone);
+  letter-spacing: 0.04em;
+  text-shadow: 1px 2px #0a1420;
+}
+
+.app .system-screen .modal-heading-icon {
+  background: #131e2b;
+  border: 1px solid #5d747c;
+  border-image: var(--watchers-socket) 11 fill / 7px stretch;
+  color: var(--watchers-copper-lit);
+  box-shadow: none;
+}
+
+.app .system-screen .system-groups {
+  gap: 4px;
+  padding-block: 4px;
+  background: #0e1824;
+  border: 0;
+  border-bottom: 1px solid var(--watchers-rule);
+}
+
+.app .system-screen .system-navigation {
+  padding-block: 4px;
+  background: linear-gradient(#1b2b3b, #182535);
+  border: 0;
+  border-bottom: 1px solid var(--watchers-rule);
+}
+
+.app .system-screen :is(.system-groups, .system-navigation) button {
+  position: relative;
+  min-height: 44px;
+  border: 1px solid transparent;
+  border-radius: 0;
+  background: none;
+  color: var(--watchers-muted);
+  box-shadow: none;
+}
+
+.app .system-screen :is(.system-groups, .system-navigation) button[aria-current] {
+  color: #fff0d4;
+  background: #3e2d25;
+  border-image: var(--watchers-primary) 16 20 fill / 7px stretch;
+}
+
+.app .system-screen :is(.system-groups, .system-navigation) button[aria-current]::after {
+  display: none;
+}
+
+.app .system-screen :is(.system-groups, .system-navigation) button:hover {
+  border-color: #647f86;
+  color: #fff0d4;
+  background-color: var(--watchers-elevation);
+}
+
+.app .system-screen .modal-footer {
+  border-top: 1px solid var(--watchers-rule);
+  background: var(--watchers-ink);
+  box-shadow: none;
+}
+
+.app .system-screen .system-feedback,
+.app .toast {
+  background: #20313e;
+  border: 1px solid #507677;
+  border-left: 3px solid var(--watchers-slate);
+  border-radius: 1px;
+  box-shadow: 0 10px 24px #080c0f66;
+  color: var(--watchers-bone);
+}
+
+.app .toast > svg {
+  color: var(--watchers-slate);
+}
+
+.app .system-screen .card,
+.app :is(.cloud-choice, .operation-review, .trial-intro, .onboarding-checklist, .coop-login) {
+  color: var(--watchers-bone);
+  background: linear-gradient(142deg, #203144d9, #162331ee);
+  border: 1px solid var(--watchers-rule);
+  border-radius: 1px;
+  box-shadow:
+    inset 0 1px #8397a52f,
+    inset 0 -1px #091321;
+}
+
+.app
+  :is(
+    .account-character,
+    .build-card,
+    .relic-card,
+    .skill-description,
+    .gem-card,
+    .pet-card,
+    .service-card,
+    .item-detail
+  ) {
+  background: var(--watchers-surface);
+  border: 1px solid var(--watchers-rule);
+  border-radius: 1px;
+  box-shadow: inset 0 1px #7994a12f;
+}
+
+.app :is(.account-character.active, .pet-card.active, .relic-card.selected) {
+  background: #23312f;
+  border-color: var(--watchers-slate);
+  box-shadow: inset 3px 0 var(--watchers-slate);
+}
+
+.app .system-screen .service-card {
+  min-height: 60px;
+}
+
+.app .system-screen .service-card > .pixel-ui-icon {
+  color: var(--watchers-copper-lit);
+}
+
+.app :is(.item-card, .paperdoll-slot, .skill-node) {
+  border: 1px solid var(--watchers-rule);
+  border-radius: 1px;
+  background: #141f2b;
+  color: var(--watchers-bone);
+  box-shadow: none;
+}
+
+.app .item-card {
+  border-bottom: 2px solid var(--rarity, var(--watchers-rule));
+  box-shadow: inset 0 1px #8aa3af38;
+}
+
+.app .item-card .item-tile-art,
+.app .paperdoll-slot {
+  border: 1px solid var(--watchers-rule);
+  border-image: var(--watchers-socket) 12 fill / 7px stretch;
+}
+
+.app .item-card .item-tile-art {
+  width: min(58px, 100%);
+}
+
+.app .item-card .item-tile-art::before {
+  display: none;
+}
+
+.app :is(.paperdoll-slot:hover:not(:disabled), .paperdoll-slot.occupied) {
+  box-shadow: inset 0 -2px var(--slot-color, var(--watchers-slate));
+}
+
+.app :is(.item-card, .paperdoll-slot, .skill-node):hover:not(:disabled) {
+  background-color: var(--watchers-elevation);
+  border-color: var(--watchers-copper);
+}
+
+.app :is(.item-card.selected, .skill-node.selected) {
+  color: var(--watchers-bone);
+  background: #2b3340;
+  border-color: var(--watchers-copper-lit);
+  outline: 1px solid var(--watchers-copper-lit);
+  outline-offset: -3px;
+}
+
+.app .system-screen .character-dossier {
+  background:
+    radial-gradient(ellipse at 50% 60%, #3e6373a1, #101b297a 63%),
+    var(--watchers-material) center / 168px;
+  border: 1px solid var(--watchers-rule);
+  border-image: var(--watchers-frame) 16 / 9px stretch;
+  border-radius: 1px;
+  box-shadow: none;
+}
+
+.app .character-dossier :is(.dossier-top, .dossier-numbers) {
+  border-color: var(--watchers-rule);
+  color: var(--watchers-muted);
+}
+
+.app .character-dossier .dossier-numbers :is(svg, b) {
+  color: var(--watchers-copper-lit);
+}
+
+.app .character-dossier .sigil-ring {
+  opacity: 0.35;
+}
+
+.app .system-screen :is(.cube-slot, .forge-slot, .run-record, .stash-columns > section) {
+  border-color: var(--watchers-rule);
+  background: var(--watchers-surface);
+  box-shadow: none;
+}
+
+.app .system-screen :is(.cube-orbit, .pet-portrait) {
+  border-color: #556d65;
+  background: #202c2c;
+  box-shadow: none;
+}
+
+.app .system-screen .cube-slot.filled .cube-orbit {
+  border-color: var(--watchers-slate);
+  color: var(--watchers-slate);
+}
+
+.app .system-screen .mia-quote {
+  border-color: #6d5748;
+  background:
+    linear-gradient(90deg, #30282280, #151f2bd6),
+    var(--watchers-material) center right / 144px;
+  box-shadow: none;
+}
+
+.app .system-screen .slot-selector button.active,
+.app .system-screen .panel-tabs button.active {
+  color: var(--watchers-copper-lit);
+  border-color: var(--watchers-copper);
+  background: #322a29;
+  box-shadow:
+    inset 0 -2px var(--watchers-copper),
+    inset 0 1px #b8845955;
+}
+
+.app .system-screen .skill-node {
+  background: #1b2a39;
+}
+
+.app .system-screen .skill-node.selected {
+  background: #302b2d;
+}
+
+.app .system-screen .skill-tier-label {
+  color: var(--watchers-copper-lit);
+  border-color: var(--watchers-rule);
+}
+
+.app .system-screen :is(.mobile-skill-toolbar, .skill-detail, .mobile-skill-detail) {
+  border-color: var(--watchers-rule);
+  background: var(--watchers-surface);
+}
+
+.app .system-screen .skill-node .skill-symbol {
+  background: #111b28;
+  border: 1px solid var(--watchers-rule);
+  border-image: var(--watchers-socket) 11 fill / 6px stretch;
+  box-shadow: none;
+}
+
+.systems-modal.item-comparison-tooltip {
+  border: 1px solid var(--watchers-rule);
+  border-radius: 4px;
+  background: var(--watchers-ink);
+  box-shadow: var(--watchers-shadow);
+}
+
+.app.character-entry,
+.loading-screen {
+  background:
+    radial-gradient(ellipse at 48% 28%, #1f3848af, #0a111de8 70%),
+    var(--watchers-material) center / 160px;
+}
+
+.loading-screen .brand-sigil {
+  color: var(--watchers-copper-lit);
+  text-shadow: none;
+}
+
+.loading-screen h1 {
+  color: var(--watchers-bone);
+  font-family: var(--serif);
+  text-shadow: none;
+}
+
+.app.character-entry .character-creation {
+  display: grid;
+  grid-template: 'select portrait' auto 'register portrait' 1fr / minmax(0, 0.92fr) minmax(
+      0,
+      1.08fr
+    );
+  column-gap: clamp(22px, 5vw, 72px);
+  row-gap: 28px;
+  width: min(1080px, calc(100% - 40px));
+  padding: clamp(20px, 5vw, 68px);
+  margin: clamp(16px, 6vh, 72px) auto;
+  background:
+    linear-gradient(105deg, #111b28e8 10%, #222f3ba8),
+    var(--watchers-material) center / 192px;
+}
+
+.creation-select {
+  grid-area: select;
+  min-width: 0;
+}
+
+.creation-heading {
+  padding-bottom: 20px;
+  border-bottom: 1px solid #64747c;
+  box-shadow: 0 1px #080d17;
+}
+
+.app .character-creation .creation-heading h1 {
+  margin: 0;
+  color: var(--watchers-bone);
+  font: 600 clamp(42px, 6vw, 80px)/1.1 var(--serif);
+  letter-spacing: 0.14em;
+  text-shadow:
+    2px 2px #0a1420,
+    3px 4px #0c1622;
+}
+
+.creation-heading p {
+  margin: 10px 0 0;
+  color: var(--watchers-muted);
+}
+
+.app .character-creation .creation-classes {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 6px;
+  margin: 18px 0 0;
+}
+
+.app .character-creation .creation-class {
+  display: grid;
+  align-content: center;
+  justify-items: center;
+  gap: 6px;
+  grid-column: auto;
+  min-height: 65px;
+  padding: 8px 2px;
+  border: 1px solid var(--watchers-rule);
+  border-image: var(--watchers-secondary) 16 20 fill / 7px stretch;
+  border-radius: 0;
+  background: #131f2b;
+  box-shadow: none;
+  color: var(--watchers-muted);
+}
+
+.app .character-creation .creation-class > svg {
+  width: 25px;
+  height: 25px;
+}
+
+.app .character-creation .creation-class strong {
+  color: inherit;
+  white-space: nowrap;
+  font: 600 clamp(12px, 2.7vw, 14px) var(--ui-sans, system-ui, sans-serif);
+}
+
+.app .character-creation .creation-class:hover {
+  color: var(--watchers-bone);
+  filter: brightness(1.2);
+}
+
+.app .character-creation .creation-class.selected {
+  color: #fff0d4;
+  background: #3e2d25;
+  border-color: var(--watchers-copper);
+  border-image-source: var(--watchers-primary);
+}
+
+.creation-stage {
+  grid-area: portrait;
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid var(--watchers-rule);
+  border-image: var(--watchers-frame) 16 / 10px stretch;
+  border-radius: 1px;
+  background: #111b28;
+}
+
+.creation-portrait {
+  display: grid;
+  place-items: end center;
+  height: clamp(184px, 31vw, 352px);
+  padding: 10px 10px 0;
+  overflow: hidden;
+  background:
+    radial-gradient(
+      ellipse at 50% 74%,
+      color-mix(in srgb, var(--class-accent), #162638 72%),
+      transparent 68%
+    ),
+    linear-gradient(#0d1826a8, #16253669 76%, #0c1622),
+    var(--watchers-material) center / 192px;
+}
+
+.app .character-creation .creation-portrait > .hero-art {
+  grid-area: 1 / 1;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  max-height: 100%;
+  filter: drop-shadow(0 12px 15px #06090c9c);
+  animation: watchers-portrait-in 300ms var(--watchers-ease) both;
+}
+
+.app .character-creation .creation-intro {
+  padding: clamp(12px, 3vw, 22px);
+  border: 0;
+  border-top: 1px solid #52687a;
+  background: #162330;
+  box-shadow: inset 0 1px #080f1c;
+}
+
+.app .creation-intro h2 {
+  margin: 0;
+  color: var(--watchers-bone);
+  font: 600 clamp(20px, 3vw, 27px) var(--serif);
+}
+
+.creation-intro p {
+  margin: 8px 0 12px;
+  color: var(--watchers-muted);
+}
+
+.creation-facts {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px 14px;
+  margin: 0;
+}
+
+.creation-facts dt {
+  color: var(--watchers-muted);
+  font-size: 12px;
+}
+
+.creation-facts > div {
+  padding-inline-start: 7px;
+  border-inline-start: 2px solid #334e5f;
+}
+
+.creation-facts dd {
+  margin: 2px 0 0;
+  color: var(--watchers-bone);
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+.app .character-creation .creation-register {
+  grid-area: register;
+  align-self: start;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 10px;
+  margin: 0;
+}
+
+.creation-account {
+  justify-self: start;
+}
+
+.app .camp-hud-topbar {
+  background: none;
+  border: 0;
+}
+
+.app .camp-hud-traveler,
+.app .camp-hud-button,
+.app .camp-hud-objective,
+.app .camp-hud-resource-popover {
+  background:
+    linear-gradient(120deg, #15263882, #0d1926d9),
+    var(--watchers-material) center / 128px;
+  border: 1px solid var(--watchers-rule);
+  border-image: var(--watchers-frame) 16 / 8px stretch;
+  border-radius: 1px;
+  color: var(--watchers-bone);
+  box-shadow: 0 4px 18px #070a0c4d;
+}
+
+.app .camp-hud-traveler {
+  gap: 6px;
+  padding-inline: 3px 12px;
+}
+
+.app .camp-hud-traveler > img,
+.app .coop-member img {
+  image-rendering: pixelated;
+}
+
+.app .camp-hud-traveler :is(strong, small) {
+  color: inherit;
+}
+
+.app .camp-hud-traveler small {
+  color: var(--watchers-muted);
+}
+
+.app .camp-hud-objective {
+  border-left: 3px solid var(--watchers-copper);
+  border-image: none;
+  box-shadow:
+    inset 0 1px #66848c53,
+    0 4px 18px #070a0c66;
+}
+
+.app .camp-hud-objective-action > svg,
+.app .camp-hud-button[aria-expanded='true'] {
+  color: var(--watchers-copper-lit);
+}
+
+.app .camp-hud-objective-action small {
+  color: var(--watchers-muted);
+}
+
+.app .camp-hud-objective-dismiss {
+  border-color: var(--watchers-rule);
+}
+
+.app .camp-hud-bottom {
+  gap: 4px;
+  padding: 5px max(6px, env(safe-area-inset-right)) max(5px, env(safe-area-inset-bottom))
+    max(6px, env(safe-area-inset-left));
+  border: 1px solid var(--watchers-rule);
+  border-image: var(--watchers-frame) 16 / 9px stretch;
+  border-radius: 1px;
+  background:
+    linear-gradient(#172638ad, #0b1522d9),
+    var(--watchers-material) center / 144px;
+  box-shadow: 0 -8px 24px #060a0d59;
+}
+
+.app .camp-hud-bottom > button {
+  border: 1px solid var(--watchers-rule);
+  border-image: var(--watchers-secondary) 16 20 fill / 7px stretch;
+  border-radius: 0;
+  color: var(--watchers-bone);
+}
+
+.app .camp-hud-bottom > button:not(.camp-hud-depart):hover {
+  filter: brightness(1.23);
+}
+
+.app .camp-hud-bottom .camp-hud-depart {
+  border: 1px solid var(--watchers-copper-lit);
+  border-image: var(--watchers-primary) 16 20 fill / 8px stretch;
+  padding: 4px 8px;
+  background: #4c2f20;
+  color: #fff0d7;
+}
+
+.app .camp-hud-bottom .camp-hud-depart:hover {
+  filter: brightness(1.15);
+}
+
+.app .camp-hud-bottom .camp-hud-depart small {
+  color: #f0dbba;
+}
+
+.app .coop-backdrop .coop-panel .coop-heading {
+  top: -20px;
+  padding: 12px 14px;
+}
+
+.app .coop-backdrop .coop-panel .coop-solo {
+  min-height: 66px;
+  border: 1px solid var(--watchers-copper);
+  border-image: var(--watchers-primary) 16 20 fill / 10px stretch;
+  border-radius: 1px;
+  background: #432d22;
+  color: #fff0d7;
+  box-shadow: none;
+}
+
+.app .coop-backdrop .coop-panel .coop-solo:hover:not(:disabled) {
+  filter: brightness(1.15);
+}
+
+.app .coop-backdrop .coop-panel .coop-solo :is(strong, svg) {
+  color: #fff0d7;
+}
+
+.app .coop-backdrop .coop-panel .coop-solo small {
+  color: #f0dbba;
+}
+
+.app :is(.coop-footnote, .coop-intro p, .coop-rules) {
+  color: var(--watchers-muted);
+}
+
+.app :is(.coop-member, .coop-room-code, .coop-stage-picker) {
+  border-color: var(--watchers-rule);
+  background: #172535;
+  box-shadow: inset 0 1px #5b7a88a1;
+}
+
+.app .coop-member::after,
+.app .coop-stage-picker::after {
+  display: none;
+}
+
+.app .coop-member.occupied {
+  border-color: #566f69;
+}
+
+.app .coop-ready {
+  color: var(--watchers-slate);
+}
+
+.app .coop-error {
+  border-color: #a76a5b;
+  background: #3b2522;
+  color: #f4c7ba;
+}
+
+.app .story-book .story-art {
+  border-color: var(--watchers-rule);
+  color: var(--watchers-slate);
+  background: var(--watchers-material) center / 144px;
+}
+
+.app .story-book :is(h2, p) {
+  color: var(--watchers-bone);
+}
+
+.app .story-book footer {
+  background: var(--watchers-ink);
+  border-top: 1px solid var(--watchers-rule);
+}
+
+.app .story-book.campaign-ending {
+  width: min(680px, 100%);
+}
+
+.campaign-ending-art {
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  margin: 16px 0;
+  border-block: 1px solid var(--watchers-rule);
+  object-fit: cover;
+  image-rendering: pixelated;
 }
 
 .app .journey-panel .campaign-journal {
@@ -75,9 +875,8 @@
   isolation: isolate;
   overflow: hidden;
   padding: clamp(14px, 3vw, 26px);
-  border: 1px solid var(--watchers-bronze);
-  background: linear-gradient(135deg, #182934, #101a23 74%);
-  box-shadow: inset 0 2px #d0bf9b2e;
+  border-left: 3px solid var(--watchers-copper);
+  background: var(--watchers-material) center / 144px;
 }
 
 .campaign-journal-art {
@@ -88,23 +887,23 @@
   height: 100%;
   object-fit: cover;
   object-position: center 51%;
-  opacity: 0.27;
+  opacity: 0.23;
 }
 
 .app .campaign-journal h3 {
   margin: 0;
-  color: var(--watchers-amber);
+  color: var(--watchers-bone);
   font: 600 clamp(18px, 3vw, 26px) var(--serif);
 }
 
 .campaign-journal-copy .muted {
-  color: var(--chapter-accent);
+  color: var(--chapter-accent, var(--watchers-muted));
 }
 
 .campaign-route {
   display: grid;
-  min-width: 0;
   gap: 4px;
+  min-width: 0;
   margin: 0;
   padding: 0;
   list-style: none;
@@ -117,14 +916,14 @@
   gap: 9px;
   min-height: 46px;
   padding: 3px 6px 3px 12px;
-  border-left: 2px solid #74858a65;
-  background: #0d1821db;
-  color: #bbbeb3;
+  border-left: 2px solid var(--watchers-rule);
+  background: #101619d9;
+  color: var(--watchers-muted);
 }
 
 .campaign-route > li[aria-current='step'] {
-  border-color: var(--watchers-amber);
-  color: var(--watchers-amber);
+  border-color: var(--watchers-copper);
+  color: var(--watchers-copper-lit);
 }
 
 .campaign-route > li[data-cleared] {
@@ -132,52 +931,401 @@
   color: var(--watchers-slate);
 }
 
-.campaign-route b,
-.campaign-route small {
+.campaign-route :is(b, small) {
   display: block;
 }
 
 .campaign-route small {
-  color: #b9c1bc;
+  color: var(--watchers-muted);
 }
 
 .app .campaign-route button {
   display: grid;
+  place-items: center;
   min-width: 44px;
   min-height: 44px;
-  place-items: center;
   padding: 0;
 }
 
-.app .story-book.campaign-ending {
-  width: min(680px, 100%);
+.app .combat-screen {
+  --rift-accent: #a6c6b4;
 }
 
-.campaign-ending-art {
-  display: block;
-  width: 100%;
-  aspect-ratio: 16 / 9;
-  margin: 16px 0;
-  border-block: 2px solid var(--watchers-bronze);
-  object-fit: cover;
-  image-rendering: pixelated;
+.app .combat-screen[data-rift-theme='1'] {
+  --rift-accent: #afbdcf;
 }
 
+.app .combat-screen[data-rift-theme='2'] {
+  --rift-accent: #d8a282;
+}
+
+.app .combat-screen[data-rift-theme='3'] {
+  --rift-accent: #bfbbd0;
+}
+
+.app .combat-screen .combat-top {
+  background:
+    linear-gradient(#0d1725e8 0 45%, #0d1725b3 100%),
+    var(--watchers-material) center / 140px;
+  border-bottom: 1px solid #758d9ba6;
+  box-shadow: 0 1px #070e17;
+}
+
+.app .combat-screen .combat-top .icon-button {
+  background: #1b2d3d;
+  border: 1px solid var(--watchers-rule);
+  border-image: var(--watchers-secondary) 16 20 fill / 7px stretch;
+  color: var(--watchers-bone);
+  box-shadow: none;
+}
+
+.app .combat-screen .rift-progress > div:first-child > span {
+  color: var(--rift-accent);
+  font-family: var(--serif);
+  font-weight: 600;
+}
+
+.app .combat-screen[data-chapter-gate] .rift-progress > div:first-child > span {
+  color: var(--watchers-copper-lit);
+}
+
+.app .combat-screen .rift-progress b {
+  color: var(--watchers-bone);
+  font-variant-numeric: tabular-nums;
+}
+
+.app .combat-screen .rift-status {
+  color: var(--watchers-bone);
+  font-size: clamp(12px, calc(12px * var(--font-scale, 1)), 15px);
+}
+
+.app .combat-screen :is(.progress-track, .boss-health > div, .mini-progress) {
+  background: #080f1a;
+  border-radius: 0;
+  box-shadow: 0 1px #7b91974d;
+}
+
+.app .combat-screen .progress-track i {
+  background: linear-gradient(
+    var(--rift-accent) 0 37%,
+    color-mix(in srgb, var(--rift-accent), #324958 36%) 37% 100%
+  );
+  border-radius: inherit;
+  transition: width 180ms var(--watchers-ease);
+}
+
+.app .combat-screen .combat-vitals > div,
+.app .combat-screen .coop-team-hud > div {
+  background: #111d2aeb;
+  border-radius: 1px;
+  box-shadow: inset 0 1px #708a994d;
+}
+
+.app .combat-screen .combat-vitals :is(span, b) {
+  color: var(--watchers-bone);
+  font-variant-numeric: tabular-nums;
+}
+
+.app .combat-screen .combat-vitals i,
+.app .combat-screen .boss-health > div > i {
+  background: linear-gradient(#e39179 0 36%, #b85e53 36% 100%);
+  transition: width 160ms var(--watchers-ease);
+}
+
+.app .combat-screen .combat-vitals .vital-energy i {
+  background: linear-gradient(#9bc7bd 0 36%, #629896 36% 100%);
+}
+
+.app[data-color-assist='true'] .combat-vitals .vital-health i {
+  background: #f3a464;
+}
+
+.app[data-color-assist='true'] .combat-vitals .vital-energy i {
+  background: #8acef7;
+}
+
+.app .combat-screen .boss-health {
+  background: #181b29eb;
+  border: 1px solid #845346;
+  border-radius: 0;
+  color: var(--watchers-bone);
+  box-shadow: 0 4px 16px #0a0e114d;
+}
+
+.app .combat-screen .combat-bottom {
+  background:
+    linear-gradient(#152334a8, #0e1826e8),
+    var(--watchers-material) center / 144px;
+  border: 1px solid var(--watchers-rule);
+  border-image: var(--watchers-frame) 16 / 8px stretch;
+  border-radius: 1px;
+  box-shadow: 0 -7px 18px #080a0c47;
+}
+
+.app .combat-screen .skill-cast {
+  border: 1px solid #526b7a;
+  border-image: var(--watchers-socket) 11 fill / 7px stretch;
+  border-radius: 0;
+  background: #152232;
+  box-shadow: none;
+  padding: 3px;
+}
+
+.app .combat-screen .skill-cast:hover:not(:disabled) {
+  outline: 1px solid var(--watchers-copper-lit);
+  outline-offset: -2px;
+}
+
+.app .combat-screen .skill-cast:active:not(:disabled) .skill-symbol {
+  transform: scale(0.91);
+}
+
+.app .combat-screen .skill-cast:not(:disabled) .skill-symbol {
+  animation: watchers-ready 230ms var(--watchers-ease) both;
+}
+
+.app .combat-screen .skill-cast:disabled .skill-symbol {
+  opacity: 0.68;
+}
+
+.app .combat-screen .skill-cast .cooldown-overlay {
+  background: #080d10c9;
+  color: var(--watchers-bone);
+  font-variant-numeric: tabular-nums;
+  text-shadow: none;
+}
+
+.app .combat-screen .skill-cast .resource-warning {
+  color: var(--watchers-danger);
+}
+
+.app .combat-screen :is(.skill-name, .skill-mode) {
+  color: var(--watchers-bone);
+}
+
+.app .combat-screen .skill-mode {
+  border-radius: 2px;
+  background: #12181bed;
+}
+
+.app .combat-screen .pylon-list button {
+  color: #d7e8dd;
+  background: #1f302eef;
+  border: 1px solid #7da49d;
+  border-image: var(--watchers-secondary) 16 20 fill / 8px stretch;
+  border-radius: 0;
+}
+
+.app .combat-screen .coop-network {
+  color: var(--watchers-bone);
+  background: #242c31;
+  border-color: #687477;
+}
+
+.app .result-card {
+  background:
+    radial-gradient(ellipse at 50% 0%, #73553c4d, #132032de 56%),
+    var(--watchers-material) center / 144px;
+}
+
+.app .result-card h2 {
+  color: var(--watchers-bone);
+  text-shadow: none;
+}
+
+.app .result-card .result-crest {
+  display: grid;
+  place-items: center;
+  width: 72px;
+  height: 72px;
+  margin-inline: auto;
+  border: 1px solid #775b45;
+  border-image: var(--watchers-primary) 16 20 fill / 12px stretch;
+  border-radius: 0;
+  color: var(--watchers-copper-lit);
+  background: #201f1c;
+  filter: none;
+  animation: watchers-result-seal 400ms var(--watchers-ease) both;
+}
+
+.app .result-card .result-crest > svg {
+  width: 36px;
+  height: 36px;
+}
+
+.app .result-card .result-stats > div {
+  border-color: var(--watchers-rule);
+  border-radius: 0;
+  background: #152435;
+  box-shadow: inset 0 1px #627d8f47;
+}
+
+.app .result-card .result-stats strong,
 .app .campaign-victory-status {
-  color: var(--watchers-amber);
+  color: var(--watchers-copper-lit);
 }
 
-.app .campaign-victory .result-crest {
-  color: var(--watchers-amber);
-  filter: drop-shadow(0 0 13px #dfb47760);
+.app .result-card .result-loot {
+  border-color: var(--watchers-rule);
+  background: #162637;
+}
+
+.app
+  :is(
+    .system-screen,
+    .coop-panel,
+    .result-card,
+    .story-book,
+    .guide-modal,
+    .camp-hud-resource-popover
+  ) {
+  animation: watchers-panel-in 230ms var(--watchers-ease) both;
+}
+
+.app :is(.system-feedback, .toast, .gamble-results, .item-detail) {
+  animation: watchers-feedback 260ms ease-out both;
+}
+
+@keyframes watchers-panel-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes watchers-feedback {
+  from {
+    opacity: 0.68;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes watchers-portrait-in {
+  from {
+    opacity: 0.28;
+    transform: translateY(5px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes watchers-ready {
+  from {
+    opacity: 0.7;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes watchers-result-seal {
+  from {
+    opacity: 0;
+    scale: 0.88;
+  }
+  to {
+    opacity: 1;
+    scale: 1;
+  }
 }
 
 @media (max-width: 760px) {
+  .app.character-entry .character-creation {
+    grid-template: 'select' auto 'portrait' auto 'register' auto / minmax(0, 1fr);
+    gap: 10px;
+    width: min(560px, calc(100% - 20px));
+    margin: 10px auto;
+    padding: clamp(12px, 3.5vw, 18px);
+  }
+
+  .app .character-creation .creation-heading {
+    padding-bottom: 9px;
+  }
+
+  .app .character-creation .creation-classes {
+    margin-top: 9px;
+  }
+
+  .app .character-creation .creation-class {
+    min-height: 51px;
+    gap: 2px;
+    padding-block: 5px;
+  }
+
+  .creation-portrait {
+    height: clamp(136px, 44vw, 198px);
+  }
+
+  .app .creation-intro p {
+    margin: 4px 0 8px;
+  }
+
+  .creation-facts {
+    gap: 6px 8px;
+  }
+
+  .app .character-creation .creation-register {
+    gap: 7px;
+  }
+
+  .creation-register :is(.gold-button, .creation-account) {
+    justify-self: stretch;
+  }
+
   .app .journey-panel .campaign-journal {
     grid-template-columns: minmax(0, 1fr);
   }
 
   .app .campaign-ending footer .gold-button {
     grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 960px) and (orientation: landscape) {
+  .app .combat-screen .combat-bottom {
+    border-image: none;
+    border-width: 0 0 0 1px;
+    border-radius: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app
+    :is(
+      button,
+      summary,
+      input,
+      select,
+      textarea,
+      .combat-vitals i,
+      .boss-health > div > i,
+      .progress-track i
+    ) {
+    transition: none;
+  }
+
+  .app
+    :is(
+      .system-screen,
+      .coop-panel,
+      .result-card,
+      .result-crest,
+      .story-book,
+      .guide-modal,
+      .camp-hud-resource-popover,
+      .system-feedback,
+      .toast,
+      .gamble-results,
+      .item-detail
+    ),
+  .app .character-creation .creation-portrait > .hero-art,
+  .app .combat-screen .skill-cast .skill-symbol {
+    animation: none;
   }
 }

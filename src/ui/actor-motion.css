@@ -49,6 +49,18 @@
   .actor-idle {
     animation: camp-breathe var(--idle-period, 4s) ease-in-out var(--idle-delay, -1s) infinite;
   }
+  .hall-self.walking .actor-idle {
+    animation: camp-stride 0.46s ease-in-out infinite;
+  }
+  .hall-self.walking .actor-idle img {
+    animation: camp-stride-contact 0.46s steps(1, end) infinite;
+  }
+  .hall-self.walking .actor-idle::after {
+    animation: camp-stride-release 0.46s steps(1, end) infinite;
+  }
+  .hall-npc.selected.in-reach .actor-idle {
+    animation: camp-attend 0.42s ease-out both;
+  }
 }
 @keyframes camp-breathe {
   0%,
@@ -67,10 +79,66 @@
 }
 .actor-idle[data-motion-paused],
 .npc-hall[data-motion-paused] .actor-idle,
-.npc-hall[data-motion-paused] .hall-self.walking .hall-sprite {
+.npc-hall[data-motion-paused] .hall-self.walking .actor-idle img,
+.npc-hall[data-motion-paused] .hall-self.walking .actor-idle::after {
   animation-play-state: paused;
 }
-.hall-self.walking .actor-idle {
-  animation: none;
-  transform: none;
+.hall-self .actor-idle::after {
+  content: '';
+  position: absolute;
+  left: var(--art-left);
+  bottom: var(--art-bottom);
+  width: 100%;
+  height: 100%;
+  background: var(--art-walk) center / contain no-repeat;
+  image-rendering: pixelated;
+  transform: scaleX(var(--facing, 1));
+  transform-origin: var(--art-anchor);
+  filter: drop-shadow(0 1px 1px #10191dbf);
+  opacity: 0;
+  pointer-events: none;
+}
+.hall-self.walking .actor-idle img {
+  opacity: 0;
+}
+.hall-self.walking .actor-idle::after {
+  opacity: 1;
+}
+@keyframes camp-stride {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  48% {
+    transform: translateY(-1.5px) scaleY(1.01);
+  }
+}
+@keyframes camp-stride-contact {
+  0%,
+  100% {
+    opacity: 0;
+  }
+  72% {
+    opacity: 1;
+  }
+}
+@keyframes camp-stride-release {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  72% {
+    opacity: 0;
+  }
+}
+@keyframes camp-attend {
+  0% {
+    transform: rotate(0);
+  }
+  42% {
+    transform: rotate(3deg) scaleY(1.025);
+  }
+  100% {
+    transform: rotate(0);
+  }
 }

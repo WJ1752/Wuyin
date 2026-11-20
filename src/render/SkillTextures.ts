@@ -17,17 +17,10 @@ export async function preloadSkillTextures(ids: string[]): Promise<void> {
   );
   sheets.push(
     preloadAtlas(
-      './assets/skills/ground.webp',
+      './assets/skills/painted/shared.webp',
       4,
-      2,
-      GROUND_CELLS.map((id, i) => [`fx:${id}`, i % 4, Math.floor(i / 4)]),
-      'nearest',
-    ),
-    preloadAtlas(
-      './assets/skills/hd/effects.webp',
-      4,
-      3,
-      EFFECT_CELLS.map((id, i) => [`fx:${id}`, i % 4, Math.floor(i / 4)]),
+      5,
+      [...EFFECT_CELLS, ...GROUND_CELLS].map((id, i) => [`fx:${id}`, i % 4, Math.floor(i / 4)]),
       'nearest',
     ),
   );
@@ -42,7 +35,8 @@ export function getZoneTexture(skillId: string | undefined, icy: boolean) {
 }
 
 export function getProjectileArt(skillId: string, color: number) {
-  const texture = getSkillTexture(skillId);
+  // The dedicated crossbow streak is shown on release, while each live bolt gets one shaft.
+  const texture = skillId === 'rapid_fire' ? undefined : getSkillTexture(skillId);
   if (texture) return { texture, tint: 0xffffff };
   let shape: EffectArt = 'arrow';
   if (skillId.includes('orb')) shape = 'orb';

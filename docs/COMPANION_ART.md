@@ -1,6 +1,6 @@
 # 伙伴贴图（2026-11-01）
 
-当前版本采用[暮铁守望总美术方案](ART_DIRECTION.md)。下文为早期素材制作记录。
+现行六种伙伴的待机、活动姿势和图集见[像素人物与伙伴](PAINTED_ACTORS.md)。下文记录早期像素素材制作。
 
 
 六种伙伴使用内置 `imagegen` 工具生成，参考现有 `public/assets/characters/sorcerer.png` 的精细 Q 版像素风、明暗层次与轮廓精度。没有使用旧版几何头像或同色换皮。原始透明图集保留在 `public/assets/pets/companions-atlas.png`；三个等宽列、两个等高行，每格 512 × 512 像素。第一行为 goblin / dragon / owl，第二行为 imp / fox / wisp。

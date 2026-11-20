@@ -99,6 +99,7 @@ export function PetIcon({ petId, size = 84 }: { petId: string; size?: number }) 
       height={size}
       alt=""
       draggable={false}
+      style={{ imageRendering: 'pixelated' }}
     />
   ) : null;
 }

@@ -5,13 +5,38 @@ import type { CombatEffectCue } from '../core/coop';
 import type { EffectArt } from '../data/skillArt';
 import { pixelEllipse, pixelLine, pixelPolygon, snapPixel } from './PixelArt';
 export const ELEMENT_COLORS: Record<string, number> = {
-  physical: 0xe4d6ac,
-  fire: 0xffa45c,
-  ice: 0x9ce4f2,
-  lightning: 0xcbbeff,
-  arcane: 0xbb98ec,
-  poison: 0xaedb79,
+  physical: 0xe3cfaa,
+  fire: 0xeaa068,
+  ice: 0xa5d7dd,
+  lightning: 0xbbcbe7,
+  arcane: 0xc3a4d4,
+  poison: 0xa9be7e,
 };
+const entityEffects = new Set([
+  'homing',
+  'explosive',
+  'elemental',
+  'spear',
+  'orb',
+  'boomerang',
+  'rain',
+  'meteor',
+  'blackhole',
+  'vines',
+  'whirlwind',
+]);
+const directionalEffects = new Set([
+  'frenzy',
+  'bash',
+  'hammer',
+  'scythe',
+  'spike',
+  'claw',
+  'fan',
+  'pull',
+  'multishot',
+]);
+const targetedEffects = new Set(['siphon', 'chain', 'curse', 'raven']);
 interface Effect {
   view: Container;
   age: number;
@@ -24,7 +49,10 @@ export class VFXManager {
     private layer: Container,
     private record?: (cue: CombatEffectCue) => void,
     private density: 'full' | 'reduced' | 'off' = 'full',
-  ) {}
+  ) {
+    if (density === 'full' && globalThis.matchMedia?.('(prefers-reduced-motion: reduce)').matches)
+      this.density = 'reduced';
+  }
   replay(cue: CombatEffectCue) {
     const { x, y, color } = cue;
     switch (cue.kind) {
@@ -49,48 +77,33 @@ export class VFXManager {
   signature(skill: SkillDef, x: number, y: number, angle: number, tx: number, ty: number) {
     if (this.density === 'off' || (this.density === 'reduced' && skill.kind === 'basic')) return;
     // Flying missiles and persistent ground spells carry their own artwork on the actual entity.
-    if (
-      [
-        'homing',
-        'explosive',
-        'multishot',
-        'elemental',
-        'spear',
-        'orb',
-        'boomerang',
-        'rain',
-        'meteor',
-        'blackhole',
-        'vines',
-        'whirlwind',
-      ].includes(skill.effect)
-    )
-      return;
+    if (entityEffects.has(skill.effect)) return;
     const texture = getSkillTexture(skill.id);
     if (!texture) return;
     const glyph = new Sprite(texture);
     glyph.anchor.set(0.5);
-    const directed = [
-      'frenzy',
-      'bash',
-      'hammer',
-      'scythe',
-      'spike',
-      'claw',
-      'fan',
-      'pull',
-    ].includes(skill.effect);
-    const targeted = ['siphon', 'chain', 'curse'].includes(skill.effect);
-    const size = skill.kind === 'ultimate' ? 138 : skill.kind === 'basic' ? 65 : 96;
-    glyph.position.set(
-      targeted ? tx : x + (directed ? Math.cos(angle) * 34 : 0),
-      (targeted ? ty : y + (directed ? Math.sin(angle) * 34 : 0)) - 20,
-    );
-    if (directed) glyph.rotation = angle;
-    glyph.width = glyph.height = size;
-    this.add(glyph, skill.kind === 'basic' ? 0.24 : 0.48, (view, t) => {
-      view.alpha = Math.min(1, (1 - t) * 2);
-      view.width = view.height = size * (0.75 + t * 0.4);
+    const travel = skill.kind === 'movement' && skill.effect !== 'teleport';
+    const directed = travel || directionalEffects.has(skill.effect);
+    const targeted = targetedEffects.has(skill.effect);
+    const ritual = skill.kind === 'ultimate' || skill.kind === 'defense';
+    const size = ritual ? 134 : skill.kind === 'basic' ? 67 : 98;
+    const dx = directed ? Math.cos(angle) : 0;
+    const dy = directed ? Math.sin(angle) : 0;
+    const offset = directed ? 31 : 0;
+    const startX = targeted ? tx : x + dx * offset;
+    const startY = (targeted ? ty : y + dy * offset) - (ritual ? 29 : 16);
+    glyph.position.set(startX, startY);
+    glyph.rotation = directed ? angle : 0;
+    glyph.width = glyph.height = size * 0.68;
+    const life = ritual ? 0.66 : travel ? 0.37 : skill.kind === 'basic' ? 0.23 : 0.41;
+    this.add(glyph, life, (view, t) => {
+      const sweep = 1 - (1 - t) ** 2;
+      const retreat = travel ? -37 : 16;
+      view.position.set(startX + dx * retreat * sweep, startY + dy * retreat * sweep);
+      view.alpha = Math.min(1, t * 12) * (1 - t) ** (ritual ? 0.8 : 1.3);
+      view.width = size * (0.68 + sweep * (travel ? 0.76 : 0.46));
+      view.height = size * (0.68 + sweep * (travel ? 0.12 : 0.46));
+      if (directed && !travel) view.rotation = angle - 0.19 + 0.46 * sweep;
     });
   }
   private stamp(
@@ -123,19 +136,31 @@ export class VFXManager {
     if (this.density === 'off') return;
     if (this.density === 'reduced') count = Math.min(4, count);
     const diameter = large ? 110 : 22 + count * 2;
+    const art = heal
+      ? 'heal'
+      : color === ELEMENT_COLORS.ice
+        ? 'frostfield'
+        : color === ELEMENT_COLORS.poison
+          ? 'vortex'
+          : color === ELEMENT_COLORS.lightning
+            ? 'lightning'
+            : 'burst';
     if (
       this.stamp(
-        heal ? 'heal' : 'burst',
+        art,
         x,
         y,
         color,
         diameter,
         diameter,
-        heal ? 0 : Math.random() * Math.PI,
-        0.38,
+        heal || art === 'frostfield' ? 0 : Math.random() * Math.PI,
+        heal ? 0.44 : 0.3,
         (v, t) => {
-          v.width = v.height = diameter * (0.55 + t * 0.75);
-          v.alpha = 1 - t;
+          const release = 1 - (1 - t) ** 2;
+          v.width = diameter * (0.42 + release * 0.78);
+          v.height = v.width * (heal ? 1.1 : art === 'lightning' ? 0.55 : 1);
+          v.y = y - (heal ? release * 20 : 0);
+          v.alpha = (1 - t) ** 1.5;
         },
       )
     )

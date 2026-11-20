@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type CSSProperties } from 'react';
+import { useEffect, useRef, useState, type CSSProperties, type MouseEvent } from 'react';
 import {
   ArrowLeft,
   ArrowRight,
@@ -56,6 +56,16 @@ import './ui/pixel-fantasy.css';
 import './ui/responsive-layout.css';
 import './ui/world-first.css';
 import './ui/watchers-style.css';
+
+function playControlAudio(event: MouseEvent) {
+  const target = event.target;
+  const control =
+    target instanceof Element &&
+    target.closest<HTMLElement>('button, summary, select, input[type="checkbox"]');
+  if (!control || control.matches(':disabled, [aria-disabled="true"], .skill-cast, [data-silent]'))
+    return;
+  audio.play(control.dataset.sound ?? (control.tagName === 'SUMMARY' ? 'folio' : 'click'));
+}
 
 function App() {
   const compact = useCompactLayout();
@@ -128,7 +138,6 @@ function App() {
     };
   }, []);
   const open = (id: string) => {
-    audio.play('click');
     setInspectItem(undefined);
     if (id === 'story') {
       setPanel(null);
@@ -147,7 +156,7 @@ function App() {
     if (mode === 'rift') current.beginSummit();
     current.setInCombat(true);
     setNotice('');
-    audio.play('pylon');
+    audio.play('gate');
     audio.setTrack('rift');
     setResult(null);
     const { save, accounts, activeAccountId, labBackup } = useGameStore.getState();
@@ -177,6 +186,7 @@ function App() {
     setResult(null);
     setCoop(room);
     setConfig({ ...member.config, preferences: useGameStore.getState().save.preferences });
+    audio.play('gate');
     audio.setTrack('rift');
   };
   const finish = async (r: RunResult) => {
@@ -196,6 +206,13 @@ function App() {
       }
     } else if (!config?.training) completeRun(r);
     const current = useGameStore.getState();
+    if (current.save.level > before.level) audio.play('upgrade');
+    if (coop && coop.code !== 'TRIAL') {
+      const rareDrop = ['primal', 'set', 'legendary', 'epic', 'rare'].find((rarity) =>
+        r.items.some((item) => item.rarity === rarity),
+      );
+      if (rareDrop) audio.play(rareDrop);
+    }
     const clearedAfter = current.save.progression?.clearedStage ?? 0;
     const chapter =
       r.won && !r.challenge && !labBackup && clearedBefore < r.stage && clearedAfter >= r.stage
@@ -268,6 +285,7 @@ function App() {
       <div
         className={`app character-entry ${compact ? 'layout-compact' : 'layout-desktop'}`}
         style={{ '--font-scale': preferences.fontScale } as CSSProperties}
+        onClickCapture={playControlAudio}
       >
         <CharacterCreation
           onAccount={() => setPanel('accounts')}
@@ -280,7 +298,7 @@ function App() {
           onEnterHall={() => setPanel(null)}
         />
         {notice && (
-          <div className="toast" role="status">
+          <div className="creation-status" role="status">
             {notice}
           </div>
         )}
@@ -308,6 +326,7 @@ function App() {
       className={`app ${compact ? 'layout-compact' : 'layout-desktop'} ${config ? 'in-combat' : 'in-town'} orientation-${save.orientation}`}
       style={{ '--font-scale': preferences.fontScale } as CSSProperties}
       data-color-assist={preferences.colorAssist}
+      onClickCapture={playControlAudio}
       data-campaign-complete={
         (!labBackup && (save.progression?.clearedStage ?? 0) >= CAMPAIGN_FINALE.stage) || undefined
       }
@@ -741,9 +760,9 @@ function CombatView({
             else onFinishRef.current(r);
           }
         },
-        onSound: (n) => {
-          if (n === 'boss') audio.setTrack('boss');
-          audio.play(n);
+        onSound: (name) => {
+          if (name === 'boss' || name === 'boss-theme') audio.setTrack('boss');
+          if (name !== 'boss-theme') audio.play(name);
         },
       })
       .then(() => {

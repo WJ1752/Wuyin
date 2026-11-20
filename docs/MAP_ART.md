@@ -12,7 +12,7 @@
 
 ## 第三版：中央传送门与外围服务
 
-当时主城使用 `public/assets/maps/watchers-camp-v3.png`，1296×1216、不透明 PNG；使用内置 imagegen 编辑第二版，沿用同一精细像素风。传送门、符文广场与南北道路留空，移除中央篝火，七处服务建筑沿外围排布。`HALL_LAYOUT` 统一传送门、出生点、留白区、道路与行走边界；七名NPC脚点和朝广场侧的接近点由 `npcHall.ts` 定义。
+当时主城使用 `docs/art/legacy-maps/watchers-camp-v3.png`，1296×1216、不透明 PNG，由内置 ImageGen 编辑第二版。历史地图原图已归档。新营地规则见 [整体美术方案](ART_DIRECTION.md)。
 
 | 服务 | 门前脚点 (x,y) | 接近点 (x,y) |
 | --- | --- | --- |
@@ -34,7 +34,7 @@
 
 ## 第二版素材记录
 
-2026-11-01 使用内置 `image_gen` 重绘营地环境，参考原职业 ranger.png 的高精度 Q 版暗黑幻想像素画风，并保留原大厅功能区布局。正式素材为 `public/assets/maps/watchers-camp-v2.png`，1296×1216、不透明 PNG；项目已保存本地副本，不依赖生成工具路径。
+2026-11-01 使用内置 `image_gen` 重绘营地环境，参考原职业 ranger.png 的 Q 版暗黑幻想像素画风。历史素材为 `docs/art/legacy-maps/watchers-camp-v2.png`。
 
 `HallScene.tsx` 直接展示该地图，复用原有 CSS 场景层。图片完整填充原有地面坐标系，不使用 cover 裁切；NPC、点击移动与交互位置继续使用 `src/data/npcHall.ts` 的归一坐标。建筑面向各自的 NPC 站位，中央石路保留通行区域。地图不烘焙人物、名字、交互按钮或伙伴，不会与运行时贴图重叠。
 
@@ -64,7 +64,7 @@ Constraints: NO TEXT, no letters, no numbers, no logos, no interface, no borders
 
 ## 旧版四主题战斗地表
 
-`public/assets/maps/rift-ground-atlas-v2.png` 为内置 `image_gen` 按同一 ranger 画风生成的1254×1254不透明四格图集。象限依次对应现有主题ID：左上幽暗密林、右上荒芜墓园、左下熔火地狱、右下虚空圣殿。没有改变原有150层主题配置。
+`docs/art/legacy-maps/rift-ground-atlas-v2.png` 为内置 `image_gen` 按同一 ranger 画风生成的不透明四格图集。象限依次为幽暗密林、荒芜墓园、熔火地狱和虚空圣殿。
 
 `MapGenerator.ts` 使用 Pixi `Assets` 只加载一次，按图像实际宽高各一半切出独立 `Texture`，以 `TilingSprite` 绘制地表并降低亮度，让人物、怪物和红色预警更清晰；树木、墓碑、岩石、晶石沿用现有道具绘制。`GameEngine.init` 在创建地图前预加载。贴图加载失败保留旧程序地表，场景坐标、碰撞与战斗机制不变。
 

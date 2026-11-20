@@ -1,6 +1,6 @@
 # NPC 第二版素材
 
-当前版本采用[暮铁守望总美术方案](ART_DIRECTION.md)。下文为早期素材制作记录。
+现行七位营地居民的站姿、交互动效与图集见[像素人物与伙伴](PAINTED_ACTORS.md)。下文记录早期像素素材制作。
 
 
 使用内置 imagegen，以已有 ranger.png、sorcerer.png 为画风参照生成透明图集，正式文件为 `public/assets/npcs/watchers-v2.png`，实际尺寸 1774×887 RGBA。浏览器按四列两行等分显示，避免运行时导出裁切及重复下载七份图片；最末一格留空。每个格子的绘图内容、剪影和功能道具不同。

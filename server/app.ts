@@ -321,6 +321,8 @@ export async function createApp(options: AppOptions = {}) {
   });
   if (options.staticDir) await app.register(serveStatic, { root: resolve(options.staticDir) });
   app.setNotFoundHandler((request, reply) => {
+    if (request.url.startsWith('/assets/'))
+      return reply.code(404).send({ error: '资源不存在。', code: 'ASSET_NOT_FOUND' });
     if (options.staticDir && request.method === 'GET' && !request.url.startsWith('/api/'))
       return reply.sendFile('index.html');
     return reply.code(404).send({ error: '接口不存在。', code: 'NOT_FOUND' });

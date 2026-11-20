@@ -13,6 +13,14 @@
   margin: 24px auto;
   padding: clamp(18px, 4vw, 38px);
 }
+.creation-status {
+  width: min(620px, calc(100% - 28px));
+  margin: 0 auto 20px;
+  padding: 10px 16px;
+  border-inline-start: 2px solid #c79359;
+  color: #efdec0;
+  background: #19242c;
+}
 .character-creation h1 {
   margin: 8px 0;
   font-size: clamp(28px, 5vw, 42px);
@@ -122,6 +130,59 @@
   text-align: right;
   color: #aaa18f;
   font-size: 12px;
+}
+.app .story-book .story-art--painted {
+  background:
+    linear-gradient(90deg, #111b22ba, #18243032, #111b22c9),
+    url('/assets/maps/watchers-keep.webp') center 27% / cover;
+  color: #eddec2;
+  text-shadow: 0 2px 6px #070b0f;
+}
+.story-plate {
+  position: relative;
+  isolation: isolate;
+  margin: 16px 0;
+  overflow: hidden;
+}
+.app .story-book .story-plate .campaign-ending-art {
+  display: block;
+  width: 100%;
+  margin: 0;
+  aspect-ratio: 16 / 9;
+  image-rendering: pixelated;
+  animation: story-road-appear 1.4s ease-out both;
+}
+.story-plate::after {
+  position: absolute;
+  inset: 0;
+  content: '';
+  pointer-events: none;
+  background: radial-gradient(ellipse at 20% 41%, #ffca7450, transparent 18%);
+  animation: story-lamp-light 3.8s ease-in-out infinite alternate;
+}
+@keyframes story-road-appear {
+  from {
+    opacity: 0.55;
+    transform: scale(1.025);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+@keyframes story-lamp-light {
+  from {
+    opacity: 0.24;
+  }
+  to {
+    opacity: 0.73;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .app .story-book .story-plate .campaign-ending-art,
+  .story-plate::after {
+    animation: none;
+  }
 }
 .story-book footer {
   display: flex;

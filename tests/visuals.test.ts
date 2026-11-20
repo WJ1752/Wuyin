@@ -2,7 +2,8 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { readFileSync } from 'node:fs';
 import { HALL_NPCS } from '../src/data/npcHall';
-import { NPC_ART } from '../src/data/npcVisuals';
+import { NPC_ART, NPC_ATLAS } from '../src/data/npcVisuals';
+import { skillSound, SOUND_NAMES } from '../src/audio/SynthAudio';
 import { SKILLS } from '../src/data/skillTrees';
 import { SKILL_ART, CAST_ART, EFFECT_CELLS } from '../src/data/skillArt';
 import { LEGENDARIES } from '../src/data/legendaries';
@@ -36,17 +37,19 @@ test('equipment drop atlas matches the stable visual catalog', async () => {
   assert.equal(metadata.height, EQUIPMENT_ATLAS.rows * EQUIPMENT_ATLAS.cell);
 });
 
-test('all seven hall residents resolve to distinct cells of a bundled high resolution RGBA atlas', () => {
+test('all seven hall residents resolve to distinct cells of a bundled transparent atlas', async () => {
   assert.deepEqual(Object.keys(NPC_ART).sort(), HALL_NPCS.map((npc) => npc.id).sort());
+  const atlas = await sharp(
+    readFileSync(new URL(`../public/${NPC_ATLAS.replace(/^\.?\//, '')}`, import.meta.url)),
+  ).metadata();
+  assert.equal(atlas.format, 'webp');
+  assert.equal(atlas.hasAlpha, true);
+  assert.ok(atlas.width >= 4 * 128 && atlas.width % 4 === 0);
+  assert.ok(atlas.height >= 2 * 128 && atlas.height % 2 === 0);
   const cells = HALL_NPCS.map((npc) => {
     const art = NPC_ART[npc.id];
     assert.ok(art.description.length > 0);
-    const png = readFileSync(
-      new URL(`../public/${art.src.replace(/^\.?\//, '')}`, import.meta.url),
-    );
-    assert.equal(png.toString('hex', 0, 8), '89504e470d0a1a0a');
-    assert.ok(png.readUInt32BE(16) >= 1600 && png.readUInt32BE(20) >= 800);
-    assert.equal(png[25], 6, 'transparent RGBA sprites');
+    assert.equal(art.src, NPC_ATLAS);
     assert.ok(art.column >= 0 && art.column < 4 && art.row >= 0 && art.row < 2);
     return `${art.column}:${art.row}`;
   });
@@ -59,6 +62,8 @@ test('every skill has an illustrated tile and every active skill has a distinct 
   for (const frame of Object.values(SKILL_ART))
     assert.ok(frame.column < 4 && frame.row < 4, 'skill icons must fit the published 4×4 sheet');
   assert.deepEqual(Object.keys(CAST_ART).sort(), active.map((s) => s.id).sort());
+  for (const skill of active)
+    assert.ok(SOUND_NAMES.includes(skillSound(skill)), `${skill.id} must resolve to a cast sound`);
   for (const frames of [SKILL_ART, CAST_ART]) {
     const all = Object.values(frames);
     assert.equal(new Set(all.map((f) => `${f.src}/${f.column}/${f.row}`)).size, all.length);

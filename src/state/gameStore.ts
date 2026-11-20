@@ -835,7 +835,7 @@ export const useGameStore = create<GameState>((set, get) => {
       }
       let data = newAccountSave();
       let save = activeSave(data);
-      let notice = '欢迎来到雾隐营地。选择秘境，开始你的第一场远征。';
+      let notice = '';
       let restored = false;
       candidates.sort(
         (a, b) =>

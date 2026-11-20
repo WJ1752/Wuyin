@@ -33,6 +33,7 @@ import { preloadMonsterTextures } from '../render/MonsterTextures';
 import {
   createMap,
   createPropSprite,
+  RIFT_MAP_SIZE,
   preloadMapTextures,
   preloadPropTextures,
 } from '../render/MapGenerator';
@@ -62,13 +63,13 @@ import type {
   MonsterAttackPose,
 } from '../core/coop';
 import { coopBalance } from '../data/coopBalance';
-import { PET_ART } from '../data/petVisuals';
-import { preloadPetTexture, getPetTexture } from '../render/PetTextures';
+import { PetRig, preloadPetTexture } from '../render/PetTextures';
 import type { RunResult } from '../core/types';
 import { DEFAULT_KEYS, getPreferences } from '../core/preferences';
 import { CHALLENGES } from '../data/challenges';
-import { combatFraming } from '../render/viewport';
+import { boundCamera, combatFraming } from '../render/viewport';
 import { isSkillAutoEnabled } from '../data/progression';
+import { skillSound } from '../audio/SynthAudio';
 
 /** Rendering-free actors keep the production simulation usable by the server. */
 class SimulationActor extends Container {
@@ -76,6 +77,7 @@ class SimulationActor extends Container {
   update(..._args: unknown[]) {}
   hit() {}
   drawHealth(..._args: unknown[]) {}
+  defeat() {}
 }
 
 const arenaLimit = 780;
@@ -105,6 +107,39 @@ function warningDecal(
     height: 2 * (cone ? w.range * Math.sin(w.width) : w.width),
     angle: w.angle,
   };
+}
+function drawWarning(g: Graphics, w: CoopFrame['warnings'][number], assist: boolean, progress = 1) {
+  const color = assist ? 0xffd68f : w.color;
+  if (w.shape === 'circle') {
+    g.circle(w.x, w.y, w.radius);
+  } else if (w.shape === 'cone') {
+    const points = [w.x, w.y];
+    for (let i = 0; i <= 16; i++) {
+      const angle = w.angle - w.width + (w.width * i) / 8;
+      points.push(w.x + Math.cos(angle) * w.range, w.y + Math.sin(angle) * w.range);
+    }
+    g.poly(points);
+  } else {
+    const dx = Math.cos(w.angle) * w.range;
+    const dy = Math.sin(w.angle) * w.range;
+    const ox = -Math.sin(w.angle) * w.width;
+    const oy = Math.cos(w.angle) * w.width;
+    g.poly([
+      w.x + ox,
+      w.y + oy,
+      w.x + dx + ox,
+      w.y + dy + oy,
+      w.x + dx - ox,
+      w.y + dy - oy,
+      w.x - ox,
+      w.y - oy,
+    ]);
+  }
+  g.fill({ color, alpha: 0.12 }).stroke({ color, width: 2.2, alpha: 0.96 });
+  if (w.shape === 'circle') {
+    if (progress < 1)
+      g.circle(w.x, w.y, w.radius * progress).stroke({ color, width: 2, alpha: 0.76 });
+  }
 }
 const clampArena = (value: number) => Math.max(-arenaLimit, Math.min(arenaLimit, value));
 // Turn an outward spawn offset inward at the edge, keeping the intended distance from the player.
@@ -259,6 +294,7 @@ export class GameEngine {
   private textLayer = new Container();
   private hero!: CharacterRig;
   private pet = new Container();
+  private petRig?: PetRig;
   private vfx!: VFXManager;
   private numbers!: FloatingText;
   private projectiles!: ProjectileSystem;
@@ -355,10 +391,14 @@ export class GameEngine {
   private coopWallClock = 0;
   private coopAccumulator = 0;
   private coopReceivedSequence = -1;
+  private coopAudioFrame?: CoopFrame;
+  private coopAudioAt = 0;
   private coopResults?: Record<string, RunResult>;
   private coopDownSeconds = 0;
   private coopInput: CoopInput = { sequence: 0, movement: { x: 0, y: 0 }, casts: [] };
   private coopVisuals = new Graphics();
+  private warningLayer = new Container();
+  private coopWarningVisuals = new Graphics();
   private coopStamps: Sprite[] = [];
   private recentEffects: NonNullable<CoopFrame['effects']> = [];
   private effectSequence = 0;
@@ -473,12 +513,14 @@ export class GameEngine {
       preloadSkillTextures(this.skills.map((skill) => skill.id)),
       preloadPetTexture(config.petId),
       preloadAtlas(
-        'assets/maps/rift-loot.webp',
-        2,
+        'assets/maps/painted/loot.webp',
+        4,
         1,
         [
           ['loot:item', 0, 0],
           ['loot:gold', 1, 0],
+          ['loot:progress', 2, 0],
+          ['loot:health', 3, 0],
         ],
         'nearest',
       ),
@@ -508,7 +550,13 @@ export class GameEngine {
     host.appendChild(this.app.canvas);
     this.app.canvas.style.touchAction = 'none';
     this.app.canvas.setAttribute('aria-label', '秘境战场，使用 WASD 移动，空格施放位移技能');
-    this.world.addChild(this.floorLayer, this.entityLayer, this.effectsLayer, this.textLayer);
+    this.world.addChild(
+      this.floorLayer,
+      this.entityLayer,
+      this.effectsLayer,
+      this.warningLayer,
+      this.textLayer,
+    );
     this.app.stage.addChild(this.world, this.minimap);
     this.entityLayer.sortableChildren = true;
     this.floorLayer.addChild(createMap(stage));
@@ -631,6 +679,7 @@ export class GameEngine {
       this.coopLabels.set(member.id, label);
     }
     this.effectsLayer.addChild(this.coopVisuals);
+    this.warningLayer.addChild(this.coopWarningVisuals);
   }
 
   private linkCoopActor(actor: GameEngine) {
@@ -769,6 +818,7 @@ export class GameEngine {
           actor.hp = actor.config.stats.hp * coopBalance(this.coopActors.size).reviveHealth;
           actor.buffs.add('invulnerable', '复苏庇护', 2);
           actor.hero.alpha = 1;
+          if (actor.hero instanceof CharacterRig) actor.hero.setDown(false);
         } else continue;
       }
       const control = this.coopControls.get(id);
@@ -951,6 +1001,61 @@ export class GameEngine {
     this.callbacks.onFinish(this.coopResults[this.coop!.localId]);
   }
 
+  private replayCoopAudio(frame: CoopFrame, localId: string) {
+    const now = performance.now();
+    const previous = this.coopAudioFrame;
+    const live =
+      !!previous && now - this.coopAudioAt < 900 && frame.elapsed - previous.elapsed < 0.8;
+    this.coopAudioFrame = frame;
+    this.coopAudioAt = now;
+    const bossAlive = frame.enemies.some((enemy) => enemy.boss && enemy.hp > 0);
+    if (bossAlive && !this.bossSpawned) {
+      this.bossSpawned = true;
+      this.callbacks.onSound(live ? 'boss' : 'boss-theme');
+    }
+    // Resume music after reconnecting without replaying a batch of old action sounds.
+    if (!live || !previous) return;
+    const local = frame.actors.find((actor) => actor.id === localId);
+    const before = previous.actors.find((actor) => actor.id === localId);
+    if (!local || !before) return;
+    const near = ({ x, y }: { x: number; y: number }, range: number) =>
+      Math.hypot(x - local.x, y - local.y) < range;
+    for (const state of frame.actors) {
+      if (!state.cast || !near(state, 260)) continue;
+      const lastCast = previous.actors.find((actor) => actor.id === state.id)?.cast;
+      if (state.cast.sequence > (lastCast?.sequence ?? -1)) {
+        const skill = this.coopActors.get(state.id)?.skill(state.cast.skillId);
+        if (skill) this.callbacks.onSound(skillSound(skill));
+      }
+    }
+    if (local.snapshot.hp < before.snapshot.hp) this.callbacks.onSound('hurt');
+    if (local.snapshot.hp > before.snapshot.hp + local.snapshot.maxHp * 0.05)
+      this.callbacks.onSound('health');
+    if (local.moving && local.snapshot.hp > 0) this.callbacks.onSound('footstep');
+    const warnings = new Set(previous.warnings.map((warning) => warning.id));
+    if (frame.warnings.some((warning) => !warnings.has(warning.id) && near(warning, 400)))
+      this.callbacks.onSound('warning');
+    if (
+      frame.pylons.some(
+        (pylon) => pylon.used && !previous.pylons.find((old) => old.id === pylon.id)?.used,
+      )
+    )
+      this.callbacks.onSound('pylon');
+    const visibleOrbs = new Set(frame.orbs.map((orb) => `${orb.kind}:${orb.x}:${orb.y}`));
+    for (const orb of previous.orbs) {
+      if (!near(orb, 95) || visibleOrbs.has(`${orb.kind}:${orb.x}:${orb.y}`)) continue;
+      if (orb.kind === 'progress') this.callbacks.onSound('progress');
+      if (orb.kind === 'gold') this.callbacks.onSound('coin');
+    }
+    const previousHealth = new Map(previous.enemies.map((enemy) => [enemy.id, enemy.hp]));
+    if (
+      frame.enemies.some(
+        (enemy) => near(enemy, 380) && enemy.hp < (previousHealth.get(enemy.id) ?? enemy.hp),
+      )
+    )
+      this.callbacks.onSound('impact');
+  }
+
   receiveCoopFrame(frame: CoopFrame) {
     if (
       !this.isCoopGuest ||
@@ -960,6 +1065,7 @@ export class GameEngine {
     )
       return;
     this.coopReceivedSequence = frame.sequence;
+    this.replayCoopAudio(frame, this.coop!.localId);
     const dt = Math.max(0.001, frame.elapsed - this.elapsed);
     this.elapsed = frame.elapsed;
     for (const cue of frame.effects ?? []) {
@@ -974,6 +1080,10 @@ export class GameEngine {
       if (!actor) continue;
       actor.x = state.x;
       actor.y = state.y;
+      if (actor.hero instanceof CharacterRig) {
+        actor.hero.setDown(state.snapshot.hp <= 0);
+        if (state.snapshot.hp < actor.hp && state.snapshot.hp > 0) actor.hero.hit();
+      }
       actor.hp = state.snapshot.hp;
       actor.resource = state.snapshot.resource;
       actor.cooldowns = { ...state.snapshot.cooldowns };
@@ -999,6 +1109,9 @@ export class GameEngine {
       actor.hero.zIndex = state.y;
       actor.hero.alpha = state.snapshot.hp <= 0 ? 0.3 : 1;
       if (state.pet) {
+        const dx = state.pet.x - actor.pet.x;
+        const dy = state.pet.y - actor.pet.y;
+        actor.petRig?.travel(dx, Math.hypot(dx, dy) > 1);
         actor.pet.position.set(state.pet.x, state.pet.y);
         actor.pet.zIndex = state.pet.y;
       }
@@ -1058,6 +1171,7 @@ export class GameEngine {
     for (const enemy of existing.values()) enemy.view.destroy({ children: true });
     this.enemies = next;
     this.coopVisuals.clear();
+    this.coopWarningVisuals.clear();
     let usedStamps = 0;
     const stamp = (
       texture: Texture | undefined,
@@ -1121,47 +1235,18 @@ export class GameEngine {
             : getAtlasTexture('loot:gold');
         if (stamp(texture, o.x, o.y, size, size, 0, 0xffffff, 1)) continue;
       }
-      if (
-        (o.kind === 'health' || o.kind === 'progress') &&
-        stamp(getEffectTexture('globe'), o.x, o.y, 22, 22, 0, color, 1)
-      )
-        continue;
+      if (o.kind === 'health' || o.kind === 'progress') {
+        const offset = Math.sin(frame.elapsed * 3 + o.x / 50) * 2.5;
+        if (stamp(getAtlasTexture(`loot:${o.kind}`), o.x, o.y + offset, 26, 26, 0, 0xffffff, 1))
+          continue;
+      }
       this.coopVisuals.rect(o.x - 3, o.y - 3, 6, 6).fill(color);
     }
+    const colorAssist = getPreferences(this.config.preferences).colorAssist;
     for (const w of frame.warnings) {
       const d = warningDecal(w);
-      stamp(d.texture, d.x, d.y, d.width, d.height, d.angle, 0xffffff, 0.5);
-      if (w.shape === 'circle')
-        pixelEllipse(this.coopVisuals, w.x, w.y, w.radius, w.radius, w.color, 6, 0.5, true);
-      else if (w.shape === 'cone') {
-        const points = [w.x, w.y];
-        for (let i = 0; i <= 12; i++) {
-          const angle = w.angle - w.width + (w.width * 2 * i) / 12;
-          points.push(w.x + Math.cos(angle) * w.range, w.y + Math.sin(angle) * w.range);
-        }
-        pixelPolygon(this.coopVisuals, points, w.color, 6, 0.25);
-      } else {
-        const dx = Math.cos(w.angle) * w.range,
-          dy = Math.sin(w.angle) * w.range;
-        const ox = -Math.sin(w.angle) * w.width,
-          oy = Math.cos(w.angle) * w.width;
-        pixelPolygon(
-          this.coopVisuals,
-          [
-            w.x + ox,
-            w.y + oy,
-            w.x + dx + ox,
-            w.y + dy + oy,
-            w.x + dx - ox,
-            w.y + dy - oy,
-            w.x - ox,
-            w.y - oy,
-          ],
-          w.color,
-          6,
-          0.25,
-        );
-      }
+      stamp(d.texture, d.x, d.y, d.width, d.height, d.angle, 0xffffff, 0.28);
+      drawWarning(this.coopWarningVisuals, w, colorAssist);
     }
     for (const state of frame.pylons) {
       const pylon = this.pylons.find((p) => p.id === state.id);
@@ -1371,9 +1456,14 @@ export class GameEngine {
       const time = performance.now() / 1000;
       for (const actor of this.coopActors.values()) {
         if (actor.hp > 0) actor.hero.update(time, dt, actor.moving, actor.facing, false);
+        actor.petRig?.updatePose(time, dt, actor.hp <= 0);
       }
       for (const e of this.enemies) {
-        if (e.hp <= 0 || !e.guestVelocity) continue;
+        if (e.hp <= 0) {
+          e.view.defeat?.(dt);
+          continue;
+        }
+        if (!e.guestVelocity) continue;
         e.age += dt;
         const movingTime = e.age <= 0.25 ? dt : 0;
         e.view.update(
@@ -1385,6 +1475,10 @@ export class GameEngine {
           e.pose,
         );
       }
+      this.vfx.tick(dt);
+    }
+    if (this.finished) {
+      for (const e of this.enemies) if (e.hp <= 0) e.view.defeat?.(dt);
       this.vfx.tick(dt);
     }
     this.updateCamera(dt);
@@ -1461,6 +1555,7 @@ export class GameEngine {
     mx /= len;
     my /= len;
     this.moving = Math.hypot(mx, my) > 0.1;
+    if (this.moving && !this.headless) this.callbacks.onSound('footstep');
     this.movementDirection = { x: mx, y: my };
     if (mx) this.facing = mx;
     for (const skill of gamepadSkills) this.cast(skill.id);
@@ -1707,7 +1802,8 @@ export class GameEngine {
     const w = this.app.screen.width,
       h = this.app.screen.height;
     const framing = combatFraming(w, h, this.compactViewport?.matches ?? false);
-    const scale = framing.scale;
+    const scale = Math.max(framing.scale, w / RIFT_MAP_SIZE, h / RIFT_MAP_SIZE);
+    const halfMap = (RIFT_MAP_SIZE * scale) / 2;
     this.world.scale.set(scale);
     this.shake = Math.max(0, this.shake - dt * 22);
     const shake =
@@ -1716,8 +1812,8 @@ export class GameEngine {
         ? this.shake
         : 0;
     this.world.position.set(
-      framing.x - this.x * scale + (Math.random() - 0.5) * shake,
-      framing.y - this.y * scale + (Math.random() - 0.5) * shake,
+      boundCamera(framing.x - this.x * scale + (Math.random() - 0.5) * shake, w, halfMap),
+      boundCamera(framing.y - this.y * scale + (Math.random() - 0.5) * shake, h, halfMap),
     );
   }
   private drawMinimap() {
@@ -1870,6 +1966,7 @@ export class GameEngine {
         x = spawnCoordinate(this.x, Math.cos(a) * 350),
         y = spawnCoordinate(this.y, Math.sin(a) * 350);
       this.spawn(MONSTERS[this.config.stage % MONSTERS.length], x, y, true);
+      this.callbacks.onSound('elite');
       for (let i = 0; i < 3; i++)
         this.spawn(
           MONSTERS[this.config.stage % MONSTERS.length],
@@ -1893,6 +1990,7 @@ export class GameEngine {
     };
     const e = this.spawn(def, this.x + 220, this.y - 180);
     e.goblin = true;
+    this.callbacks.onSound('goblin');
     this.numbers.show(e.x, e.y, '盗宝者出现', true, 0xf2cd7d);
   }
   private summonBoss() {
@@ -1933,7 +2031,7 @@ export class GameEngine {
       if (e.hp <= 0) {
         e.deadTime = (e.deadTime ?? 0.4) - dt;
         e.view.alpha = Math.max(0, e.deadTime / 0.4);
-        e.view.rotation += dt * 2;
+        e.view.defeat?.(dt);
         e.view.y -= dt * 18;
         if (e.deadTime <= 0 && !e.brain?.pending.length) {
           e.warning?.view.destroy();
@@ -2085,13 +2183,16 @@ export class GameEngine {
         continue;
       }
       animation.age += dt;
-      const t = Math.min(1, animation.age / Math.max(0.01, animation.event.delay));
+      const preferences = getPreferences(this.config.preferences);
+      const reduced =
+        preferences.effects === 'reduced' ||
+        globalThis.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+      const t = reduced ? 1 : Math.min(1, animation.age / Math.max(0.01, animation.event.delay));
       const e = animation.event;
       view.alpha = 0.6 + t * 0.4;
       if (e.shape === 'circle') {
         view.clear();
-        pixelEllipse(view, e.x, e.y, e.radius, e.radius, e.color, 6, 0.12);
-        pixelEllipse(view, e.x, e.y, e.radius * t, e.radius * t, e.color, 6, 0.9, true);
+        drawWarning(view, e, preferences.colorAssist, t);
       }
     }
   }
@@ -2107,39 +2208,7 @@ export class GameEngine {
     if (event.kind === 'telegraph') {
       this.clearWarning(event.id);
       const g = new Graphics();
-      const color = event.color;
-      if (event.shape === 'circle') {
-        pixelEllipse(g, event.x, event.y, event.radius, event.radius, color, 6, 0.15);
-        pixelEllipse(g, event.x, event.y, event.radius, event.radius, color, 6, 0.8, true);
-      } else {
-        const points = event.shape === 'cone' ? [event.x, event.y] : [];
-        if (event.shape === 'cone') {
-          for (let i = 0; i <= 12; i++) {
-            const a = event.angle - event.width + (event.width * 2 * i) / 12;
-            points.push(event.x + Math.cos(a) * event.range, event.y + Math.sin(a) * event.range);
-          }
-        } else {
-          const dx = Math.cos(event.angle) * event.range,
-            dy = Math.sin(event.angle) * event.range;
-          const ox = -Math.sin(event.angle) * event.width,
-            oy = Math.cos(event.angle) * event.width;
-          points.push(
-            event.x + ox,
-            event.y + oy,
-            event.x + dx + ox,
-            event.y + dy + oy,
-            event.x + dx - ox,
-            event.y + dy - oy,
-            event.x - ox,
-            event.y - oy,
-          );
-        }
-        pixelPolygon(g, points, color, 6, 0.18);
-        for (let i = 0; i < points.length; i += 2) {
-          const j = (i + 2) % points.length;
-          pixelLine(g, points[i], points[i + 1], points[j], points[j + 1], color, 4, 0.8);
-        }
-      }
+      drawWarning(g, event, getPreferences(this.config.preferences).colorAssist);
       const decal = warningDecal(event);
       const art = decal.texture ? new Sprite(decal.texture) : undefined;
       if (art) {
@@ -2148,13 +2217,13 @@ export class GameEngine {
         art.width = decal.width;
         art.height = decal.height;
         art.rotation = decal.angle;
-        art.alpha = 0.5;
+        art.alpha = 0.32;
         this.floorLayer.addChild(art);
       }
-      this.floorLayer.addChild(g);
+      this.warningLayer.addChild(g);
       this.enemyWarnings.set(event.id, g);
       this.warningAnimations.set(event.id, { event, age: 0, art });
-      if (e.boss) this.callbacks.onSound('warning');
+      if ((e.boss || e.elite) && this.distance(e) < 490) this.callbacks.onSound('warning');
     } else if (event.kind === 'strike') {
       this.clearWarning(event.id);
       this.vfx.ring(event.targetX, event.targetY, event.color, event.radius);
@@ -2278,11 +2347,16 @@ export class GameEngine {
       this.numbers.show(this.x, this.y, `−${Math.round(damage)}`, false, 0xef8b98);
       this.callbacks.onSound('hurt');
       this.shake = 4;
+      if (this.hero instanceof CharacterRig) this.hero.hit();
     }
     if (this.hp <= 0 && this.learned('final_service') && !this.buffs.has('final_service_cd')) {
       this.hp = this.config.stats.hp * 0.25 * this.rankScale('final_service');
       this.buffs.add('invulnerable', '灵魂庇护', 3);
       this.buffs.add('final_service_cd', '命匣冷却', 60);
+    }
+    if (this.hp <= 0) {
+      if (this.hero instanceof CharacterRig) this.hero.setDown(true);
+      this.petRig?.updatePose(this.elapsed, 0, true);
     }
   }
   private updateShield(dt: number) {
@@ -2442,7 +2516,7 @@ export class GameEngine {
         this.lastCast = { sequence: this.attackCount, skillId: skill.id, angle, tx, ty };
     }
     this.vfx.signature(skill, this.x, this.y, angle, tx, ty);
-    this.callbacks.onSound(skill.effect);
+    if (!free) this.callbacks.onSound(skillSound(skill));
     if (!free && this.config.petId.includes('imp'))
       this.vfx.burst(this.x, this.y - 20, 0xff9b58, 5);
     if (!free && ['basic', 'core'].includes(skill.kind) && this.buffs.has('vengeance')) {
@@ -3040,6 +3114,7 @@ export class GameEngine {
     e.view.hit();
     this.hp = Math.min(stats.hp, this.hp + stats.lifeOnHit * (dot ? 0.1 : 1));
     if (!dot) this.numbers.show(e.x, e.y, damage, crit);
+    if (!dot && !crit && dealt > 0) this.callbacks.onSound('impact');
     if (crit) {
       this.callbacks.onSound('critical');
       if (!e.boss) {
@@ -3199,6 +3274,7 @@ export class GameEngine {
     this.combo++;
     this.comboTimer = 3;
     this.gold += 3;
+    if (!e.boss) this.callbacks.onSound('fall');
     this.vfx.burst(e.x, e.y, 0x899d84, 7);
     if (this.config.classId === 'necromancer')
       this.resource = Math.min(
@@ -3525,10 +3601,8 @@ export class GameEngine {
     if (item) color = Number.parseInt(RARITY_COLORS[item.rarity].slice(1), 16);
     const texture =
       kind === 'item' && item
-        ? getDropTexture(getItemAppearanceKey(item), item.slot)
-        : kind === 'gold'
-          ? getAtlasTexture('loot:gold')
-          : undefined;
+        ? (getDropTexture(getItemAppearanceKey(item), item.slot) ?? getAtlasTexture('loot:item'))
+        : getAtlasTexture(`loot:${kind}`);
     if (kind === 'item') {
       if (!texture)
         pixelStamp(
@@ -3574,13 +3648,7 @@ export class GameEngine {
           -6,
           3,
         );
-    } else if (getEffectTexture('globe')) {
-      const globe = new Sprite(getEffectTexture('globe'));
-      globe.anchor.set(0.5);
-      globe.width = globe.height = kind === 'health' ? 22 : 26;
-      globe.tint = color;
-      view.addChild(globe);
-    } else {
+    } else if (!texture) {
       pixelStamp(
         g,
         ['..oo..', '.ohho.', 'ohhhho', 'ohhhho', '.ohho.', '..oo..'],
@@ -3596,7 +3664,7 @@ export class GameEngine {
     if (texture) {
       const loot = new Sprite(texture);
       loot.anchor.set(0.5);
-      loot.width = loot.height = kind === 'gold' ? 25 : 32;
+      loot.width = loot.height = kind === 'item' ? 32 : 26;
       view.addChild(loot);
     }
     view.position.set(x, y);
@@ -3624,15 +3692,7 @@ export class GameEngine {
       return;
     }
     this.drop('item', x, y, 0, item);
-    this.callbacks.onSound(
-      item.rarity === 'primal'
-        ? 'primal'
-        : item.rarity === 'set'
-          ? 'set'
-          : item.rarity === 'legendary'
-            ? 'legendary'
-            : 'pickup',
-    );
+    if (item.rarity !== 'common' && item.rarity !== 'uncommon') this.callbacks.onSound(item.rarity);
     if (item.rarity === 'primal') {
       this.shake = 9;
       this.vfx.ring(x, y, 0xf94365, 150);
@@ -3687,9 +3747,13 @@ export class GameEngine {
         }
         if (o.kind === 'gold') {
           this.gold += o.value;
-          this.callbacks.onSound('pickup');
+          this.callbacks.onSound('coin');
         }
-        if (o.item) this.earned.push(o.item);
+        if (o.item) {
+          this.earned.push(o.item);
+          this.callbacks.onSound('pickup');
+          this.vfx.burst(o.x, o.y, Number.parseInt(RARITY_COLORS[o.item.rarity].slice(1), 16), 5);
+        }
         o.view.destroy({ children: true });
         this.orbs.splice(i, 1);
       } else {
@@ -3705,13 +3769,8 @@ export class GameEngine {
     }
   }
   private createPet() {
-    const id = this.config.petId;
-    const art = PET_ART[id] ?? PET_ART.owl;
-    const sprite = new Sprite(getPetTexture(id));
-    sprite.anchor.set(art.anchorX, art.ground);
-    sprite.width = 36;
-    sprite.height = 36;
-    this.pet.addChild(sprite);
+    this.petRig = new PetRig(this.config.petId);
+    this.pet.addChild(this.petRig);
     this.pet.position.set(-38, 32);
     this.entityLayer.addChild(this.pet);
     if (this.config.classId === 'ranger' && this.learned('raven'))
@@ -3761,7 +3820,8 @@ export class GameEngine {
     this.pet.x += (dx / Math.max(1, d)) * Math.min(d, speed * dt);
     this.pet.y += (dy / Math.max(1, d)) * Math.min(d, speed * dt);
     this.pet.zIndex = this.pet.y;
-    this.pet.children[0].y = Math.sin(this.elapsed * 8) * 3;
+    this.petRig?.travel(dx, d > 2);
+    if (nearest && d <= 18) this.petRig?.react();
     this.petTimer -= dt;
     if (this.petTimer <= 0) {
       this.petTimer = 3;
@@ -3776,8 +3836,10 @@ export class GameEngine {
               3,
             );
             this.vfx.ring(e.x, e.y, 0x96dce8, 20);
+            this.petRig?.react();
           }
     }
+    this.petRig?.updatePose(this.elapsed, dt, this.hp <= 0);
     this.updateSummons(dt);
   }
   private reviveSummon(summon: CharacterRig) {
@@ -3911,7 +3973,12 @@ export class GameEngine {
     const def = PYLONS.find((d) => d.id === id)!;
     for (const actor of this.coopHost.coop ? this.coopHost.coopActors.values() : [this])
       actor.buffs.add(id, def.name, 25 * (1 + this.power('nemesis')), def.color);
-    this.vfx.ring(p.x, p.y, Number.parseInt(def.color.slice(1), 16), 230);
+    const color = Number.parseInt(def.color.slice(1), 16);
+    this.vfx.ring(p.x, p.y, color, 230);
+    if (id === 'conduit') this.vfx.lightning(p.x, p.y - 140, p.x, p.y, color);
+    if (id === 'power') this.vfx.burst(p.x, p.y, color, 24, true);
+    if (id === 'speed') this.vfx.slash(p.x, p.y, this.facing < 0 ? Math.PI : 0, color, 120);
+    if (id === 'channeling') this.vfx.ring(p.x, p.y, color, 105);
     this.callbacks.onSound('pylon');
     if (this.power('nemesis')) {
       this.spawn(MONSTERS[this.config.stage % MONSTERS.length], p.x + 70, p.y, true);

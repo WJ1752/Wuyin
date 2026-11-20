@@ -1,4 +1,6 @@
-type Track = 'town' | 'rift' | 'boss';
+import type { Element, SkillDef } from '../core/types';
+
+type Track = 'town' | 'rift' | 'boss' | 'ending';
 type Voice = {
   frequency: number;
   end?: number;
@@ -7,46 +9,88 @@ type Voice = {
   gain?: number;
   delay?: number;
   noise?: boolean;
+  attack?: number;
 };
 const SFX: Record<string, Voice[]> = {
-  bow: [{ frequency: 1600, end: 280, duration: 0.12, type: 'triangle', noise: true }],
-  crossbow: [{ frequency: 980, end: 100, duration: 0.08, type: 'sawtooth', noise: true }],
-  hammer: [{ frequency: 85, end: 22, duration: 0.48, type: 'sine', gain: 0.65, noise: true }],
-  whirlwind: [{ frequency: 550, end: 170, duration: 0.35, noise: true }],
-  meteor: [{ frequency: 800, end: 40, duration: 0.65, noise: true }],
+  bow: [
+    { frequency: 1470, end: 720, duration: 0.1, noise: true, gain: 0.25 },
+    { frequency: 112, end: 76, duration: 0.074, type: 'triangle', gain: 0.16 },
+  ],
+  crossbow: [
+    { frequency: 810, end: 380, duration: 0.1, noise: true, gain: 0.25 },
+    { frequency: 163, end: 81, duration: 0.09, type: 'triangle', gain: 0.23 },
+  ],
+  hammer: [
+    { frequency: 87, end: 30, duration: 0.38, gain: 0.45 },
+    { frequency: 430, end: 118, duration: 0.31, noise: true, gain: 0.28 },
+  ],
+  whirlwind: [
+    { frequency: 450, end: 1180, duration: 0.39, noise: true, gain: 0.27, attack: 0.12 },
+    { frequency: 91, end: 52, duration: 0.39, gain: 0.22 },
+  ],
+  meteor: [
+    { frequency: 470, end: 120, duration: 0.54, noise: true, gain: 0.36, attack: 0.11 },
+    { frequency: 82, end: 40, duration: 0.4, gain: 0.31, delay: 0.14 },
+  ],
   ice: [1400, 2200, 3100].map((frequency) => ({
     frequency,
     duration: 0.3,
     type: 'triangle',
     gain: 0.16,
   })),
-  lightning: [{ frequency: 2200, end: 70, duration: 0.16, type: 'sawtooth', noise: true }],
-  bone: [{ frequency: 160, end: 35, duration: 0.27, noise: true }],
+  lightning: [
+    { frequency: 2800, end: 260, duration: 0.14, noise: true, gain: 0.25 },
+    { frequency: 1240, end: 125, duration: 0.2, type: 'triangle', gain: 0.16 },
+  ],
+  bone: [
+    { frequency: 680, end: 360, duration: 0.12, noise: true, gain: 0.27 },
+    { frequency: 152, end: 54, duration: 0.2, type: 'triangle', gain: 0.26 },
+  ],
   critical: [
     { frequency: 140, end: 35, duration: 0.18, gain: 0.5 },
     { frequency: 840, duration: 0.09, type: 'triangle' },
   ],
-  slash: [{ frequency: 900, end: 100, duration: 0.14, noise: true }],
-  poison: [{ frequency: 240, end: 95, duration: 0.4, type: 'sine', noise: true }],
-  arcane: [{ frequency: 440, end: 1600, duration: 0.26, type: 'sine' }],
-  dash: [{ frequency: 220, end: 980, duration: 0.18, noise: true }],
+  slash: [{ frequency: 1220, end: 320, duration: 0.15, noise: true, gain: 0.32 }],
+  poison: [{ frequency: 660, end: 145, duration: 0.37, noise: true, gain: 0.29, attack: 0.054 }],
+  arcane: [
+    { frequency: 245, end: 455, duration: 0.37, type: 'triangle', gain: 0.32, attack: 0.055 },
+    { frequency: 736, end: 920, duration: 0.46, gain: 0.14, delay: 0.06, attack: 0.09 },
+  ],
+  dash: [{ frequency: 940, end: 280, duration: 0.23, noise: true, gain: 0.29, attack: 0.039 }],
   hit: [{ frequency: 110, end: 35, duration: 0.13, type: 'triangle' }],
   death: [{ frequency: 240, end: 25, duration: 0.6, type: 'sawtooth', gain: 0.15 }],
-  primal: [440, 554.37, 659.25, 880].map((frequency, i) => ({
+  primal: [294, 440, 587, 740].map((frequency, i) => ({
     frequency,
-    duration: 2.8,
+    duration: 1.45,
     type: 'sine',
     gain: 0.24,
     delay: i * 0.09,
   })),
-  legendary: [587.33, 880, 1174.66].map((frequency, i) => ({
+  legendary: [392, 588, 785].map((frequency, i) => ({
     frequency,
-    duration: 1.5,
+    duration: 1.1,
     type: 'triangle',
     gain: 0.18,
     delay: i * 0.1,
   })),
-  pickup: [{ frequency: 550, end: 1100, duration: 0.16, type: 'sine' }],
+  set: [294, 349, 523].map((frequency, i) => ({
+    frequency,
+    duration: 0.8,
+    gain: 0.19,
+    delay: i * 0.08,
+  })),
+  pickup: [{ frequency: 670, end: 460, duration: 0.12, noise: true, gain: 0.15 }],
+  coin: [
+    { frequency: 1172, duration: 0.15, gain: 0.16 },
+    { frequency: 1733, duration: 0.11, gain: 0.07, delay: 0.035 },
+  ],
+  rare: [{ frequency: 466, duration: 0.35, type: 'triangle', gain: 0.19 }],
+  epic: [415, 611].map((frequency, i) => ({
+    frequency,
+    duration: 0.44,
+    gain: 0.2,
+    delay: i * 0.07,
+  })),
   health: [{ frequency: 280, end: 760, duration: 0.24, type: 'sine' }],
   progress: [{ frequency: 440, end: 1320, duration: 0.32, type: 'triangle' }],
   pylon: [
@@ -71,10 +115,27 @@ const SFX: Record<string, Voice[]> = {
     gain: 0.2,
   })),
   boss: [
-    { frequency: 55, duration: 1.8, type: 'sawtooth', gain: 0.2 },
-    { frequency: 58.27, duration: 1.8, type: 'sawtooth', gain: 0.15 },
+    { frequency: 54, end: 37, duration: 1.3, type: 'triangle', gain: 0.34, attack: 0.07 },
+    { frequency: 79, end: 57, duration: 1.06, noise: true, gain: 0.22, attack: 0.18 },
   ],
-  click: [{ frequency: 680, end: 400, duration: 0.06, type: 'triangle', gain: 0.18 }],
+  warning: [
+    { frequency: 294, end: 253, duration: 0.2, type: 'triangle', gain: 0.23 },
+    { frequency: 311, end: 196, duration: 0.26, type: 'triangle', gain: 0.22, delay: 0.1 },
+  ],
+  elite: [{ frequency: 165, end: 126, duration: 0.55, type: 'triangle', gain: 0.2, attack: 0.09 }],
+  impact: [{ frequency: 176, end: 85, duration: 0.12, noise: true, gain: 0.21 }],
+  fall: [{ frequency: 320, end: 92, duration: 0.17, noise: true, gain: 0.14 }],
+  ward: [
+    { frequency: 248, end: 201, duration: 0.31, type: 'triangle', gain: 0.2 },
+    { frequency: 615, duration: 0.68, gain: 0.13, delay: 0.07 },
+  ],
+  gate: [
+    { frequency: 240, end: 495, duration: 0.65, noise: true, gain: 0.2, attack: 0.16 },
+    { frequency: 147, end: 220, duration: 0.6, type: 'triangle', gain: 0.19, attack: 0.18 },
+  ],
+  footstep: [{ frequency: 430, end: 252, duration: 0.085, noise: true, gain: 0.1 }],
+  folio: [{ frequency: 1110, end: 630, duration: 0.18, noise: true, gain: 0.13 }],
+  click: [{ frequency: 420, end: 240, duration: 0.06, type: 'triangle', gain: 0.16 }],
   victory: [392, 493.88, 587.33, 783.99].map((frequency, i) => ({
     frequency,
     duration: 1.8,
@@ -90,7 +151,6 @@ const ALIASES: Record<string, string> = {
   crit: 'critical',
   kill: 'bone',
   loot: 'pickup',
-  set: 'legendary',
   fire: 'meteor',
   explosion: 'hammer',
   shield: 'arcane',
@@ -112,7 +172,7 @@ const ALIASES: Record<string, string> = {
   pull: 'whirlwind',
   warcry: 'pylon',
   charge: 'dash',
-  berserker: 'boss',
+  berserker: 'ward',
   chain: 'lightning',
   orb: 'ice',
   teleport: 'dash',
@@ -126,21 +186,71 @@ const ALIASES: Record<string, string> = {
   summon: 'bone',
   curse: 'poison',
   bloodstep: 'dash',
-  army: 'boss',
+  army: 'bone',
   claw: 'slash',
   boomerang: 'whirlwind',
   fan: 'crossbow',
   vines: 'poison',
   shadowstep: 'dash',
-  wolf: 'boss',
+  wolf: 'whirlwind',
   hurt: 'hit',
-  warning: 'boss',
+};
+
+const elementalCue: Record<Element, string> = {
+  physical: 'slash',
+  fire: 'meteor',
+  ice: 'ice',
+  lightning: 'lightning',
+  arcane: 'arcane',
+  poison: 'poison',
+};
+
+export function skillSound(skill: Pick<SkillDef, 'effect' | 'element' | 'kind'>) {
+  if (skill.kind === 'movement') return 'dash';
+  if (skill.kind === 'defense') return 'ward';
+  const effect = ALIASES[skill.effect] ?? skill.effect;
+  return Object.hasOwn(SFX, effect) ? effect : elementalCue[skill.element];
+}
+
+const score = {
+  town: {
+    beat: 520,
+    melody: [57, 64, 60, 0, 55, 62, 57, 0, 53, 60, 57, 0, 52, 59, 55, 0],
+    bass: [38, 43, 41, 40],
+  },
+  rift: {
+    beat: 290,
+    melody: [50, 0, 57, 0, 48, 0, 55, 0, 46, 0, 53, 0, 45, 0, 52, 0],
+    bass: [38, 36, 34, 33],
+  },
+  boss: {
+    beat: 236,
+    melody: [43, 0, 46, 43, 44, 0, 46, 44, 41, 0, 46, 41, 43, 0, 49, 46],
+    bass: [31, 32, 29, 31],
+  },
+  ending: {
+    beat: 550,
+    melody: [57, 64, 69, 0, 60, 67, 71, 0, 62, 65, 69, 0, 64, 69, 74, 0],
+    bass: [38, 41, 43, 38],
+  },
+} as const;
+const frequencyFor = (midi: number) => 440 * 2 ** ((midi - 69) / 12);
+const cooldowns: Record<string, number> = {
+  footstep: 0.31,
+  warning: 0.34,
+  impact: 0.13,
+  fall: 0.18,
+  coin: 0.12,
+  progress: 0.22,
+  hurt: 0.17,
+  hit: 0.17,
 };
 export class SynthAudio {
   private context?: AudioContext;
   private master?: GainNode;
   private musicBus?: GainNode;
   private reverb?: ConvolverNode;
+  private noiseBuffer?: AudioBuffer;
   private timer?: number;
   private track: Track = 'town';
   private step = 0;
@@ -170,6 +280,14 @@ export class SynthAudio {
           a[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / a.length, 3) * 0.45;
       }
       this.reverb.buffer = impulse;
+      this.noiseBuffer = ctx.createBuffer(1, ctx.sampleRate * 4, ctx.sampleRate);
+      const noise = this.noiseBuffer.getChannelData(0);
+      let pink = 0;
+      for (let i = 0; i < noise.length; i++) {
+        const white = Math.random() * 2 - 1;
+        pink = 0.965 * pink + white * 0.035;
+        noise[i] = pink * 4.4 + white * 0.22;
+      }
       const wet = ctx.createGain();
       wet.gain.value = 0.22;
       this.reverb.connect(wet);
@@ -192,7 +310,7 @@ export class SynthAudio {
     const voices = SFX[key];
     if (!voices) return;
     const now = this.context.currentTime;
-    if (now - (this.last.get(key) ?? -100) < 0.055) return;
+    if (now - (this.last.get(key) ?? -100) < (cooldowns[key] ?? 0.085)) return;
     this.last.set(key, now);
     voices.forEach((v) => this.voice(v, false));
   }
@@ -213,31 +331,29 @@ export class SynthAudio {
     filter.frequency.value = v.noise ? v.frequency : music ? 1300 : 6500;
     filter.Q.value = v.noise ? 0.7 : 0.3;
     env.gain.setValueAtTime(0.0001, t);
-    env.gain.exponentialRampToValueAtTime((v.gain ?? 0.3) * relativeVolume, t + 0.008);
+    env.gain.exponentialRampToValueAtTime(
+      (v.gain ?? 0.3) * relativeVolume,
+      t + (v.attack ?? 0.008),
+    );
     env.gain.exponentialRampToValueAtTime(0.0001, t + v.duration);
     filter.connect(env);
     env.connect(music ? this.musicBus! : this.master);
     if (this.reverb) env.connect(this.reverb);
     let source: OscillatorNode | AudioBufferSourceNode;
-    if (v.noise) {
-      source = ctx.createBufferSource();
-      const buffer = ctx.createBuffer(1, Math.ceil(ctx.sampleRate * v.duration), ctx.sampleRate);
-      const data = buffer.getChannelData(0);
-      let pink = 0;
-      for (let i = 0; i < data.length; i++) {
-        pink = 0.97 * pink + 0.03 * (Math.random() * 2 - 1);
-        data[i] = pink * 6 + (Math.random() * 2 - 1) * 0.3;
-      }
-      source.buffer = buffer;
+    if (v.noise && this.noiseBuffer) {
+      const grain = ctx.createBufferSource();
+      grain.buffer = this.noiseBuffer;
+      source = grain;
       if (v.end) filter.frequency.exponentialRampToValueAtTime(v.end, t + v.duration);
+      grain.start(t, Math.random() * Math.max(0, this.noiseBuffer.duration - v.duration - 0.03));
     } else {
       source = ctx.createOscillator();
       source.type = v.type ?? 'sine';
       source.frequency.setValueAtTime(v.frequency, t);
       if (v.end) source.frequency.exponentialRampToValueAtTime(v.end, t + v.duration);
+      source.start(t);
     }
     source.connect(filter);
-    source.start(t);
     source.stop(t + v.duration + 0.02);
     source.onended = () => {
       source.disconnect();
@@ -247,49 +363,60 @@ export class SynthAudio {
   }
   private sequence() {
     if (!this.context) return;
+    const { beat, melody, bass } = score[this.track];
     if (this.context.state === 'running' && !document.hidden) {
-      const notes =
-        this.track === 'town'
-          ? [110, 164.81, 220, 261.63, 220, 164.81, 130.81, 196]
-          : this.track === 'rift'
-            ? [73.42, 73.42, 110, 146.83, 73.42, 87.31, 130.81, 110]
-            : [55, 55, 65.41, 55, 82.41, 73.42, 65.41, 61.74];
-      const frequency = notes[this.step % notes.length];
-      this.voice(
-        {
-          frequency,
-          duration: this.track === 'town' ? 1.8 : 0.42,
-          type: this.track === 'town' ? 'triangle' : 'sawtooth',
-          gain: 0.22,
-        },
-        true,
-      );
-      if (this.step % 4 === 0) {
-        this.voice({ frequency: frequency * 0.5, duration: 2.4, type: 'sine', gain: 0.3 }, true);
-        this.voice({ frequency: frequency * 3, duration: 2.1, type: 'sine', gain: 0.06 }, true);
-      }
-      if (this.track !== 'town')
+      const phrase = this.step % melody.length;
+      const note = melody[phrase];
+      const pulse = this.track === 'rift' || this.track === 'boss';
+      const low = frequencyFor(bass[Math.floor(phrase / 4)]);
+      if (note) {
+        const tone = frequencyFor(note);
         this.voice(
           {
-            frequency: this.step % 2 ? 2300 : 80,
-            end: this.step % 2 ? 900 : 24,
-            duration: 0.12,
-            noise: this.step % 2 === 1,
-            gain: 0.18,
+            frequency: tone,
+            duration: pulse ? 0.49 : 1.45,
+            type: 'triangle',
+            gain: pulse ? 0.12 : 0.18,
+            attack: 0.024,
           },
+          true,
+        );
+        if (!pulse) this.voice({ frequency: tone * 2.008, duration: 0.64, gain: 0.045 }, true);
+      }
+      if (phrase % 4 === 0) {
+        this.voice({ frequency: low, duration: 2.3, gain: 0.23, attack: 0.22 }, true);
+        this.voice(
+          { frequency: low * 1.502, duration: 2, type: 'triangle', gain: 0.075, attack: 0.38 },
+          true,
+        );
+      }
+      if (phrase % 8 === 0)
+        this.voice(
+          {
+            frequency: 440,
+            end: 260,
+            duration: 3.2,
+            noise: true,
+            gain: pulse ? 0.08 : 0.07,
+            attack: 0.46,
+          },
+          true,
+        );
+      if (pulse && (phrase % 4 === 0 || phrase % 4 === 3))
+        this.voice(
+          { frequency: this.track === 'boss' ? 91 : 72, end: 38, duration: 0.26, gain: 0.2 },
           true,
         );
       this.step++;
     }
-    this.timer = window.setTimeout(
-      () => this.sequence(),
-      this.track === 'town' ? 480 : this.track === 'rift' ? 230 : 190,
-    );
+    this.timer = window.setTimeout(() => this.sequence(), beat);
   }
   destroy() {
     window.clearTimeout(this.timer);
     void this.context?.close();
     this.context = undefined;
+    this.noiseBuffer = undefined;
+    this.last.clear();
   }
 }
 export const audio = new SynthAudio();

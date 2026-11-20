@@ -58,7 +58,10 @@ type Composition =
   | 'ring';
 // Ability identities are composed from original filled pixel motifs. Variants
 // change silhouettes and motion, rather than recoloring their parent's icon.
-const SKILL_ART: Record<string, [SkillShape, PixelMotif, PixelMotif, Composition]> = {
+export const SKILL_ICON_COMPOSITIONS: Record<
+  string,
+  [SkillShape, PixelMotif, PixelMotif, Composition]
+> = {
   hunting_arrow: ['arrow', 'arrow', 'crosshair', 'single'],
   explosive_arrow: ['burst', 'arrow', 'flame', 'impact'],
   split_arrow: ['arrow', 'arrow', 'arrow', 'split'],
@@ -137,7 +140,7 @@ const SKILL_ART: Record<string, [SkillShape, PixelMotif, PixelMotif, Composition
 };
 
 function skillPixels(id: string): PixelArt {
-  const [, main, secondary, layout] = SKILL_ART[id];
+  const [, main, secondary, layout] = SKILL_ICON_COMPOSITIONS[id];
   const art = new PixelArt(),
     glyph = pixelMotif(main),
     detail = pixelMotif(secondary);
@@ -204,7 +207,7 @@ export const SKILL_VISUALS: Record<string, SkillVisual> = Object.fromEntries(
     {
       key: `skill:${skill.id}`,
       effectKey: skill.id,
-      shape: SKILL_ART[skill.id][0],
+      shape: SKILL_ICON_COMPOSITIONS[skill.id][0],
       color: ELEMENT_PALETTE[skill.element],
       layers: skillPixels(skill.id).layers(ELEMENT_PALETTE[skill.element]),
     },
@@ -261,10 +264,6 @@ export const EQUIPMENT_SHAPES: readonly GearShape[] = [
 interface EquipmentVisual extends AssetVisual {
   shape: GearShape;
   motif: string;
-}
-
-export function equipmentCrestSvg({ motif, color }: EquipmentVisual) {
-  return visualToSvg({ key: motif, color, layers: skillPixels(motif).layers(color) });
 }
 
 function gearPixels(shape: GearShape): PixelArt {

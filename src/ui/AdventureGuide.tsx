@@ -52,7 +52,6 @@ export function AdventureGuide({
       >
         <header className="modal-header">
           <div>
-            <span className="eyebrow">A WATCHER'S HANDBOOK · 新手教程</span>
             <h2 id="guide-title">迷雾中的第一步</h2>
           </div>
           <button

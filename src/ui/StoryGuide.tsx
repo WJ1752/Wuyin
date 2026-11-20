@@ -1,10 +1,10 @@
-import { useState } from 'react';
+import { useEffect } from 'react';
+import { audio } from '../audio/SynthAudio';
 import { CLASSES } from '../data/classes';
 import { CAMPAIGN_CHAPTERS, CAMPAIGN_FINALE, type CampaignChapter } from '../data/campaign';
 import { useGameStore } from '../state/gameStore';
 import { HeroArt } from './SceneArt';
 import { useDialog } from './useDialog';
-import { ArrowLeft } from './PixelIcons';
 import './character-story.css';
 
 export type PrologueChapter = 'arrival' | 'mentor' | 'first-clear';
@@ -29,7 +29,7 @@ const lines: Record<PrologueChapter, { title: string; text: readonly string[] }>
   },
 };
 
-export const CAMPAIGN_ENDING_ART = 'assets/story/watchers-dawn.webp';
+export const CAMPAIGN_ENDING_ART = 'assets/story/guarded-road.webp';
 
 export function StoryGuide({
   chapter,
@@ -47,6 +47,11 @@ export function StoryGuide({
   const readingReport = typeof chapter !== 'string' || chapter === 'first-clear';
   const dialog = useDialog(true, onSkip);
   const hero = CLASSES.find((entry) => entry.id === save.classId)!;
+  useEffect(() => {
+    if (!ending) return;
+    audio.setTrack('ending');
+    return () => audio.setTrack('town');
+  }, [ending]);
   return (
     <div className="story-backdrop">
       <section
@@ -60,13 +65,15 @@ export function StoryGuide({
         <span className="eyebrow">{ending ? '主线结局' : `${hero.name}的远征手记`}</span>
         <h2 id="story-title">{story.title}</h2>
         {ending ? (
-          <img
-            className="campaign-ending-art"
-            src={CAMPAIGN_ENDING_ART}
-            alt="黎明时亮起灯火的营地归路"
-          />
+          <figure className="story-plate">
+            <img
+              className="campaign-ending-art"
+              src={CAMPAIGN_ENDING_ART}
+              alt="黎明时亮起灯火的营地归路"
+            />
+          </figure>
         ) : (
-          <div className="story-art" aria-hidden="true">
+          <div className="story-art story-art--painted" aria-hidden="true">
             <HeroArt classId={save.classId} />
             <span>{chapter === 'arrival' ? '守望者营地' : '星语导师 · 岚'}</span>
           </div>
@@ -78,11 +85,11 @@ export function StoryGuide({
         </div>
         <footer>
           {typeof chapter === 'string' && (
-            <button className="ghost-button" onClick={onSkip}>
+            <button className="ghost-button" data-sound="folio" onClick={onSkip}>
               跳过剧情
             </button>
           )}
-          <button className="gold-button" onClick={onAdvance}>
+          <button className="gold-button" data-sound="folio" onClick={onAdvance}>
             {readingReport ? '合上手记' : chapter === 'mentor' ? '进入守望者营地' : '去见导师岚'}
           </button>
         </footer>

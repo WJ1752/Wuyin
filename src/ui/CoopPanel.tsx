@@ -204,7 +204,6 @@ export function CoopPanel({
       >
         <header className="coop-heading">
           <div>
-            <span className="eyebrow">OATH OF THE WATCHERS · I—IV</span>
             <h2>{room ? '守望者集结' : expedition ? '选择远征方式' : '结伴踏入迷雾'}</h2>
           </div>
           <button className="icon-button" aria-label="关闭远征" disabled={busy} onClick={close}>
@@ -288,6 +287,7 @@ export function CoopPanel({
                   {character && (
                     <button
                       className="gold-button"
+                      data-sound="equip"
                       disabled={busy || !canClaim}
                       onClick={async () => {
                         if (operating.current) return;
