@@ -35,23 +35,19 @@ export function TrialPanel({
   const operating = useRef(false);
   const revision = useRef(0);
   const handedOff = useRef(false);
-  const canPlay = cloud.status === 'online' && !lab && !transition;
+  const canPlay =
+    !!cloud.user &&
+    cloud.user.id === cloud.localUser?.id &&
+    cloud.status !== 'expired' &&
+    !lab &&
+    !transition;
   const previousResult = room?.snapshot?.results?.[room.selfId];
-  const close = async () => {
+  const close = () => {
     if (operating.current || handedOff.current) return;
-    operating.current = true;
     revision.current++;
-    setBusy(true);
-    try {
-      if (cloud.status === 'online') await apiRequest('/trials/leave', 'POST', {});
-    } catch {
-      if (active.current) useGameStore.getState().setNotice('试炼连接已断开，已返回营地。');
-    } finally {
-      operating.current = false;
-      if (active.current) onClose();
-    }
+    onClose();
   };
-  const dialog = useDialog(true, () => void close());
+  const dialog = useDialog(true, close);
   useEffect(() => {
     active.current = true;
     return () => {
@@ -123,12 +119,7 @@ export function TrialPanel({
             <span className="eyebrow">THE WATCHER'S TRIAL · VERIFIED</span>
             <h2 id="trial-title">守望者验证试炼</h2>
           </div>
-          <button
-            className="icon-button"
-            aria-label="结束试炼并关闭"
-            disabled={busy}
-            onClick={() => void close()}
-          >
+          <button className="icon-button" aria-label="关闭官方试炼" disabled={busy} onClick={close}>
             <X />
           </button>
         </header>
@@ -194,7 +185,7 @@ export function TrialPanel({
                   operating.current = true;
                   setBusy(true);
                   try {
-                    await apiRequest('/trials/leave', 'POST', {});
+                    await apiRequest('/trials/leave', 'POST', { runId: room.runId });
                     if (active.current) setRoom(null);
                   } catch (e) {
                     if (active.current) setError(e instanceof Error ? e.message : '无法结束试炼。');

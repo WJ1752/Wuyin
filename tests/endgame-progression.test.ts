@@ -15,10 +15,50 @@ import {
   skillLearningStatus,
 } from '../src/data/progression';
 import { CHALLENGES, getChallengeOffer } from '../src/data/challenges';
+import { CAMPAIGN_CHAPTERS, CAMPAIGN_FINALE, getNextCampaignChapter } from '../src/data/campaign';
+import { STAGES } from '../src/data/stages';
+import { getStageBoss } from '../src/data/monsters';
 import { SKILLS } from '../src/data/skillTrees';
 import { SETS } from '../src/data/sets';
 import { generateLoot } from '../src/engine/LootGenerator';
 import type { RunResult } from '../src/core/types';
+
+test('speed clears stop at each chapter gate and the campaign opens optional deeper floors', () => {
+  const save = newSave();
+  const clear = (stage: number, won = true) =>
+    applyRunResult(save, { stage, won, seconds: 30, kills: 0, gold: 0, shards: 0, items: [] });
+  const foughtGates = [];
+  while (save.progression!.clearedStage < CAMPAIGN_FINALE.stage) {
+    const stage = save.highestStage;
+    const gate = getNextCampaignChapter(save.progression!.clearedStage)!;
+    assert.ok(stage <= gate.stage);
+    if (stage === gate.stage) {
+      clear(stage, false);
+      assert.equal(save.highestStage, stage);
+      assert.equal(getNextCampaignChapter(save.progression!.clearedStage), gate);
+      assert.equal(getStageBoss(stage).id, gate.bossId);
+      assert.equal(STAGES[stage - 1].theme, gate.theme);
+      foughtGates.push(stage);
+    }
+    clear(stage);
+  }
+  assert.deepEqual(
+    foughtGates,
+    CAMPAIGN_CHAPTERS.map((chapter) => chapter.stage),
+  );
+  assert.equal(getNextCampaignChapter(validateSave(save).progression!.clearedStage), undefined);
+  assert.equal(save.highestStage, CAMPAIGN_FINALE.stage + 3);
+  clear(save.highestStage);
+  assert.equal(save.highestStage, CAMPAIGN_FINALE.stage + 6);
+
+  // The rollout preserves valid pre-campaign frontier unlocks, including old speed skips.
+  save.progression!.clearedStage = 49;
+  save.highestStage = 52;
+  assert.equal(validateSave(save).highestStage, 52);
+  clear(52);
+  assert.equal(save.highestStage, 55);
+  assert.equal(getNextCampaignChapter(save.progression!.clearedStage), undefined);
+});
 
 test('skill choices retain the opening pace and continue through level 100 without maxing every branch', () => {
   assert.equal(skillPointBudget(15), 29);

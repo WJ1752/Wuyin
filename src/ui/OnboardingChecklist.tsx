@@ -1,6 +1,8 @@
 import type { SaveData } from '../core/types';
+import { skillLearningStatus } from '../data/progression';
 import { SKILLS } from '../data/skillTrees';
 import { SETS } from '../data/sets';
+import { emptySlotItems } from '../state/gameStore';
 import { Check, ChevronRight } from './PixelIcons';
 import './player-experience.css';
 
@@ -9,20 +11,23 @@ export function onboardingTasks(save: SaveData) {
     (skill) => skill.classId === save.classId && skill.kind === 'movement',
   );
   const equipped = Object.values(save.equipment).filter(Boolean).length;
+  const clearedStage = save.progression?.clearedStage ?? 0;
   return [
     {
       id: 'clear',
       title: '完成第一场秘境',
       detail: '靠近敌人自动攻击，走出预警，拾取紫色进度球后击败首领。',
-      done: save.clears > 0,
+      done: clearedStage > 0 || save.clears > 0,
+      canPrepare: false,
       panel: 'expedition',
       action: '开始远征',
     },
     {
       id: 'equip',
       title: '穿上带回的装备',
-      detail: equipped ? `已穿戴 ${equipped} 个部位。` : '通关后打开角色装备，选择战利品并穿戴。',
+      detail: equipped ? `已穿戴 ${equipped} 个部位。` : '远征归来后，在装备页穿戴带回的战利品。',
       done: equipped > 0,
+      canPrepare: !equipped && emptySlotItems(save).length > 0,
       panel: 'character',
       action: '整理装备',
     },
@@ -34,6 +39,7 @@ export function onboardingTasks(save: SaveData) {
           ? '先升至 Lv.3，再到技能之书学习位移；手动保留它躲避危险。'
           : '在技能之书学习位移；战斗中使用位移键或点击技能躲避。',
       done: !!movement && (save.skills[movement.id] ?? 0) > 0,
+      canPrepare: !!movement && skillLearningStatus(save, movement).canLearn,
       panel: 'skills',
       action: '学习技能',
     },
@@ -44,6 +50,7 @@ export function onboardingTasks(save: SaveData) {
       done: SETS.some(
         (set) => set.classId === save.classId && set.id === save.progression?.targetSetId,
       ),
+      canPrepare: clearedStage >= 16 && clearedStage < 31,
       panel: 'journey',
       action: '选择流派',
     },

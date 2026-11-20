@@ -1,5 +1,5 @@
 import type { Rarity } from '../core/types';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type CSSProperties } from 'react';
 import { RARITY_COLORS, RARITY_NAMES } from '../core/types';
 import { SETS } from '../data/sets';
 import { SKILLS } from '../data/skillTrees';
@@ -12,9 +12,18 @@ import {
 } from '../data/progression';
 import { LEGENDARIES } from '../data/legendaries';
 import { BUILD_GUIDES } from '../data/buildGuides';
+import {
+  CAMPAIGN_CHAPTERS,
+  CAMPAIGN_FINALE,
+  getNextCampaignChapter,
+  type CampaignChapter,
+} from '../data/campaign';
+import { getStageBoss } from '../data/monsters';
+import { RIFT_RULES, THEMES } from '../data/stages';
 import { BUILD_RELICS, MAX_INVENTORY, useGameStore } from '../state/gameStore';
 import { ItemIcon, SkillIcon } from './AssetIcon';
-import { Check, Lock } from './PixelIcons';
+import { BookOpen, Check, Lock, Swords } from './PixelIcons';
+import { CAMPAIGN_ENDING_ART } from './StoryGuide';
 import './journey.css';
 import './secondary-pixel.css';
 import { CHALLENGES, getChallengeOffer } from '../data/challenges';
@@ -39,7 +48,13 @@ export function LootChances({ stage, source = 'world' }: { stage: number; source
   );
 }
 
-export function JourneyPanel({ onNavigate }: { onNavigate?: (panel: string) => void }) {
+export function JourneyPanel({
+  onNavigate,
+  onReadChapter,
+}: {
+  onNavigate?: (panel: string) => void;
+  onReadChapter?: (chapter: CampaignChapter) => void;
+}) {
   const {
     save,
     selectProgressionSet,
@@ -50,6 +65,7 @@ export function JourneyPanel({ onNavigate }: { onNavigate?: (panel: string) => v
     inCombat,
     cloudTransition,
     beginChallenge,
+    selectStage,
   } = useGameStore();
   const [now, setNow] = useState(Date.now);
   useEffect(() => {
@@ -59,9 +75,10 @@ export function JourneyPanel({ onNavigate }: { onNavigate?: (panel: string) => v
   const challenge = getChallengeOffer(save, now);
   const challengeLocked = !!labBackup || inCombat || cloudTransition || !onNavigate;
   const milestones = getProgressionMilestones(save);
-  const hasPending = milestones.some(
-    (m) => !m.claimed && m.stage <= (save.progression?.clearedStage ?? 0),
-  );
+  const cleared = save.progression?.clearedStage ?? 0;
+  const hasPending = milestones.some((m) => !m.claimed && m.stage <= cleared);
+  const nextChapter = getNextCampaignChapter(cleared);
+  const frontier = Math.min(save.highestStage, nextChapter?.stage ?? RIFT_RULES.maxLevel);
   const stash = labBackup
     ? []
     : (accounts.find((account) => account.id === activeAccountId)?.stash ?? []);
@@ -86,6 +103,79 @@ export function JourneyPanel({ onNavigate }: { onNavigate?: (panel: string) => v
   const worn = Object.values(save.equipment).filter((item) => item?.setId === target.id).length;
   return (
     <div className="journey-panel">
+      {!labBackup && (
+        <section
+          className="card campaign-journal"
+          style={
+            {
+              '--chapter-accent': THEMES[nextChapter?.theme ?? CAMPAIGN_FINALE.theme].accent,
+            } as CSSProperties
+          }
+        >
+          {!nextChapter && (
+            <img className="campaign-journal-art" src={CAMPAIGN_ENDING_ART} alt="" />
+          )}
+          <div className="campaign-journal-copy">
+            <h3>{nextChapter ? '主线 · 点亮归路' : '主线完成 · 归路已亮'}</h3>
+            {nextChapter ? (
+              <p>
+                下一章 {nextChapter.title} · 第 {nextChapter.stage} 层 ·{' '}
+                {getStageBoss(nextChapter.stage).name}
+                <br />
+                <span className="muted">{nextChapter.objective}</span>
+              </p>
+            ) : (
+              <p>
+                第 {CAMPAIGN_FINALE.stage + 1}–{RIFT_RULES.maxLevel}{' '}
+                层仍可继续挑战，收集太古装备并争夺登峰成绩。
+              </p>
+            )}
+            {onNavigate && (
+              <button
+                className="gold-button"
+                disabled={inCombat || cloudTransition}
+                onClick={() => {
+                  selectStage(frontier);
+                  onNavigate('expedition');
+                }}
+              >
+                <Swords size={17} /> {nextChapter ? '继续主线' : '挑战高阶秘境'} · 第 {frontier} 层
+              </button>
+            )}
+          </div>
+          <ol className="campaign-route" aria-label="主线章节">
+            {CAMPAIGN_CHAPTERS.map((chapter) => {
+              const done = chapter.stage <= cleared;
+              const current = chapter === nextChapter;
+              const Marker = done ? Check : current ? Swords : Lock;
+              return (
+                <li
+                  key={chapter.stage}
+                  aria-current={current ? 'step' : undefined}
+                  data-cleared={done || undefined}
+                >
+                  <Marker size={17} aria-hidden="true" />
+                  <div>
+                    <b>{chapter.title}</b>
+                    <small>
+                      第 {chapter.stage} 层 · {done ? '已完成' : current ? '当前章节' : '待完成'}
+                    </small>
+                  </div>
+                  {done && onReadChapter && (
+                    <button
+                      className="ghost-button"
+                      onClick={() => onReadChapter(chapter)}
+                      aria-label={`重读${chapter.stage === CAMPAIGN_FINALE.stage ? '主线结局' : chapter.title}`}
+                    >
+                      <BookOpen size={16} />
+                    </button>
+                  )}
+                </li>
+              );
+            })}
+          </ol>
+        </section>
+      )}
       <section className="card journey-current">
         <span className="eyebrow">当前远征 · 第 {save.selectedStage} 层</span>
         <h3>{getLootProfile(save.selectedStage).label}</h3>

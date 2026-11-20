@@ -14,7 +14,7 @@ export const CHALLENGES: ChallengeDef[] = [
   {
     id: 'pursuit',
     name: '追猎契约',
-    description: '精英巡猎队不断来袭。击败三名精英后召唤守关首领，完成远征。',
+    description: '击败三名精英领队并集满秘境进度，再击败守关首领。',
     objective: 'eliteKills',
     target: 3,
     reward: { gold: 1800, shards: 350, crystals: 60 },
@@ -22,7 +22,7 @@ export const CHALLENGES: ChallengeDef[] = [
   {
     id: 'ward',
     name: '守望仪式',
-    description: '在中央符文周围累计驻守十八秒，离圈暂停充能；完成仪式后击败首领。',
+    description: '在中央符文周围累计驻守十八秒，离圈暂停充能。集满秘境进度后击败首领。',
     objective: 'holdSeconds',
     target: 18,
     reward: { gold: 1800, shards: 350, crystals: 60 },
@@ -30,7 +30,7 @@ export const CHALLENGES: ChallengeDef[] = [
   {
     id: 'hazards',
     name: '余烬试炼',
-    description: '避开周期预警的地面冲击，经历六轮危险后击败首领。位移与走位同样重要。',
+    description: '躲避有预警的地面冲击。等六轮冲击落下并集满秘境进度后，击败首领。',
     objective: 'hazardWaves',
     target: 6,
     reward: { gold: 1800, shards: 350, crystals: 60 },

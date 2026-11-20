@@ -5,7 +5,8 @@ import { SKILLS } from '../data/skillTrees';
 import { useGameStore } from '../state/gameStore';
 import { useDialog } from './useDialog';
 import { OnboardingChecklist } from './OnboardingChecklist';
-import { nextSkillPointLevel, skillPointBudget } from '../data/progression';
+import { isSkillAutoEnabled, nextSkillPointLevel, skillPointBudget } from '../data/progression';
+import { RIFT_RULES } from '../data/stages';
 import { actionKey } from './inputLabels';
 
 const CHAPTERS = [
@@ -75,16 +76,7 @@ export function AdventureGuide({
             </button>
           ))}
         </nav>
-        <div className="modal-body guide-content">
-          <OnboardingChecklist save={save} onNavigate={onNavigate} />
-          <button
-            className="ghost-button onboarding-skip"
-            onClick={() => {
-              useGameStore.getState().updateSettings({ tutorialSeen: !save.tutorialSeen });
-            }}
-          >
-            {save.tutorialSeen ? '恢复营地实操提醒' : '跳过营地实操提醒，保留指南'}
-          </button>
+        <div className="modal-body guide-content" key={step}>
           <div className="guide-heading">
             <Icon size={28} />
             <div>
@@ -97,15 +89,14 @@ export function AdventureGuide({
           {step === 0 && (
             <>
               <div className="guide-callout">
-                在大厅用摇杆或方向键走动，点击 NPC 会走近，靠近后点「交互」或按
-                E。右下角选层后即可出征。要找队友，点击营地传送门选择组队远征。
+                从底部「出征」或营地传送门打开远征面板，选层后点击「独自远征」。访客可以直接单人游玩，组队需要登录并同步角色。
               </div>
-              <button className="outline-button full-width" onClick={() => onNavigate('story')}>
-                <BookOpen size={16} /> 回顾开场剧情
-              </button>
               <p>
-                你已掌握{basic?.name ?? '基础技能'}
-                。靠近敌人后会自动攻击，把注意力留给躲避红色预警。
+                你已掌握{basic?.name ?? '基础技能'}。
+                {basic && !isSkillAutoEnabled(save.autoSkills, basic)
+                  ? '当前是手动施法。靠近敌人后点击技能攻击。'
+                  : '靠近敌人后会自动攻击。'}
+                遇到地面预警时走出危险范围。
               </p>
               <div className="guide-controls">
                 <span>
@@ -125,9 +116,9 @@ export function AdventureGuide({
                   施放已学技能
                 </span>
                 <span>
-                  <kbd>Esc</kbd> 暂停 / 继续
+                  <kbd>Esc</kbd> / 右上角按钮暂停战斗
                 </span>
-                <span>触屏：左侧摇杆或拖动战场</span>
+                <span>触屏按住战场空地拖动，松手停止</span>
               </div>
               <div className="guide-callout">
                 {movement && save.skills[movement.id]
@@ -136,6 +127,18 @@ export function AdventureGuide({
               </div>
               <button className="outline-button full-width" onClick={onTrain}>
                 <Swords size={16} /> 去无收益训练场试试走位
+              </button>
+              <OnboardingChecklist save={save} onNavigate={onNavigate} />
+              <button
+                className="ghost-button onboarding-skip"
+                onClick={() => {
+                  useGameStore.getState().updateSettings({ tutorialSeen: !save.tutorialSeen });
+                }}
+              >
+                {save.tutorialSeen ? '恢复营地实操提醒' : '隐藏营地实操提醒'}
+              </button>
+              <button className="outline-button full-width" onClick={() => onNavigate('story')}>
+                <BookOpen size={16} /> 回顾开场剧情
               </button>
             </>
           )}
@@ -177,8 +180,8 @@ export function AdventureGuide({
           {step === 2 && (
             <>
               <p>
-                秘境限时 5
-                分钟。击败精英后靠近拾取紫色进度球，进度满后击败守关首领即可通关。圣坛需要靠近后点击激活。
+                每层限时 {RIFT_RULES.timeLimit}{' '}
+                秒。击败精英后靠近拾取紫色进度球，进度满后击败守关首领即可通关。走到圣坛旁再点击激活。
               </p>
               <ol className="guide-milestones">
                 <li>

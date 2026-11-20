@@ -297,6 +297,8 @@ export function registerTrials(
   app.post('/api/trials/leave', { bodyLimit: 1024 }, async (request, reply) => {
     const state = current(request, reply);
     if (!state) return;
+    const runId = (request.body as { runId?: unknown } | undefined)?.runId;
+    if (runId !== undefined && runId !== state.trial?.room.runId) return { room: null };
     state.trial?.engine.destroy();
     trials.delete(state.user.id);
     return { room: null };

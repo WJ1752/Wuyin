@@ -1,4 +1,5 @@
 import type { BossDef, MonsterDef } from '../core/types';
+import { getCampaignChapter } from './campaign';
 
 // Each family has a distinct silhouette; behavior drives movement and attack cadence.
 export const MONSTERS: MonsterDef[] = [
@@ -413,6 +414,12 @@ export const BOSSES: BossDef[] = [
     element: 'arcane',
   },
 ];
+
+export function getStageBoss(stage: number): BossDef {
+  const chapterBoss = getCampaignChapter(stage)?.bossId;
+  return BOSSES.find((boss) => boss.id === chapterBoss) ?? BOSSES[(stage - 1) % BOSSES.length];
+}
+
 export const ELITE_AFFIXES = [
   {
     id: 'molten',

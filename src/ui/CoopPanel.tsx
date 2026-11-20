@@ -25,14 +25,20 @@ export function CoopPanel({
 }) {
   const cloud = useCloudStore();
   const save = useGameStore((state) => state.save);
+  const characters = useGameStore(
+    (state) => state.accounts.find((account) => account.id === state.activeAccountId)?.characters,
+  );
   const lab = useGameStore((state) => state.labBackup);
   const cloudTransition = useGameStore((state) => state.cloudTransition);
   const selectStage = useGameStore((state) => state.selectStage);
   const [room, setRoom] = useState<CoopRoom | null>(null);
   const [rewards, setRewards] = useState<CoopReward[]>([]);
   const [code, setCode] = useState('');
+  const [stageDraft, setStageDraft] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [roomError, setRoomError] = useState('');
+  const [rewardsUnavailable, setRewardsUnavailable] = useState(false);
   const [copied, setCopied] = useState(false);
   const started = useRef(false);
   const active = useRef(true);
@@ -40,15 +46,42 @@ export function CoopPanel({
   const revision = useRef(0);
   const onStartRef = useRef(onStart);
   onStartRef.current = onStart;
-  const leave = async (afterClose = onClose) => {
+  const connectedAccount =
+    !!cloud.user && cloud.user.id === cloud.localUser?.id && cloud.status !== 'expired' && !lab;
+  const canOnline = connectedAccount && cloud.status === 'online' && !cloudTransition;
+  const canClaim =
+    connectedAccount && !cloudTransition && ['online', 'offline'].includes(cloud.status);
+  const close = () => {
     if (operating.current || started.current) return;
+    revision.current++;
+    onClose();
+  };
+  const commitStage = (offset = 0) => {
+    const current = useGameStore.getState().save.selectedStage;
+    const next = (stageDraft ? Number(stageDraft) : current) + offset;
+    if (next !== current) selectStage(next);
+    setStageDraft(null);
+    return useGameStore.getState().save.selectedStage;
+  };
+  const playSolo = () => {
+    if (operating.current || started.current || cloudTransition) return;
+    commitStage();
+    revision.current++;
+    onSolo();
+  };
+  const leave = async () => {
+    if (!room || operating.current || started.current) return;
     operating.current = true;
     revision.current++;
     setBusy(true);
+    setError('');
     try {
-      // The initial room lookup may still be in flight when the player closes.
-      if (cloud.status === 'online') await apiRequest('/coop/leave', 'POST', {});
-      if (active.current) afterClose();
+      await apiRequest('/coop/leave', 'POST', { runId: room.runId });
+      if (active.current) {
+        setRoom(null);
+        setRoomError('');
+        setCopied(false);
+      }
     } catch (e) {
       if (active.current) setError(e instanceof Error ? e.message : '暂时无法离开队伍，请重试。');
     } finally {
@@ -56,9 +89,7 @@ export function CoopPanel({
       if (active.current) setBusy(false);
     }
   };
-  const dialog = useDialog(true, () => {
-    void leave();
-  });
+  const dialog = useDialog(true, close);
   useEffect(() => {
     active.current = true;
     return () => {
@@ -66,43 +97,71 @@ export function CoopPanel({
     };
   }, []);
   useEffect(() => {
-    if (cloud.status !== 'online' || lab) return;
+    if (!connectedAccount) {
+      setRoom(null);
+      setRewards([]);
+      setRoomError('');
+      setRewardsUnavailable(false);
+      return;
+    }
     let cancelled = false;
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    const poll = async () => {
+    let roomTimer: ReturnType<typeof setTimeout> | undefined;
+    let rewardTimer: ReturnType<typeof setTimeout> | undefined;
+    const isCurrent = (before: number) =>
+      !cancelled &&
+      active.current &&
+      !operating.current &&
+      !started.current &&
+      before === revision.current;
+    const pollRoom = async () => {
       const before = revision.current;
       try {
         if (operating.current) return;
-        const [response, pending] = await Promise.all([
-          apiRequest<{ room: CoopRoom | null }>('/coop/room'),
-          apiRequest<{ rewards: CoopReward[] }>('/coop/results'),
-        ]);
-        if (cancelled || !active.current || operating.current || before !== revision.current)
-          return;
+        const response = await apiRequest<{ room: CoopRoom | null }>('/coop/room');
+        if (!isCurrent(before)) return;
         setRoom(response.room);
-        setRewards(pending.rewards);
-        if (response.room?.status === 'playing' && !started.current) {
+        setRoomError(
+          response.room?.status === 'aborted'
+            ? (response.room.reason ?? '本次远征已结束，请离队重新组建。')
+            : '',
+        );
+        if (response.room?.status === 'playing' && !useGameStore.getState().cloudTransition) {
           started.current = true;
           onStartRef.current(response.room);
-          return;
         }
-        if (response.room?.status === 'aborted')
-          setError(response.room.reason ?? '本次远征已结束，请离队重新组建。');
       } catch (e) {
-        if (!cancelled && active.current && !operating.current && before === revision.current)
-          setError(e instanceof Error ? e.message : '无法连接队伍服务。');
+        if (isCurrent(before)) setRoomError(e instanceof Error ? e.message : '无法连接队伍服务。');
       } finally {
-        if (!cancelled && active.current && !started.current) timer = setTimeout(poll, 1500);
+        if (!cancelled && active.current && !started.current)
+          roomTimer = setTimeout(pollRoom, 1500);
       }
     };
-    void poll();
+    const pollRewards = async () => {
+      const before = revision.current;
+      try {
+        if (operating.current) return;
+        const pending = await apiRequest<{ rewards: CoopReward[] }>('/coop/results');
+        if (!Array.isArray(pending.rewards)) throw new Error('远征奖励响应无效。');
+        if (!isCurrent(before)) return;
+        setRewards(pending.rewards);
+        setRewardsUnavailable(false);
+      } catch {
+        if (isCurrent(before)) setRewardsUnavailable(true);
+      } finally {
+        if (!cancelled && active.current && !started.current)
+          rewardTimer = setTimeout(pollRewards, 5000);
+      }
+    };
+    void pollRoom();
+    void pollRewards();
     return () => {
       cancelled = true;
-      clearTimeout(timer);
+      clearTimeout(roomTimer);
+      clearTimeout(rewardTimer);
     };
-  }, [cloud.status, cloud.user?.id, lab]);
+  }, [connectedAccount, cloud.user?.id]);
   const action = async (path: string, body: unknown) => {
-    if (operating.current || started.current) return;
+    if (operating.current || started.current || !canOnline) return;
     operating.current = true;
     revision.current++;
     const userId = cloud.user?.id;
@@ -132,7 +191,7 @@ export function CoopPanel({
   const self = room?.members.find((member) => member.id === room.selfId);
   const host = room?.selfId === room?.hostId;
   const balance = coopBalance(room?.members.length ?? 1);
-  const canOnline = cloud.status === 'online' && !lab;
+  const previewStage = stageDraft ? Number(stageDraft) : save.selectedStage;
   return (
     <div className="modal-backdrop coop-backdrop">
       <div
@@ -148,12 +207,7 @@ export function CoopPanel({
             <span className="eyebrow">OATH OF THE WATCHERS · I—IV</span>
             <h2>{room ? '守望者集结' : expedition ? '选择远征方式' : '结伴踏入迷雾'}</h2>
           </div>
-          <button
-            className="icon-button"
-            aria-label={room ? '离开队伍并关闭' : '关闭远征'}
-            disabled={busy}
-            onClick={() => void leave()}
-          >
+          <button className="icon-button" aria-label="关闭远征" disabled={busy} onClick={close}>
             <X />
           </button>
         </header>
@@ -162,46 +216,111 @@ export function CoopPanel({
             {error}
           </p>
         )}
+        {expedition && (
+          <>
+            <div className="coop-stage-picker">
+              <label htmlFor="coop-expedition-stage">挑战层数</label>
+              <div>
+                <button
+                  type="button"
+                  aria-label="降低挑战层数"
+                  disabled={cloudTransition || !!lab || busy || previewStage <= 1}
+                  onClick={() => commitStage(-1)}
+                >
+                  −
+                </button>
+                <input
+                  id="coop-expedition-stage"
+                  aria-label="选择已解锁挑战层数"
+                  type="text"
+                  inputMode="numeric"
+                  maxLength={3}
+                  value={stageDraft ?? save.selectedStage}
+                  disabled={cloudTransition || !!lab || busy}
+                  onChange={(event) => setStageDraft(event.target.value.replace(/\D/g, ''))}
+                  onBlur={() => commitStage()}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter') event.currentTarget.blur();
+                  }}
+                />
+                <span>层</span>
+                <button
+                  type="button"
+                  aria-label="提高挑战层数"
+                  disabled={cloudTransition || !!lab || busy || previewStage >= save.highestStage}
+                  onClick={() => commitStage(1)}
+                >
+                  ＋
+                </button>
+              </div>
+            </div>
+            <button className="coop-solo" disabled={busy || cloudTransition} onClick={playSolo}>
+              <Compass size={28} />
+              <span>
+                <strong>独自远征</strong>
+                <small>第 {save.selectedStage} 层 · 单人爬塔 · 随时暂停</small>
+              </span>
+              <span>→</span>
+            </button>
+          </>
+        )}
+        {roomError && (
+          <p className="coop-error" role="status">
+            {roomError}
+          </p>
+        )}
+        {rewardsUnavailable && <p className="muted">远征奖励暂时无法读取，正在重试。</p>}
         {rewards.length > 0 && (
           <section className="cloud-choice" aria-label="待领取远征奖励">
             <h3>远征奖励待领取</h3>
             <p className="muted">
               通关结果已在服务器保存。掉线或服务重启后仍可领取，每次远征仅结算一次。
             </p>
-            {rewards.map((reward) => (
-              <div className="coop-actions" key={reward.runId}>
-                <span>
-                  第 {reward.result.stage} 层 · {reward.result.won ? '通关' : '挑战结束'} ·{' '}
-                  {reward.result.items.length} 件战利品
-                </span>
-                <button
-                  className="gold-button"
-                  disabled={busy}
-                  onClick={async () => {
-                    if (operating.current) return;
-                    operating.current = true;
-                    revision.current++;
-                    setBusy(true);
-                    setError('');
-                    try {
-                      await useCloudStore.getState().claimCoopReward(reward.runId);
-                      if (active.current)
-                        setRewards((previous) =>
-                          previous.filter((entry) => entry.runId !== reward.runId),
-                        );
-                    } catch (e) {
-                      if (active.current)
-                        setError(e instanceof Error ? e.message : '奖励领取失败，可稍后重试。');
-                    } finally {
-                      operating.current = false;
-                      if (active.current) setBusy(false);
-                    }
-                  }}
-                >
-                  领取到原角色
-                </button>
-              </div>
-            ))}
+            {rewards.map((reward) => {
+              const character = characters?.find((entry) => entry.id === reward.characterId);
+              return (
+                <div className="coop-actions" key={reward.runId}>
+                  <span>
+                    {character?.name ?? '原角色当前未找到'} · 第 {reward.result.stage} 层 ·{' '}
+                    {reward.result.won ? '通关' : '挑战结束'} · {reward.result.items.length}{' '}
+                    件战利品
+                  </span>
+                  {character && (
+                    <button
+                      className="gold-button"
+                      disabled={busy || !canClaim}
+                      onClick={async () => {
+                        if (operating.current) return;
+                        operating.current = true;
+                        revision.current++;
+                        setBusy(true);
+                        setError('');
+                        try {
+                          await useCloudStore.getState().claimCoopReward(reward.runId);
+                          if (active.current)
+                            setRewards((previous) =>
+                              previous.filter((entry) => entry.runId !== reward.runId),
+                            );
+                        } catch (e) {
+                          if (active.current)
+                            setError(e instanceof Error ? e.message : '奖励领取失败，可稍后重试。');
+                        } finally {
+                          operating.current = false;
+                          if (active.current) setBusy(false);
+                        }
+                      }}
+                    >
+                      领取到原角色
+                    </button>
+                  )}
+                </div>
+              );
+            })}
+            {!canClaim && (
+              <button className="ghost-button" disabled={busy} onClick={onAccount}>
+                同步云端进度后领取
+              </button>
+            )}
           </section>
         )}
         {room ? (
@@ -285,7 +404,7 @@ export function CoopPanel({
                 (host && self?.ready ? (
                   <button
                     className="gold-button"
-                    disabled={busy || room.members.some((member) => !member.ready)}
+                    disabled={busy || !canOnline || room.members.some((member) => !member.ready)}
                     onClick={() => void action('start', {})}
                   >
                     <Swords size={17} />
@@ -294,7 +413,7 @@ export function CoopPanel({
                 ) : (
                   <button
                     className="gold-button"
-                    disabled={busy}
+                    disabled={busy || !canOnline}
                     onClick={() => void action('ready', { ready: !self?.ready })}
                   >
                     {self?.ready ? '取消准备' : '准备就绪'}
@@ -307,53 +426,6 @@ export function CoopPanel({
           </>
         ) : (
           <>
-            {expedition && (
-              <div className="coop-stage-picker">
-                <label htmlFor="coop-expedition-stage">挑战层数</label>
-                <div>
-                  <button
-                    type="button"
-                    aria-label="降低挑战层数"
-                    disabled={cloudTransition || !!lab || busy || save.selectedStage <= 1}
-                    onClick={() => selectStage(save.selectedStage - 1)}
-                  >
-                    −
-                  </button>
-                  <input
-                    id="coop-expedition-stage"
-                    aria-label="选择已解锁挑战层数"
-                    type="number"
-                    inputMode="numeric"
-                    min={1}
-                    max={save.highestStage}
-                    value={save.selectedStage}
-                    disabled={cloudTransition || !!lab || busy}
-                    onChange={(event) => selectStage(Number(event.target.value))}
-                  />
-                  <span>层</span>
-                  <button
-                    type="button"
-                    aria-label="提高挑战层数"
-                    disabled={
-                      cloudTransition || !!lab || busy || save.selectedStage >= save.highestStage
-                    }
-                    onClick={() => selectStage(save.selectedStage + 1)}
-                  >
-                    ＋
-                  </button>
-                </div>
-              </div>
-            )}
-            {expedition && (
-              <button className="coop-solo" disabled={busy} onClick={() => void leave(onSolo)}>
-                <Compass size={28} />
-                <span>
-                  <strong>独自远征</strong>
-                  <small>第 {save.selectedStage} 层 · 单人爬塔 · 随时暂停</small>
-                </span>
-                <span>→</span>
-              </button>
-            )}
             <div className="coop-intro">
               <Swords size={36} />
               <div>
@@ -367,7 +439,7 @@ export function CoopPanel({
                   className="gold-button full-width"
                   disabled={busy}
                   onClick={() =>
-                    void action('create', { stage: save.selectedStage, authority: 'server' })
+                    void action('create', { stage: commitStage(), authority: 'server' })
                   }
                 >
                   {busy ? '正在同步角色…' : `创建远征 · 第 ${save.selectedStage} 层`}

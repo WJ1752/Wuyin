@@ -17,7 +17,7 @@ import { CLASSES } from '../data/classes';
 import { SKILLS } from '../data/skillTrees';
 import { SETS } from '../data/sets';
 import { LEGENDARIES } from '../data/legendaries';
-import { MONSTERS, BOSSES, ELITE_AFFIXES } from '../data/monsters';
+import { BOSSES, ELITE_AFFIXES, getStageBoss, MONSTERS } from '../data/monsters';
 import { RIFT_PYLON_SITES, RIFT_RULES, STAGES } from '../data/stages';
 import { CharacterRig } from '../render/ProceduralRig';
 import { getAtlasTexture, preloadAtlas } from '../render/TextureAtlas';
@@ -80,6 +80,7 @@ class SimulationActor extends Container {
 
 const arenaLimit = 780;
 const pylonReach = 190;
+const meleeEffects = new Set(['hammer', 'bash', 'frenzy', 'scythe', 'claw', 'spike', 'siphon']);
 function warningDecal(
   w: Pick<
     CoopFrame['warnings'][number],
@@ -1512,30 +1513,34 @@ export class GameEngine {
           skill.kind === 'core' &&
           isSkillAutoEnabled(this.config.autoSkills, skill) &&
           !this.cooldowns[skill.id] &&
-          this.resource < this.getSkillCost(skill.id),
+          this.resource < this.getSkillCost(skill.id) &&
+          this.hasAutoTarget(skill, targets),
       )
     )
       this.report.resourceStarvedSeconds! += dt;
     if (this.castTimer <= 0 && targets.length) {
-      const selected = selectAutoCast(this.skills, {
-        hpRatio: this.hp / this.config.stats.hp,
-        nearby: targets.filter((e) => this.distance(e) < 150).length,
-        enemies: targets.length,
-        elite: targets.some((e) => e.elite || e.boss),
-        resource: this.resource,
-        costs: Object.fromEntries(
-          this.skills.map((skill) => [skill.id, this.getSkillCost(skill.id)]),
-        ),
-        free: this.buffs.has('channeling'),
-        cooldowns: this.cooldowns,
-        auto: this.config.autoSkills,
-        focus:
-          this.set('vyr', 2) && this.buffs.has('archon')
-            ? this.skills.find((skill) => skill.kind === 'basic')?.id
-            : this.set('immortal_thorns', 4)
-              ? 'war_cry'
-              : undefined,
-      });
+      const selected = selectAutoCast(
+        this.skills.filter((skill) => this.hasAutoTarget(skill, targets)),
+        {
+          hpRatio: this.hp / this.config.stats.hp,
+          nearby: targets.filter((e) => this.distance(e) < 150).length,
+          enemies: targets.length,
+          elite: targets.some((e) => e.elite || e.boss),
+          resource: this.resource,
+          costs: Object.fromEntries(
+            this.skills.map((skill) => [skill.id, this.getSkillCost(skill.id)]),
+          ),
+          free: this.buffs.has('channeling'),
+          cooldowns: this.cooldowns,
+          auto: this.config.autoSkills,
+          focus:
+            this.set('vyr', 2) && this.buffs.has('archon')
+              ? this.skills.find((skill) => skill.kind === 'basic')?.id
+              : this.set('immortal_thorns', 4)
+                ? 'war_cry'
+                : undefined,
+        },
+      );
       if (selected) {
         if (this.coop && this.paused) this.perform(selected, false);
         else this.cast(selected.id);
@@ -1902,7 +1907,7 @@ export class GameEngine {
     this.vfx.ring(this.x, this.y, 0xf1dfaa, 650);
     this.shake = 12;
     this.callbacks.onSound('boss');
-    const def = BOSSES[(this.config.stage - 1) % BOSSES.length];
+    const def = getStageBoss(this.config.stage);
     // The first guardians meet a hero with a single basic attack and no guaranteed gear.
     const openingHealth = Math.min(1, 0.25 + (this.config.stage - 1) * 0.15);
     const boss = this.spawn(
@@ -2323,6 +2328,54 @@ export class GameEngine {
       return;
     this.perform(skill, false);
   }
+  private meleeRadius(skill: SkillDef) {
+    let radius = skill.radius || 90;
+    if (skill.effect === 'claw' && this.set('storm_wolf', 4))
+      radius = this.skill('thunder_wolf')!.radius;
+    if (skill.effect === 'claw' && this.power('moonfang')) radius *= 1.3;
+    if (skill.effect === 'hammer') radius *= 1 + this.buffs.stacks('earthbreaker') * 0.08;
+    if (skill.effect === 'bash' && this.learned('seismic_bash')) radius *= 1.3;
+    return radius;
+  }
+  private whirlwindRadius(skill: SkillDef) {
+    let radius = skill.radius || 110;
+    if (this.set('wasteland', 2)) radius *= 1.4;
+    if (this.learned('hurricane')) radius *= 1 + 0.25 * this.rankScale('hurricane');
+    return radius;
+  }
+  private hasAutoTarget(skill: SkillDef, targets: Enemy[]) {
+    const { effect, kind } = skill;
+    // Alternate and set effects can still hit at range or grant a useful buff.
+    if (kind === 'basic' && this.buffs.has('archon')) return true;
+    if ((kind === 'basic' || kind === 'core') && this.buffs.has('wolf')) return true;
+    if (effect === 'whirlwind') {
+      if (this.set('wasteland', 4) || this.power('bulkathos')) return true;
+      const radius = this.whirlwindRadius(skill);
+      const pullReach = this.set('wasteland', 2) || this.learned('hurricane') ? 300 : 0;
+      return targets.some(
+        (enemy) => this.distance(enemy) < Math.max(pullReach, radius + enemy.radius),
+      );
+    }
+    if (effect === 'nova')
+      return targets.some((enemy) => this.distance(enemy) < skill.radius + enemy.radius);
+    if (['pull', 'curse', 'raven'].includes(effect))
+      return targets.some((enemy) => this.distance(enemy) < (skill.radius || 180));
+    if (!meleeEffects.has(effect)) return true;
+
+    if (effect === 'claw' && this.learned('thunder_claw')) return true;
+    if (effect === 'spike' && this.learned('bone_splinters')) return true;
+    if (
+      effect === 'scythe' &&
+      (this.set('trang_oul', 2) ||
+        (this.power('corroded_fang') &&
+          this.enemies.some((enemy) => enemy.hp > 0 && enemy.poison > 0)))
+    )
+      return true;
+    const radius = this.meleeRadius(skill);
+    if (effect === 'siphon') return targets.some((enemy) => this.distance(enemy) < radius);
+    const bonusReach = effect === 'hammer' && this.power('gavel') ? 90 : 0;
+    return targets.some((enemy) => this.distance(enemy) < radius + bonusReach + enemy.radius);
+  }
   private perform(skill: SkillDef, free: boolean, multiplier = 1) {
     skill = this.resolveSkill(skill);
     const cast: CastContext = { resourceGranted: false };
@@ -2547,10 +2600,8 @@ export class GameEngine {
     }
     if (['rain', 'meteor', 'blackhole', 'vines', 'whirlwind'].includes(skill.effect)) {
       const centered = skill.effect === 'whirlwind';
-      let radius = skill.radius || 110;
+      let radius = centered ? this.whirlwindRadius(skill) : skill.radius || 110;
       if (skill.effect === 'rain' && this.set('stormcaller', 4)) radius *= 1.5;
-      if (centered && this.set('wasteland', 2)) radius *= 1.4;
-      if (centered && this.learned('hurricane')) radius *= 1 + 0.25 * this.rankScale('hurricane');
       if (skill.effect === 'vines' && this.set('wild_vines', 2)) radius = 420;
       const duration =
         (skill.duration || 3) * (skill.effect === 'blackhole' && this.set('vyr', 2) ? 2 : 1);
@@ -2636,14 +2687,9 @@ export class GameEngine {
       this.vfx.ring(this.x, this.y, color, radius);
       return;
     }
-    if (['hammer', 'bash', 'frenzy', 'scythe', 'claw', 'spike', 'siphon'].includes(skill.effect)) {
-      let radius = skill.radius || 90;
-      if (skill.effect === 'claw' && this.set('storm_wolf', 4))
-        radius = this.skill('thunder_wolf')!.radius;
-      if (skill.effect === 'claw' && this.power('moonfang')) radius *= 1.3;
-      if (skill.effect === 'hammer') radius *= 1 + this.buffs.stacks('earthbreaker') * 0.08;
+    if (meleeEffects.has(skill.effect)) {
+      const radius = this.meleeRadius(skill);
       if (skill.effect === 'bash' && this.learned('seismic_bash')) {
-        radius *= 1.3;
         for (const e of targets) if (this.distance(e) < radius) e.stun = Math.max(e.stun, 1);
       }
       if (skill.effect === 'siphon') {

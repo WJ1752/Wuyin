@@ -3,7 +3,20 @@ import { formatBigNumber } from '../core/format';
 import { useGameStore } from '../state/gameStore';
 import { CHARACTER_ART } from '../render/CharacterTextures';
 import { CLASSES } from '../data/classes';
-import { BookOpen, Coins, Compass, Diamond, Gem, Package, Shield, Swords, X } from './PixelIcons';
+import { getNextCampaignChapter } from '../data/campaign';
+import { onboardingTasks } from './OnboardingChecklist';
+import {
+  BookOpen,
+  ChevronRight,
+  Coins,
+  Compass,
+  Diamond,
+  Gem,
+  Package,
+  Shield,
+  Swords,
+  X,
+} from './PixelIcons';
 import './mobile-camp-home.css';
 
 const ACTIONS = [
@@ -25,9 +38,19 @@ export function MobileCamp({ onNavigate, onGuide }: MobileCampProps) {
   const activeAccountId = useGameStore((state) => state.activeAccountId);
   const labBackup = useGameStore((state) => state.labBackup);
   const leaveLab = useGameStore((state) => state.leaveLab);
+  const selectStage = useGameStore((state) => state.selectStage);
+  const updateSettings = useGameStore((state) => state.updateSettings);
+  const cloudTransition = useGameStore((state) => state.cloudTransition);
   const account = accounts.find((entry) => entry.id === activeAccountId);
   const character = account?.characters.find((entry) => entry.id === account.activeCharacterId);
   const hero = CLASSES.find((entry) => entry.id === save.classId) ?? CLASSES[0];
+  const clearedStage = save.progression?.clearedStage ?? 0;
+  const prep =
+    !labBackup && !save.tutorialSeen
+      ? onboardingTasks(save).find((task) => !task.done && task.canPrepare)
+      : undefined;
+  const chapter = !labBackup ? getNextCampaignChapter(clearedStage) : undefined;
+  const nextFloor = chapter ? Math.min(chapter.stage, save.highestStage) : undefined;
 
   return (
     <div className="camp-floating-hud" aria-label="营地快捷操作">
@@ -85,6 +108,45 @@ export function MobileCamp({ onNavigate, onGuide }: MobileCampProps) {
           </button>
         )}
       </header>
+
+      {(prep || chapter) && (
+        <aside className="camp-hud-objective" aria-label="下一步">
+          <button
+            className="camp-hud-objective-action"
+            disabled={cloudTransition}
+            onClick={() => {
+              if (prep) onNavigate(prep.panel);
+              else if (nextFloor !== undefined) {
+                selectStage(nextFloor);
+                onNavigate('expedition');
+              }
+            }}
+          >
+            {prep ? <BookOpen size={18} /> : <Compass size={18} />}
+            <span>
+              <strong>{prep?.title ?? chapter?.title}</strong>
+              {!prep && chapter && (
+                <small>
+                  {nextFloor === chapter.stage
+                    ? `主线 · 挑战第 ${chapter.stage} 层`
+                    : `主线 · 先挑战第 ${nextFloor} 层`}
+                </small>
+              )}
+            </span>
+            <ChevronRight size={16} />
+          </button>
+          {prep && (
+            <button
+              className="camp-hud-objective-dismiss"
+              aria-label="隐藏营地实操提醒"
+              disabled={cloudTransition}
+              onClick={() => updateSettings({ tutorialSeen: true })}
+            >
+              <X size={16} />
+            </button>
+          )}
+        </aside>
+      )}
 
       <nav className="camp-hud-bottom" aria-label="营地操作">
         <button onClick={() => onNavigate(ACTIONS[0].id)}>

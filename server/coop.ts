@@ -942,6 +942,12 @@ export function registerCoop(
     if (!state) return;
     const { room, member, now } = state;
     if (!room || !member) return { room: null };
+    if (
+      object(request.body) &&
+      request.body.runId !== undefined &&
+      request.body.runId !== room.runId
+    )
+      return { room: null };
     if (room.status === 'playing')
       abort(
         room,

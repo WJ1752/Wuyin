@@ -1,4 +1,5 @@
 import type { StageDef } from '../core/types';
+import { getCampaignChapter } from './campaign';
 
 export const THEMES = [
   {
@@ -58,7 +59,7 @@ const torment = [
 ];
 export const STAGES: StageDef[] = Array.from({ length: 150 }, (_, index) => {
   const level = index + 1;
-  const theme = Math.floor(index / 5) % THEMES.length;
+  const theme = getCampaignChapter(level)?.theme ?? Math.floor(index / 5) % THEMES.length;
   return {
     level,
     theme,

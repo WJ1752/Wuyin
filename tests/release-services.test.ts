@@ -226,5 +226,14 @@ test('durable reward claims survive restarts, enforce ownership and revisions, a
       .statusCode,
     400,
   );
-  assert.equal((await owner.request('POST', '/trials/leave', {})).statusCode, 200);
+  await owner.request('POST', '/trials/leave', { runId: 'previous-trial' });
+  assert.equal(
+    (await owner.request('GET', '/trials/state')).json().room.runId,
+    trial.json().room.runId,
+  );
+  assert.equal(
+    (await owner.request('POST', '/trials/leave', { runId: trial.json().room.runId })).statusCode,
+    200,
+  );
+  assert.equal((await owner.request('GET', '/trials/state')).json().room, null);
 });

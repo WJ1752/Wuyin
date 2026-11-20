@@ -1,5 +1,6 @@
 import { SeededRandom } from '../core/random';
 import type { StageDef } from '../core/types';
+import { getCampaignChapter } from '../data/campaign';
 import { RIFT_PYLON_SITES, THEMES } from '../data/stages';
 import { Container, Graphics, Sprite, type Texture, TilingSprite } from 'pixi.js';
 import { pixelEllipse, pixelLine, pixelPolygon, pixelStamp, snapPixel } from './PixelArt';
@@ -8,6 +9,7 @@ import { getAtlasTexture, preloadAtlas } from './TextureAtlas';
 const scenerySizes = { pine: 104, mushrooms: 40, grave: 52, basalt: 66, crystal: 78 };
 const themeProps = ['pine', 'grave', 'basalt', 'crystal'] as const;
 const sceneryLight = [0x839c9b, 0xa9a6bc, 0xbb9695, 0xa69abd];
+const terrainInk = [0xb1c4ba, 0xb7c4d3, 0xdabcae, 0xc9bedb];
 const propIds = [
   'conduit',
   'power',
@@ -119,8 +121,11 @@ export function createMap({ theme, level }: StageDef, size = 1800): Container {
   const texture = getAtlasTexture(groundId(theme, material));
   const pathTexture = getAtlasTexture(groundId(theme, (material + 1 + (chapter % 2)) % 3));
   if (texture && pathTexture) {
-    root.addChild(tileGround(texture, size));
+    const terrain = tileGround(texture, size);
+    terrain.tint = terrainInk[theme];
+    root.addChild(terrain);
     const road = tileGround(pathTexture, size);
+    road.tint = terrainInk[theme];
     const mask = new Graphics();
     // Merge contiguous cells per row to keep the stair-stepped boundary inexpensive.
     const cell = 12,
@@ -171,6 +176,37 @@ export function createMap({ theme, level }: StageDef, size = 1800): Container {
       ground.rect(x, y, 8, 4).fill(palette[3]);
       if (i % 4 === 0) ground.rect(x, y - 8, 4, 16).fill(palette[2]);
     }
+  }
+  if (getCampaignChapter(level)) {
+    // Inlay on the ground layer, below combat warnings and pickups.
+    const seal = new Graphics();
+    const metal = palette[3];
+    for (const side of [-1, 1]) {
+      const x = side * 96;
+      pixelLine(seal, x, -60, x, 60, metal, 6, 0.65);
+      pixelLine(seal, x, -60, side * 66, -90, metal, 6, 0.65);
+      pixelLine(seal, x, 60, side * 66, 90, metal, 6, 0.65);
+    }
+    pixelStamp(
+      seal,
+      [
+        '.....a.....',
+        '....aba....',
+        '..aaaaaaa..',
+        '..abbbbba..',
+        '..abcccba..',
+        '..abcccba..',
+        '..abbbbba..',
+        '..aaaaaaa..',
+        '....aba....',
+        '...aaaaa...',
+      ],
+      { a: metal, b: palette[0], c: 0xc5a275 },
+      -44,
+      -40,
+      8,
+    );
+    root.addChild(seal);
   }
   for (let i = 0; i < 105; i++) {
     const x = snapPixel((rand() - 0.5) * (size - 80));

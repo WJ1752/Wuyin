@@ -102,6 +102,7 @@
   position: absolute;
   top: 50px;
   right: 0;
+  z-index: 1;
   display: grid;
   min-width: 156px;
   gap: 4px;
@@ -139,6 +140,55 @@
 .camp-hud-resource-popover small {
   color: #b6b19e;
   font-size: 11px;
+}
+
+.camp-hud-objective {
+  position: absolute;
+  top: calc(58px + env(safe-area-inset-top));
+  left: max(8px, env(safe-area-inset-left));
+  display: flex;
+  max-width: min(332px, calc(100% - 16px));
+  border: 1px solid #b69a5a85;
+  background: #0c1d2be8;
+}
+
+.camp-hud-objective > button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 4px 8px;
+  border: 0;
+  background: transparent;
+  text-align: left;
+}
+
+.camp-hud-objective-action > span {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.camp-hud-objective-action > svg {
+  flex-shrink: 0;
+}
+
+.camp-hud-objective-action strong {
+  font-size: calc(13px * var(--font-scale, 1));
+  line-height: 1.35;
+}
+
+.camp-hud-objective-action small {
+  color: #b9cac6;
+  font-size: calc(11px * var(--font-scale, 1));
+  line-height: 1.25;
+}
+
+.camp-hud-objective > .camp-hud-objective-dismiss {
+  justify-content: center;
+  border-left: 1px solid #b69a5a3d;
+  color: #d3c7b1;
 }
 
 .camp-hud-lab-exit {
@@ -288,5 +338,17 @@
   .camp-hud-lab-exit {
     top: 66px;
     left: max(calc((100% - 560px) / 2), 10px);
+  }
+
+  .camp-hud-objective {
+    top: 70px;
+    left: max(calc((100% - 560px) / 2), 10px);
+  }
+}
+
+@media (max-width: 960px) and (orientation: landscape) {
+  .camp-hud-objective {
+    top: calc(68px + env(safe-area-inset-top));
+    left: max(8px, env(safe-area-inset-left));
   }
 }

@@ -83,6 +83,29 @@ test('resource-starved time requires a ready enabled core and respects free cast
   engine.destroy();
 });
 
+test('short-range auto attacks wait for an enemy before spending resource and cooldown', () => {
+  const save = newSave('barbarian');
+  save.level = 5;
+  save.skills.whirlwind = 1;
+  const config = createCombatConfig(save);
+  config.stats.resourceRegen = 0;
+  const { engine, state } = start(config);
+  const target = dummy(state);
+  const whirlwind = SKILLS.find((skill) => skill.id === 'whirlwind')!;
+
+  target.x = state.x + 350;
+  engine.stepHeadless();
+  assert.equal(state.snapshot().stats.casts, 0);
+  assert.equal(state.resource, config.stats.maxResource);
+
+  target.x = state.x + 100;
+  engine.stepHeadless();
+  assert.equal(state.snapshot().stats.casts, 1);
+  assert.equal(state.resource, config.stats.maxResource - whirlwind.cost);
+  assert.ok(state.snapshot().cooldowns.whirlwind > 0);
+  engine.destroy();
+});
+
 test('pursuit counts elite leaders and gates the guardian until three are defeated', () => {
   const config = lab('stormcaller');
   config.challenge = { id: 'pursuit', key: '2026-11-06:pursuit' };

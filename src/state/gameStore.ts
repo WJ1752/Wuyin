@@ -39,6 +39,7 @@ import type {
 } from '../core/types';
 import { SLOTS, SLOT_NAMES } from '../core/types';
 import { CLASSES } from '../data/classes';
+import { getNextCampaignChapter } from '../data/campaign';
 import { RIFT_RULES } from '../data/stages';
 import { SKILLS } from '../data/skillTrees';
 import { SETS } from '../data/sets';
@@ -697,8 +698,14 @@ export function applyRunResult(s: SaveData, result: RunResult, stash: Item[] = [
       chapterNotices.push(...chapterRewards(s, result.stage, result.items, stash));
     s.clears++;
     s.bestTime = s.bestTime ? Math.min(s.bestTime, result.seconds) : result.seconds;
-    if (!result.challenge && result.stage >= s.highestStage)
-      s.highestStage = Math.min(150, result.stage + (result.seconds < 100 ? 3 : 1));
+    if (!result.challenge && result.stage >= s.highestStage) {
+      const nextChapter = getNextCampaignChapter(s.progression?.clearedStage ?? 0);
+      const fast = result.seconds < RIFT_RULES.timeLimit - RIFT_RULES.speedClearRemaining;
+      s.highestStage = Math.min(
+        nextChapter?.stage ?? RIFT_RULES.maxLevel,
+        result.stage + (fast ? 3 : 1),
+      );
+    }
     const gem = GEMS[Math.floor(Math.random() * GEMS.length)];
     s.gems[gem.id][Math.min(9, Math.floor(result.stage / 20))]++;
   }
@@ -1232,6 +1239,7 @@ export const useGameStore = create<GameState>((set, get) => {
           get().accounts.find((account) => account.id === get().activeAccountId)!.stash,
         ),
       );
+      void get().persist();
     },
     getStats: () => computeStats(get().save),
     equip(id) {

@@ -6,8 +6,6 @@ import {
   Check,
   Crown,
   Heart,
-  Maximize,
-  Minimize,
   Moon,
   Pause,
   Play,
@@ -19,7 +17,7 @@ import {
 } from './ui/PixelIcons';
 import { CLASSES } from './data/classes';
 import { SKILLS } from './data/skillTrees';
-import { useGameStore, createCombatConfig, emptySlotItems } from './state/gameStore';
+import { useGameStore, createCombatConfig, emptySlotItems, itemClass } from './state/gameStore';
 import { useCloudStore } from './state/cloudStore';
 import { SystemsModal } from './ui/SystemsModal';
 import { NpcHall } from './ui/NpcHall';
@@ -33,6 +31,7 @@ import { apiRequest } from './state/cloudStore';
 import { useDialog } from './ui/useDialog';
 import { SETS } from './data/sets';
 import { BUILD_GUIDES } from './data/buildGuides';
+import { CAMPAIGN_FINALE, getCampaignChapter, type CampaignChapter } from './data/campaign';
 import { RIFT_RULES, STAGES } from './data/stages';
 import { isSkillAutoEnabled, skillLearningStatus } from './data/progression';
 import { GameEngine, getActiveSkills } from './engine/GameEngine';
@@ -47,7 +46,7 @@ import { actionKey } from './ui/inputLabels';
 import { TrialPanel } from './ui/TrialPanel';
 import { reportClientEvent } from './state/telemetry';
 import { CharacterCreation } from './ui/CharacterCreation';
-import { StoryGuide } from './ui/StoryGuide';
+import { StoryGuide, type PrologueChapter } from './ui/StoryGuide';
 import { MobileCamp } from './ui/MobileCamp';
 import { useCompactLayout } from './ui/useCompactLayout';
 import './styles.css';
@@ -56,6 +55,7 @@ import './ui/game-theme.css';
 import './ui/pixel-fantasy.css';
 import './ui/responsive-layout.css';
 import './ui/world-first.css';
+import './ui/watchers-style.css';
 
 function App() {
   const compact = useCompactLayout();
@@ -72,13 +72,20 @@ function App() {
     labBackup,
   } = useGameStore();
   const [panel, setPanel] = useState<string | null>(null);
+  const [inspectItem, setInspectItem] = useState<string>();
   const [config, setConfig] = useState<CombatConfig | null>(null);
   const [coop, setCoop] = useState<CoopRoom | null>(null);
   const [result, setResult] = useState<
-    (RunResult & { nextStage: number; unlocked: number; summary: string }) | null
+    | (RunResult & {
+        nextStage: number;
+        unlocked: number;
+        summary: string;
+        chapter?: CampaignChapter;
+      })
+    | null
   >(null);
   const [showGuide, setShowGuide] = useState(false);
-  const [storyReview, setStoryReview] = useState<'arrival' | 'mentor' | 'first-clear' | null>(null);
+  const [storyReview, setStoryReview] = useState<PrologueChapter | CampaignChapter | null>(null);
   const preferences = getPreferences(save.preferences);
   const localReady = useCloudStore((state) => state.localReady);
   const closeGuide = () => {
@@ -122,6 +129,7 @@ function App() {
   }, []);
   const open = (id: string) => {
     audio.play('click');
+    setInspectItem(undefined);
     if (id === 'story') {
       setPanel(null);
       setStoryReview('arrival');
@@ -129,29 +137,31 @@ function App() {
     }
     setPanel(id);
   };
-  const enter = (training = false) => {
+  const enter = (mode: 'rift' | 'training' | 'challenge' = 'rift') => {
     const current = useGameStore.getState();
     if (current.cloudTransition) {
       setNotice('正在切换云端档案，请稍候再开始远征。');
       return;
     }
-    if (!training && !current.save.progression?.challenges?.pending) current.beginSummit();
-    useGameStore.getState().setInCombat(true);
+    if (mode !== 'challenge') current.cancelChallenge();
+    if (mode === 'rift') current.beginSummit();
+    current.setInCombat(true);
     setNotice('');
     audio.play('pylon');
     audio.setTrack('rift');
     setResult(null);
-    const currentAccount = current.accounts.find((entry) => entry.id === current.activeAccountId);
+    const { save, accounts, activeAccountId, labBackup } = useGameStore.getState();
+    const currentAccount = accounts.find((entry) => entry.id === activeAccountId);
     setConfig({
-      ...createCombatConfig(current.save, current.labBackup ? [] : currentAccount?.stash),
-      training,
+      ...createCombatConfig(save, labBackup ? [] : currentAccount?.stash),
+      training: mode === 'training',
     });
   };
-  const leave = () => {
-    if (coop)
-      void apiRequest(coop.code === 'TRIAL' ? '/trials/leave' : '/coop/leave', 'POST', {}).catch(
-        () => {},
-      );
+  const leave = (leaveOnlineRun = true) => {
+    if (coop && leaveOnlineRun)
+      void apiRequest(coop.code === 'TRIAL' ? '/trials/leave' : '/coop/leave', 'POST', {
+        runId: coop.runId,
+      }).catch(() => {});
     useGameStore.getState().cancelChallenge();
     useGameStore.getState().setInCombat(false);
     setConfig(null);
@@ -170,7 +180,8 @@ function App() {
     audio.setTrack('rift');
   };
   const finish = async (r: RunResult) => {
-    const before = useGameStore.getState().save.highestStage;
+    const before = useGameStore.getState().save;
+    const clearedBefore = before.progression?.clearedStage ?? 0;
     if (coop?.code === 'TRIAL') {
       setNotice(
         r.won
@@ -185,7 +196,12 @@ function App() {
       }
     } else if (!config?.training) completeRun(r);
     const current = useGameStore.getState();
-    const unlocked = current.save.highestStage - before;
+    const clearedAfter = current.save.progression?.clearedStage ?? 0;
+    const chapter =
+      r.won && !r.challenge && !labBackup && clearedBefore < r.stage && clearedAfter >= r.stage
+        ? getCampaignChapter(r.stage)
+        : undefined;
+    const unlocked = current.save.highestStage - before.highestStage;
     // A fast frontier clear can unlock several floors. A lower-floor replay
     // advances by one so it never sends a farming character straight to the frontier.
     const nextStage = r.won
@@ -194,9 +210,10 @@ function App() {
         : Math.min(r.stage + 1, current.save.highestStage)
       : r.stage;
     if (!coop && unlocked > 0) selectStage(nextStage);
-    setResult({ ...r, nextStage, unlocked, summary: current.notice });
+    setResult({ ...r, nextStage, unlocked, summary: current.notice, chapter });
   };
-  const summit = result?.won && result.stage === RIFT_RULES.maxLevel;
+  const finale = result?.chapter?.stage === CAMPAIGN_FINALE.stage;
+  const summit = result?.won && result.stage === RIFT_RULES.maxLevel && !labBackup;
   const advance = result?.won && !summit;
   const continueLabel = result?.challenge
     ? '再次挑战本轮契约'
@@ -204,6 +221,16 @@ function App() {
       ? `挑战第 ${result.nextStage} 层`
       : '再次挑战本层';
   const quickItems = result && !coop && !labBackup ? emptySlotItems(save) : [];
+  const equippedWeapon = save.equipment.weapon;
+  const betterWeapon =
+    result && !coop && !labBackup && equippedWeapon
+      ? save.inventory.reduce<typeof equippedWeapon | undefined>((best, item) => {
+          if (item.slot !== 'weapon' || item.attack <= (best?.attack ?? equippedWeapon.attack))
+            return best;
+          const requiredClass = itemClass(item);
+          return !requiredClass || requiredClass === save.classId ? item : best;
+        }, undefined)
+      : undefined;
   const offerSkills =
     result &&
     !result.won &&
@@ -222,7 +249,7 @@ function App() {
         return;
       }
     }
-    enter();
+    enter(result.challenge ? 'challenge' : 'rift');
   };
   if (!ready || !localReady)
     return (
@@ -268,15 +295,22 @@ function App() {
     !save.storySkipped &&
     (save.storyChapter === 'arrival' ||
       save.storyChapter === 'mentor' ||
-      (save.storyChapter === 'first-clear' && save.clears > 0))
+      (save.storyChapter === 'first-clear' && (save.progression?.clearedStage ?? 0) > 0))
       ? save.storyChapter
       : null;
   const visibleStory = storyReview ?? automaticStory;
+  const readChapter = (chapter: CampaignChapter) => {
+    setPanel(null);
+    setStoryReview(chapter);
+  };
   return (
     <div
       className={`app ${compact ? 'layout-compact' : 'layout-desktop'} ${config ? 'in-combat' : 'in-town'} orientation-${save.orientation}`}
       style={{ '--font-scale': preferences.fontScale } as CSSProperties}
       data-color-assist={preferences.colorAssist}
+      data-campaign-complete={
+        (!labBackup && (save.progression?.clearedStage ?? 0) >= CAMPAIGN_FINALE.stage) || undefined
+      }
     >
       {!config && (
         <main className="game-hall" aria-label="守望者营地">
@@ -284,7 +318,15 @@ function App() {
           <MobileCamp onNavigate={open} onGuide={() => setShowGuide(true)} />
         </main>
       )}
-      {config && <CombatView config={config} coop={coop} onLeave={leave} onFinish={finish} />}
+      {config && (
+        <CombatView
+          config={config}
+          coop={coop}
+          onLeave={() => leave()}
+          onReturnToCamp={() => leave(false)}
+          onFinish={finish}
+        />
+      )}
       {['coop', 'expedition'].includes(panel ?? '') && (
         <CoopPanel
           expedition={panel === 'expedition'}
@@ -307,14 +349,17 @@ function App() {
       <SystemsModal
         panel={['coop', 'expedition', 'trial'].includes(panel ?? '') ? null : panel}
         onClose={() => setPanel(null)}
+        onReadChapter={readChapter}
+        inspectItem={inspectItem}
         onNavigate={(id) => {
+          setInspectItem(undefined);
           if (id === 'training' || id === 'guide') {
             setPanel(null);
-            if (id === 'training') enter(true);
+            if (id === 'training') enter('training');
             else setShowGuide(true);
           } else if (id === 'challenge') {
             setPanel(null);
-            enter();
+            enter('challenge');
           } else if (id === 'story') {
             setPanel(null);
             setStoryReview('arrival');
@@ -340,36 +385,44 @@ function App() {
           }}
           onTrain={() => {
             closeGuide();
-            enter(true);
+            enter('training');
           }}
         />
       )}
       {visibleStory && (
         <StoryGuide
-          key={`${storyReview ? 'review' : 'story'}-${visibleStory}`}
+          key={`${storyReview ? 'review' : 'story'}-${typeof visibleStory === 'string' ? visibleStory : visibleStory.stage}`}
           chapter={visibleStory}
           onAdvance={() => {
+            if (typeof visibleStory !== 'string') {
+              setStoryReview(null);
+              return;
+            }
             const next =
               visibleStory === 'arrival'
                 ? 'mentor'
                 : visibleStory === 'mentor'
                   ? 'first-clear'
                   : 'complete';
-            if (storyReview) setStoryReview(next === 'complete' ? null : next);
+            if (storyReview)
+              setStoryReview(
+                next === 'complete' || (next === 'first-clear' && !save.progression?.clearedStage)
+                  ? null
+                  : next,
+              );
             else updateSettings({ storyChapter: next });
           }}
           onSkip={() => {
             if (storyReview) setStoryReview(null);
             else updateSettings({ storySkipped: true, storyChapter: 'complete' });
           }}
-          onClose={() => setStoryReview(null)}
         />
       )}
       {result && (
         <div className="modal-backdrop result-backdrop">
           <div
             ref={resultRef}
-            className="result-card"
+            className={`result-card${result.chapter ? ' campaign-victory' : ''}`}
             role="dialog"
             aria-modal="true"
             aria-label="秘境结算"
@@ -389,19 +442,28 @@ function App() {
                     : '契约挑战结束'
                   : summit
                     ? '秘境之巅 · 已登顶'
-                    : result.won
-                      ? '秘境已征服'
-                      : result.seconds >= RIFT_RULES.timeLimit
-                        ? '远征时间已尽'
-                        : coop
-                          ? '队伍已倒下'
-                          : '行者倒下了'}
+                    : result.chapter
+                      ? finale
+                        ? '守望灯已重燃'
+                        : `章关告捷 · ${result.chapter.title}`
+                      : result.won
+                        ? '秘境已征服'
+                        : result.seconds >= RIFT_RULES.timeLimit
+                          ? '远征时间已尽'
+                          : coop
+                            ? '队伍已倒下'
+                            : '行者倒下了'}
             </h2>
             <p>
               {STAGES[result.stage - 1]?.name} · 第 {result.stage} 层
               {result.unlocked > 0 &&
                 ` · ${result.unlocked > 1 ? '速通' : '通关'}解锁至第 ${result.nextStage} 层`}
             </p>
+            {finale && (
+              <p className="campaign-victory-status">
+                主线完成 · 可继续挑战第 {CAMPAIGN_FINALE.stage + 1}–{RIFT_RULES.maxLevel} 层
+              </p>
+            )}
             <div className="result-stats">
               <div>
                 <span>战斗用时</span>
@@ -453,9 +515,26 @@ function App() {
               />
             )}
             <div className="result-actions">
-              {quickItems.length > 0 && (
+              {result.chapter && (
                 <button
                   className="gold-button full-width"
+                  onClick={() => {
+                    const chapter = result.chapter!;
+                    returnToCamp();
+                    if (
+                      chapter.stage !== 1 ||
+                      save.storySkipped ||
+                      save.storyChapter !== 'first-clear'
+                    )
+                      readChapter(chapter);
+                  }}
+                >
+                  {finale ? '阅读主线结局' : '回营阅读战报'} <BookOpen size={16} />
+                </button>
+              )}
+              {quickItems.length > 0 && !finale && (
+                <button
+                  className={`${result.chapter ? 'outline' : 'gold'}-button full-width`}
                   title={quickItems.map((item) => item.name).join('、')}
                   onClick={() => continueRun(true)}
                 >
@@ -463,7 +542,7 @@ function App() {
                 </button>
               )}
               <button
-                className={`${quickItems.length ? 'outline' : 'gold'}-button full-width`}
+                className={`${quickItems.length || result.chapter ? 'outline' : 'gold'}-button full-width`}
                 onClick={() => {
                   if (coop) {
                     returnToCamp();
@@ -474,6 +553,18 @@ function App() {
                 {coop ? (coop.code === 'TRIAL' ? '返回官方试炼' : '重新集结队伍') : continueLabel}{' '}
                 <Swords size={16} />
               </button>
+              {betterWeapon && (
+                <button
+                  className="outline-button full-width"
+                  onClick={() => {
+                    returnToCamp();
+                    open('character');
+                    setInspectItem(betterWeapon.id);
+                  }}
+                >
+                  比较武器 · {betterWeapon.name} <ArrowRight size={16} />
+                </button>
+              )}
               <button
                 className="outline-button full-width"
                 onClick={() => {
@@ -494,15 +585,23 @@ function App() {
   );
 }
 
+const CHALLENGE_ACTIONS = {
+  pursuit: '击败精英领队',
+  ward: '驻守中央光圈',
+  hazards: '躲避地面冲击',
+};
+
 function CombatView({
   config,
   coop,
   onLeave,
+  onReturnToCamp,
   onFinish,
 }: {
   config: CombatConfig;
   coop?: CoopRoom | null;
   onLeave: () => void;
+  onReturnToCamp: () => void;
   onFinish: (result: RunResult) => void;
 }) {
   const host = useRef<HTMLDivElement>(null);
@@ -517,7 +616,12 @@ function CombatView({
   const pauseBeforeLeave = useRef(false);
   const [auto, setAuto] = useState(config.autoSkills);
   const save = useGameStore((s) => s.save);
-  const updateSettings = useGameStore((s) => s.updateSettings);
+  const lab = useGameStore((s) => !!s.labBackup);
+  const stage = STAGES[config.stage - 1];
+  const chapter =
+    !lab && !config.training && !config.challenge && coop?.code !== 'TRIAL'
+      ? getCampaignChapter(config.stage)
+      : undefined;
   const skills = getActiveSkills(config);
   const movement = skills.find((skill) => skill.kind === 'movement');
   const combatSet = SETS.filter((set) => set.classId === config.classId)
@@ -529,9 +633,7 @@ function CombatView({
   const combatGuide = combatSet?.count >= 2 ? BUILD_GUIDES[combatSet.id] : undefined;
   const basic = skills.find((skill) => skill.kind === 'basic');
   const openingHint =
-    basic && auto[basic.id] === false
-      ? '靠近敌人，点击技能或开启自动施放'
-      : '靠近敌人自动攻击，走出地面预警';
+    basic && !isSkillAutoEnabled(auto, basic) ? '靠近后点击技能攻击' : '靠近后自动攻击，躲开预警';
   const cancelLeave = () => {
     setLeaveDialog(false);
     engine.current?.setPaused(pauseBeforeLeave.current);
@@ -668,13 +770,11 @@ function CombatView({
     const current = useGameStore.getState();
     if (isSkillAutoEnabled(current.save.autoSkills, skill) !== next) current.toggleAuto(id);
   };
-  const toggleLayout = () =>
-    updateSettings({
-      orientation: save.orientation === 'portrait' ? 'landscape' : 'portrait',
-    });
   return (
     <section
       className={`combat-screen ${coop ? 'coop-combat' : ''}`}
+      data-rift-theme={stage.theme}
+      data-chapter-gate={!!chapter || undefined}
       style={{ '--party-size': coop?.members.length ?? 1 } as CSSProperties}
     >
       <div className="combat-canvas" ref={host} />
@@ -687,7 +787,7 @@ function CombatView({
             <span>
               {config.training
                 ? '秘境演武场'
-                : `${coop?.code === 'TRIAL' ? '官方配装试炼' : STAGES[config.stage - 1]?.name} · 第 ${config.stage} 层`}
+                : `${coop?.code === 'TRIAL' ? '官方配装试炼' : (chapter?.title ?? stage.name)} · 第 ${config.stage} 层`}
             </span>
             <b>{config.training ? '∞' : formatTime(snapshot?.seconds ?? RIFT_RULES.timeLimit)}</b>
           </div>
@@ -701,23 +801,26 @@ function CombatView({
           >
             <i style={{ width: `${snapshot?.progress ?? 0}%` }} />
           </div>
-          <small>
+          <small className="rift-status">
             <span>
               {!snapshot
                 ? '正在布置战场…'
                 : config.training
                   ? '练习移动与施法 · 训练无收益'
                   : snapshot.objective && snapshot.objective.progress < snapshot.objective.target
-                    ? `${snapshot.objective.name} · ${Math.floor(snapshot.objective.progress)}/${snapshot.objective.target}${config.challenge?.id === 'ward' ? ' · 留在中央光圈充能' : ''}`
+                    ? `${config.challenge ? CHALLENGE_ACTIONS[config.challenge.id] : snapshot.objective.name} · ${Math.floor(snapshot.objective.progress)}/${snapshot.objective.target}`
                     : snapshot.boss
-                      ? '目标 · 击败守关首领'
+                      ? '击败守关首领'
                       : snapshot.kills === 0
                         ? openingHint
                         : '击败敌人，拾取紫色进度球'}
             </span>
-            <span>
-              {Math.floor(snapshot?.progress ?? 0)}% · {snapshot?.kills ?? 0} 击败
-            </span>
+            {!config.training && (
+              <span className="rift-status-count">
+                {Math.floor(snapshot?.progress ?? 0)}%
+                <span className="rift-kill-count"> · {snapshot?.kills ?? 0} 击败</span>
+              </span>
+            )}
           </small>
         </div>
         <button
@@ -822,9 +925,6 @@ function CombatView({
           onClick={() => engine.current?.setPaused(true)}
         >
           <BookOpen size={17} />
-        </button>
-        <button className="icon-button" aria-label="切换横竖屏布局" onClick={toggleLayout}>
-          {save.orientation === 'portrait' ? <Maximize size={17} /> : <Minimize size={17} />}
         </button>
         <small>{snapshot?.fps ?? 60} FPS</small>
       </div>
@@ -969,9 +1069,6 @@ function CombatView({
           <Moon />
           <h2>{coop ? '远征仍在进行' : '时间已静止'}</h2>
           {coop && <p>菜单期间角色停止接收移动操作，战场持续进行。请及时返回队伍。</p>}
-          <button className="paused-layout-control outline-button" onClick={toggleLayout}>
-            切换至{save.orientation === 'portrait' ? '横屏' : '竖屏'}布局
-          </button>
           {combatGuide && (
             <div className="paused-build-guide">
               <strong>
@@ -1024,7 +1121,7 @@ function CombatView({
         <div className="paused-label">
           <h2>无法打开秘境</h2>
           <p>{error}</p>
-          <button className="gold-button" onClick={onLeave}>
+          <button className="gold-button" onClick={onReturnToCamp}>
             返回营地
           </button>
         </div>

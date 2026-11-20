@@ -40,3 +40,18 @@
 角色、伙伴、营地、秘境和战斗图集通过现有载入接口进入游戏。地图按楼层生成布局；十二种材质使用连续边缘的镜像平铺。技能图标按原技能构图逐格限色，施法与地面效果独立保留透明区域。UI 的多尺寸框线使用九宫格角件，文字保持原生渲染。
 
 装备的目录、八个部位、可掉落与预留组合见[装备外观审计](EQUIPMENT_ART.md)。背包、装备槽和地面掉落使用相同外观键，联机接收端也据此选图。五职业在营地、装备页和战斗中均使用完整职业原画，换装不改变人物轮廓。设计板内的英文排版和示意数值仅用于展示方案。
+
+## 主线视觉修订
+
+营地以灰蓝石墙、松林和带铜边的灯具为底。暖金强调出征、当前章关和完成动作，四种地貌的标题条呼应各自色调。场景纹理压低亮度，让战斗角色、紫色进度球和红色预警优先可见。章关地面铺设低亮度的铜灯镶嵌。主线完成后，暖光照入营地，旅程与结局共用同一张归路插画。
+
+内置 ImageGen 生成《归灯》，原图转码为 [watchers-dawn.webp](../public/assets/story/watchers-dawn.webp)，1672 × 941，约 284 KiB。生成提示词如下。
+
+```text
+Use case: illustration-story
+Asset type: ending illustration for the original Chinese dark-fantasy pixel RPG Mist Continent (雾隐).
+Scene: seen from the woods looking toward the Watchers' camp, a broad old blue-gray stone road threads between rows of tall dark pines into a stone archway. In the center foreground an old bronze wayfinding lantern burns brightly. Small echoes of its amber flame light one by one along the road and reach a distant stone watchtower. The mottled blue-green fog that covered the path is breaking apart and the first pale dawn is at the horizon. The environment tells the story, with no visible people.
+Style: handcrafted high-detail 2D pixel illustration with clearly legible square pixel clusters, chunky silhouettes, clean stepped edges and restrained dithering. Cold slate, pine green and ink-blue shadows, muted brass, warm honey-orange lamps, a small cyan seam in the old stone arch. A quiet, triumphant payoff, visually related to a moody top-down stone-and-pine fantasy village, with a lower three-quarter cinematic viewpoint.
+Composition: wide landscape illustration, main lantern and vanishing point centered through the middle horizontal band. Use the full bleed rectangular canvas, with dark trees as a natural frame. Distinct silhouettes and light pools must remain visible when reduced to a narrow mobile story panel.
+Constraints: environment only, no letters, logos, interface, borders, floating text, watermarks, painterly blur or smooth 3D gradients.
+```

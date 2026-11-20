@@ -118,6 +118,8 @@
   overflow: hidden;
 }
 .app .combat-screen {
+  --combat-header-end: calc(64px + env(safe-area-inset-top));
+  --combat-info-top: calc(var(--combat-header-end) + 30px);
   width: 100%;
   max-width: none;
   height: var(--app-height, 100dvh);
@@ -130,17 +132,18 @@
   box-shadow: none;
 }
 .app .combat-screen .combat-top {
-  height: 54px;
-  padding: 6px 10px;
+  height: var(--combat-header-end);
+  padding: calc(6px + env(safe-area-inset-top)) max(10px, env(safe-area-inset-right)) 6px
+    max(10px, env(safe-area-inset-left));
   gap: 10px;
   border: 0;
   background: linear-gradient(#07111dde, #07111d70 80%, transparent);
 }
 .app .combat-screen .combat-top .icon-button {
-  width: 40px;
-  height: 40px;
-  min-width: 40px;
-  min-height: 40px;
+  width: 44px;
+  height: 44px;
+  min-width: 44px;
+  min-height: 44px;
   padding: 9px;
   border-width: 1px;
   background: #10253688;
@@ -148,6 +151,7 @@
 .app .combat-screen .rift-progress {
   min-width: 0;
   flex: 1;
+  pointer-events: none;
 }
 .app .combat-screen .rift-progress > div:first-child {
   font-size: 13px;
@@ -159,12 +163,28 @@
   border: 0;
   border-radius: 0;
 }
-.app .combat-screen .rift-progress small {
-  display: none;
+.app .combat-screen .rift-progress .rift-status {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 16px;
+  color: #e3e9dc;
+  font-size: clamp(11px, calc(11px * var(--font-scale, 1)), 13px);
+  white-space: nowrap;
+}
+.app .combat-screen .rift-progress .rift-status > span:first-child {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.app .combat-screen .rift-progress .rift-status > .rift-status-count {
+  display: inline;
+  flex-shrink: 0;
 }
 .app .combat-screen .combat-vitals {
   position: absolute;
-  top: 56px;
+  top: calc(var(--combat-header-end) + 2px);
   left: 12px;
   z-index: 7;
   display: grid;
@@ -279,7 +299,7 @@
   display: none;
 }
 .app .combat-screen .buff-list {
-  top: 86px;
+  top: var(--combat-info-top);
   left: 12px;
   right: 110px;
   max-width: min(680px, calc(100% - 120px));
@@ -296,7 +316,7 @@
   background: #0b1d2a99;
 }
 .app .combat-screen .boss-health {
-  top: 86px;
+  top: var(--combat-info-top);
   left: 50%;
   right: auto;
   width: min(620px, calc(100% - 32px));
@@ -313,6 +333,19 @@
 }
 .app .combat-screen:has(.boss-health) .buff-list {
   display: none;
+}
+.app .coop-combat .coop-team-hud {
+  top: var(--combat-info-top);
+}
+.app .coop-combat .boss-health {
+  top: calc(var(--combat-info-top) + 46px);
+}
+.app .coop-combat .buff-list {
+  top: calc(var(--combat-info-top) + 46px);
+}
+.app .coop-combat .coop-network {
+  top: auto;
+  bottom: calc(102px + env(safe-area-inset-bottom));
 }
 .app .combat-screen .pylon-list {
   top: auto;
@@ -388,11 +421,9 @@
     display: none;
   }
   .app .combat-screen .boss-health {
-    top: 84px;
     width: calc(100% - 24px);
   }
-  .app .combat-screen .coop-team-hud {
-    top: 84px;
+  .app .coop-combat .coop-team-hud {
     left: 8px;
     right: 8px;
     display: flex;
@@ -409,9 +440,6 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-  }
-  .app .coop-combat .boss-health {
-    top: 130px;
   }
 }
 @media (max-width: 960px) and (orientation: landscape) {
@@ -430,6 +458,9 @@
   }
   .app .combat-screen .combat-vitals {
     right: 130px;
+  }
+  .app .coop-combat .coop-team-hud {
+    right: 132px;
   }
   .app .combat-screen .combat-bottom {
     inset: 0 0 0 auto;
@@ -470,6 +501,9 @@
   }
 }
 @media (max-width: 370px) and (orientation: portrait) {
+  .app .combat-screen .rift-kill-count {
+    display: none;
+  }
   .app .combat-screen .combat-bottom .skills-bar {
     grid-template-columns: repeat(var(--skill-count), minmax(0, 48px));
     gap: 3px;

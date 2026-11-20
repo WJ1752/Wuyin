@@ -1,0 +1,183 @@
+.app {
+  --watchers-ink: #101c26;
+  --watchers-slate: #90b5b3;
+  --watchers-bronze: #a08455;
+  --watchers-amber: #f3ce86;
+}
+
+.app .hall-map > .town-scene {
+  filter: saturate(0.86) brightness(0.91);
+}
+
+.app.in-town[data-campaign-complete] .hall-map > .town-scene {
+  filter: saturate(0.92) brightness(1.06);
+}
+
+.app.in-town[data-campaign-complete] .hall-ground-light {
+  background:
+    radial-gradient(ellipse at 50% 6%, #eeb06c38, transparent 57%),
+    radial-gradient(ellipse at 50% 48%, transparent 42%, #08151b66 100%);
+}
+
+.app .camp-hud-objective,
+.app .camp-hud-button,
+.app .combat-screen .combat-top .icon-button {
+  border-color: var(--watchers-bronze);
+  background: var(--watchers-ink);
+  box-shadow:
+    inset 0 2px #ffffff0d,
+    0 2px #060d14ad;
+}
+
+.app .camp-hud-objective-action > svg {
+  color: var(--watchers-amber);
+}
+
+.app .combat-screen {
+  --rift-accent: #91b9a4;
+}
+
+.app .combat-screen[data-rift-theme='1'] {
+  --rift-accent: #a8badb;
+}
+
+.app .combat-screen[data-rift-theme='2'] {
+  --rift-accent: #e5ac79;
+}
+
+.app .combat-screen[data-rift-theme='3'] {
+  --rift-accent: #bfb0e4;
+}
+
+.app .combat-screen .combat-top {
+  background: linear-gradient(#0b1721f2, #0b1721aa 80%, transparent);
+}
+
+.app .combat-screen .rift-progress > div:first-child > span {
+  color: var(--rift-accent);
+}
+
+.app .combat-screen[data-chapter-gate] .rift-progress > div:first-child > span {
+  color: var(--watchers-amber);
+}
+
+.app .combat-screen .progress-track i {
+  background: repeating-linear-gradient(90deg, var(--rift-accent) 0 8px, transparent 8px 10px);
+  box-shadow: none;
+}
+
+.app .journey-panel .campaign-journal {
+  display: grid;
+  grid-column: 1 / -1;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 0.8fr);
+  align-items: center;
+  gap: clamp(16px, 4vw, 40px);
+  isolation: isolate;
+  overflow: hidden;
+  padding: clamp(14px, 3vw, 26px);
+  border: 1px solid var(--watchers-bronze);
+  background: linear-gradient(135deg, #182934, #101a23 74%);
+  box-shadow: inset 0 2px #d0bf9b2e;
+}
+
+.campaign-journal-art {
+  position: absolute;
+  z-index: -1;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center 51%;
+  opacity: 0.27;
+}
+
+.app .campaign-journal h3 {
+  margin: 0;
+  color: var(--watchers-amber);
+  font: 600 clamp(18px, 3vw, 26px) var(--serif);
+}
+
+.campaign-journal-copy .muted {
+  color: var(--chapter-accent);
+}
+
+.campaign-route {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.campaign-route > li {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 9px;
+  min-height: 46px;
+  padding: 3px 6px 3px 12px;
+  border-left: 2px solid #74858a65;
+  background: #0d1821db;
+  color: #bbbeb3;
+}
+
+.campaign-route > li[aria-current='step'] {
+  border-color: var(--watchers-amber);
+  color: var(--watchers-amber);
+}
+
+.campaign-route > li[data-cleared] {
+  border-color: var(--watchers-slate);
+  color: var(--watchers-slate);
+}
+
+.campaign-route b,
+.campaign-route small {
+  display: block;
+}
+
+.campaign-route small {
+  color: #b9c1bc;
+}
+
+.app .campaign-route button {
+  display: grid;
+  min-width: 44px;
+  min-height: 44px;
+  place-items: center;
+  padding: 0;
+}
+
+.app .story-book.campaign-ending {
+  width: min(680px, 100%);
+}
+
+.campaign-ending-art {
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  margin: 16px 0;
+  border-block: 2px solid var(--watchers-bronze);
+  object-fit: cover;
+  image-rendering: pixelated;
+}
+
+.app .campaign-victory-status {
+  color: var(--watchers-amber);
+}
+
+.app .campaign-victory .result-crest {
+  color: var(--watchers-amber);
+  filter: drop-shadow(0 0 13px #dfb47760);
+}
+
+@media (max-width: 760px) {
+  .app .journey-panel .campaign-journal {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .app .campaign-ending footer .gold-button {
+    grid-column: 1 / -1;
+  }
+}

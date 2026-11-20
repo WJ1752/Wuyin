@@ -101,13 +101,14 @@ export async function apiRequest<T>(path: string, method = 'GET', body?: unknown
       },
       ...(body === undefined ? {} : { body: JSON.stringify(body) }),
     });
-    const data = await response.json().catch(() => ({}));
+    const data = await response.json().catch(() => null);
     if (!response.ok)
       throw new RequestError(
-        data.error ?? `云服务请求失败（${response.status}）`,
+        data?.error ?? `云服务请求失败（${response.status}）`,
         response.status,
-        data.code,
+        data?.code,
       );
+    if (!data || typeof data !== 'object') throw new Error('云服务暂不可用，仍可在本机游玩。');
     return data as T;
   } finally {
     clearTimeout(timeout);
@@ -294,6 +295,8 @@ function fail(error: unknown) {
       'INVALID_CREDENTIALS_FORMAT',
       'CONFIRMATION_REQUIRED',
       'RATE_LIMITED',
+      'RESULT_NOT_FOUND',
+      'RESULT_CHARACTER_MISSING',
     ].includes(error.code ?? '')
   ) {
     useCloudStore.setState({ error: message });
@@ -592,18 +595,25 @@ export const useCloudStore = create<CloudState>((set, get) => ({
     )
       throw new Error('请登录奖励所属账号并结束流派体验后领取。');
     await get().sync();
-    if (get().status !== 'online' || get().dirty || get().busy)
-      throw new Error(get().error || '请先处理云端进度分歧，再从远征面板补领奖励。');
+    const ready = get();
+    if (
+      ready.user?.id !== initial.user.id ||
+      ready.status !== 'online' ||
+      ready.dirty ||
+      ready.busy
+    )
+      throw new Error(ready.error || '请先在账号面板同步云端进度，再回组队远征补领奖励。');
     set({ busy: true });
     useGameStore.setState({ cloudTransition: true });
     try {
       await replacementBackup();
       const response = await apiRequest<
         CloudSave & { result: RunResult; alreadyClaimed: boolean; notice?: string }
-      >('/coop/claim', 'POST', { runId, revision: get().revision });
+      >('/coop/claim', 'POST', { runId, revision: ready.revision });
       if (
         !response.account ||
         response.account.id !== initial.user.id ||
+        !Number.isSafeInteger(response.revision) ||
         response.revision < get().revision
       )
         throw new Error('奖励返回的云端存档无效，本机备份已保留。');
@@ -617,7 +627,11 @@ export const useCloudStore = create<CloudState>((set, get) => ({
       });
       set({ status: 'online', pending: response, error: '' });
       if (response.notice) useGameStore.setState({ notice: response.notice });
-      await persistLocal();
+      try {
+        await persistLocal();
+      } catch {
+        set({ error: '远征奖励已入账，浏览器本机备份写入失败。重新登录后可从云端载入。' });
+      }
       return response.result;
     } catch (error) {
       fail(error);

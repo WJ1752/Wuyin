@@ -354,6 +354,10 @@ test('server-hosted cooperation keeps the same world across guest and leader rec
   const leaderReturned = await host.request('GET', '/coop/room');
   assert.equal(leaderReturned.json().room.status, 'playing');
   assert.ok(leaderReturned.json().room.snapshot.sequence > initialSequence);
+  await guest.request('POST', '/coop/leave', { runId: 'previous-expedition' });
+  const afterOldLeave = (await guest.request('GET', '/coop/room')).json().room;
+  assert.equal(afterOldLeave.runId, created.runId);
+  assert.equal(afterOldLeave.status, 'playing');
   assert.equal(
     (await host.request('POST', '/coop/exchange', { snapshot: frame(room) })).statusCode,
     403,

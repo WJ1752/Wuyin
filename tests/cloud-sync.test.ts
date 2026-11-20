@@ -6,6 +6,7 @@ import { useCloudStore } from '../src/state/cloudStore';
 const local = new Map<string, string>();
 const disk = new Map<string, unknown>();
 let localFull = false;
+let diskFull = false;
 let offline = false;
 let expire = false;
 let failSaveGet = false;
@@ -20,6 +21,16 @@ let user: { id: string; username: string } | null = null;
 let remote: any = { account: null, revision: 0, updatedAt: null };
 let puts = 0;
 const clone = <T>(value: T): T => JSON.parse(JSON.stringify(value));
+const reward = {
+  stage: 1,
+  partySize: 2,
+  won: true,
+  seconds: 40,
+  gold: 72,
+  shards: 1,
+  kills: 6,
+  items: [],
+};
 Object.defineProperty(globalThis, 'localStorage', {
   configurable: true,
   value: {
@@ -49,6 +60,10 @@ Object.defineProperty(globalThis, 'indexedDB', {
                   return read;
                 },
                 put: (value: unknown, key: string) => {
+                  if (diskFull) {
+                    queueMicrotask(() => transaction.onerror?.());
+                    return;
+                  }
                   disk.set(key, clone(value));
                   queueMicrotask(() => transaction.oncomplete?.());
                 },
@@ -104,6 +119,16 @@ Object.defineProperty(globalThis, 'fetch', {
         };
         result = remote;
       }
+    } else if (path === '/api/coop/claim' && method === 'POST') {
+      assert.equal(body.revision, remote.revision);
+      const account = clone(remote.account);
+      account.characters.find(
+        (character: any) => character.id === account.activeCharacterId,
+      ).save.gold += reward.gold;
+      remote = { account, revision: remote.revision + 1, updatedAt: Date.now() };
+      result = { ...remote, result: reward, alreadyClaimed: false };
+      // The cloud write completed before browser storage stopped accepting writes.
+      localFull = diskFull = true;
     } else throw new Error(`unexpected request ${method} ${path}`);
     return new Response(JSON.stringify(result), {
       status,
@@ -251,6 +276,13 @@ test('cloud lifecycle preserves isolated local progress, revision conflicts and 
   );
   await cloud().choose('download');
   assert.equal(game().save.volume, 0.43);
+  const goldBeforeReward = game().save.gold;
+  assert.deepEqual(await cloud().claimCoopReward('accepted-reward'), reward);
+  assert.equal(game().save.gold, goldBeforeReward + reward.gold);
+  assert.equal(cloud().status, 'online');
+  assert.equal(cloud().revision, remote.revision);
+  assert.match(cloud().error, /已入账/);
+  localFull = diskFull = false;
   await cloud().logout();
   assert.equal(game().cloudUserId, null);
   failSaveGet = true;

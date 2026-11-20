@@ -35,6 +35,7 @@ import {
 import type { ClassId, Item, LeaderboardResponse, RunRecord, Slot, Stats } from '../core/types';
 import { RARITY_COLORS, RARITY_NAMES, SLOTS, SLOT_NAMES } from '../core/types';
 import { CLASSES } from '../data/classes';
+import type { CampaignChapter } from '../data/campaign';
 import { SKILLS } from '../data/skillTrees';
 import { SETS } from '../data/sets';
 import { LEGENDARIES } from '../data/legendaries';
@@ -451,10 +452,10 @@ const percentStats = [
   'bonusDamage',
   'luck',
 ];
-function CharacterPanel() {
+function CharacterPanel({ inspectItem }: { inspectItem?: string }) {
   const store = useGameStore();
   const { save } = store;
-  const [selected, setSelected] = useState<string>('');
+  const [selected, setSelected] = useState(inspectItem ?? '');
   const [filter, setFilter] = useState('all');
   const [slotFilter, setSlotFilter] = useState('all');
   const [search, setSearch] = useState('');
@@ -2383,19 +2384,6 @@ function SettingsPanel() {
             onChange={(e) => store.updateSettings({ muted: e.target.checked })}
           />
         </label>
-        <label className="setting-row desktop-layout-setting">
-          <span>界面方向</span>
-          <select
-            className="system-select"
-            value={store.save.orientation}
-            onChange={(e) =>
-              store.updateSettings({ orientation: e.target.value as 'portrait' | 'landscape' })
-            }
-          >
-            <option value="portrait">竖屏 · 单手探索</option>
-            <option value="landscape">横屏 · 键鼠作战</option>
-          </select>
-        </label>
         <label className="setting-row">
           <span>自动分解史诗及以下掉落</span>
           <input
@@ -2539,11 +2527,15 @@ export function SystemsModal({
   onClose,
   onNavigate,
   onEnterHall,
+  onReadChapter,
+  inspectItem,
 }: {
   panel: string | null;
   onClose: () => void;
   onNavigate?: (panel: string) => void;
   onEnterHall?: () => void;
+  onReadChapter?: (chapter: CampaignChapter) => void;
+  inspectItem?: string;
 }) {
   const title = panel ? TITLES[panel] : undefined;
   const ref = useDialog(!!panel && !!title, onClose);
@@ -2663,9 +2655,9 @@ export function SystemsModal({
             ) : panel === 'stash' ? (
               <StashPanel />
             ) : panel === 'character' ? (
-              <CharacterPanel />
+              <CharacterPanel inspectItem={inspectItem} />
             ) : panel === 'journey' ? (
-              <JourneyPanel onNavigate={onNavigate} />
+              <JourneyPanel onNavigate={onNavigate} onReadChapter={onReadChapter} />
             ) : panel === 'skills' ? (
               <SkillsPanel />
             ) : panel === 'cube' ? (
