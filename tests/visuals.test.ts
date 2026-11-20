@@ -5,8 +5,11 @@ import { HALL_NPCS } from '../src/data/npcHall';
 import { NPC_ART, NPC_ATLAS } from '../src/data/npcVisuals';
 import { skillSound, SOUND_NAMES } from '../src/audio/SynthAudio';
 import { SKILLS } from '../src/data/skillTrees';
+import { getCharacterArt } from '../src/render/CharacterTextures';
 import { SKILL_ART, CAST_ART, EFFECT_CELLS } from '../src/data/skillArt';
 import { LEGENDARIES } from '../src/data/legendaries';
+import { CLASSES } from '../src/data/classes';
+import { CLASS_HAND_EQUIPMENT, itemClass } from '../src/data/equipment';
 import { SETS } from '../src/data/sets';
 import { generateLoot } from '../src/engine/LootGenerator';
 import {
@@ -27,8 +30,24 @@ import sharp from 'sharp';
 const geometry = (visual: AssetVisual) =>
   JSON.stringify(visual.layers.map(({ path, transform }) => ({ path, transform })));
 
+test('equipping a signature piece selects the three authored class poses and unequipping restores the base', async () => {
+  for (const id of ['dawn', 'judgment', 'grand_vizier', 'bloodtide', 'greenstone']) {
+    const legendary = LEGENDARIES.find((entry) => entry.id === id)!;
+    const classId = legendary.classId!;
+    const gear = generateLoot(classId, 25, { legendaryId: id });
+    const art = getCharacterArt(classId, { [gear.slot]: gear });
+    assert.notEqual(art.src, getCharacterArt(classId, {}).src);
+    for (const src of [art.src, art.walk, art.action]) {
+      const meta = await sharp(
+        readFileSync(new URL(`../public/${src}`, import.meta.url)),
+      ).metadata();
+      assert.ok(meta.hasAlpha && meta.width === 128 && meta.height === 128);
+    }
+  }
+});
+
 test('equipment drop atlas matches the stable visual catalog', async () => {
-  assert.equal(EQUIPMENT_DROP_CATALOG.length, 221);
+  assert.equal(EQUIPMENT_DROP_CATALOG.length, 231);
   const metadata = await sharp(
     readFileSync(new URL('../public/assets/maps/equipment-drops.webp', import.meta.url)),
   ).metadata();
@@ -139,10 +158,26 @@ test('ordinary equipment uses stable series and slot identity, independent of ro
   const first = generateLoot('ranger', 1, { slot: 'weapon', rarity: 'rare', rng: () => 0.5 });
   const second = { ...first, id: 'a-different-drop', level: 100, attack: 999 };
   assert.equal(getItemVisual(first), getItemVisual(second));
-  assert.equal(getItemVisual(first).key, 'ordinary:暮色:weapon');
+  assert.equal(getItemVisual(first).key, 'class-hand:ranger:weapon');
+  const legacy = { ...first, classId: undefined, name: '暮色武器' };
+  assert.equal(getItemVisual(legacy).key, 'ordinary:暮色:weapon');
+  assert.equal(itemClass(legacy), undefined);
   assert.notEqual(getItemVisual(first), getItemVisual({ ...first, slot: 'chest' }));
   assert.equal(
-    getItemVisual({ ...first, name: `【太古】${first.name}`, rarity: 'primal' }),
-    getItemVisual(first),
+    getItemVisual({ ...legacy, name: `【太古】${legacy.name}`, rarity: 'primal' }),
+    getItemVisual(legacy),
   );
+  const visuals = CLASSES.flatMap(({ id }) => {
+    for (const slot of ['chest', 'jewelry'] as const)
+      assert.equal(itemClass(generateLoot(id, 1, { slot, rarity: 'rare' })), undefined);
+    return (['weapon', 'offhand'] as const).map((slot) => {
+      const item = generateLoot(id, 1, { slot, rarity: 'rare', gambling: true });
+      assert.equal(itemClass(item), id);
+      assert.ok(item.name.endsWith(CLASS_HAND_EQUIPMENT[id][slot].name));
+      const visual = getItemVisual(item);
+      assert.ok(EQUIPMENT_DROP_CATALOG.includes(visual));
+      return geometry(visual);
+    });
+  });
+  assert.equal(new Set(visuals).size, 10);
 });

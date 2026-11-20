@@ -1,9 +1,8 @@
-import { Container, Graphics, Sprite } from 'pixi.js';
-import { getEffectTexture, getSkillTexture } from './SkillTextures';
-import type { SkillDef } from '../core/types';
+import { Container, Graphics, Sprite, Texture } from 'pixi.js';
 import type { CombatEffectCue } from '../core/coop';
-import type { EffectArt } from '../data/skillArt';
-import { pixelEllipse, pixelLine, pixelPolygon, snapPixel } from './PixelArt';
+import type { SkillDef } from '../core/types';
+import { getEffectTexture, getSkillTexture } from './SkillTextures';
+
 export const ELEMENT_COLORS: Record<string, number> = {
   physical: 0xe3cfaa,
   fire: 0xeaa068,
@@ -37,14 +36,34 @@ const directionalEffects = new Set([
   'multishot',
 ]);
 const targetedEffects = new Set(['siphon', 'chain', 'curse', 'raven']);
+
+type View = Sprite | Graphics;
 interface Effect {
-  view: Container;
+  view: View;
   age: number;
   life: number;
+  important: boolean;
   update: (t: number) => void;
 }
+interface Spark {
+  view: Sprite;
+  life: number;
+  age: number;
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  gravity: number;
+}
+
 export class VFXManager {
   private effects: Effect[] = [];
+  private sparks: Spark[] = [];
+  private sprites: Sprite[] = [];
+  private graphics: Graphics[] = [];
+  private recent = new Map<string, number>();
+  private clock = 0;
+
   constructor(
     private layer: Container,
     private record?: (cue: CombatEffectCue) => void,
@@ -53,6 +72,7 @@ export class VFXManager {
     if (density === 'full' && globalThis.matchMedia?.('(prefers-reduced-motion: reduce)').matches)
       this.density = 'reduced';
   }
+
   replay(cue: CombatEffectCue) {
     const { x, y, color } = cue;
     switch (cue.kind) {
@@ -68,267 +88,266 @@ export class VFXManager {
         return this.meteor(x, y, color, cue.radius);
     }
   }
-  private add<T extends Container>(view: T, life: number, update: (view: T, t: number) => void) {
-    if (this.effects.length >= (this.density === 'full' ? 180 : 40))
-      this.effects.shift()?.view.destroy();
-    this.layer.addChild(view);
-    this.effects.push({ view, age: 0, life, update: (t) => update(view, t) });
+
+  private sprite(
+    texture: Texture,
+    x: number,
+    y: number,
+    width: number,
+    height: number,
+    tint = 0xffffff,
+  ) {
+    const view = this.sprites.pop() ?? new Sprite();
+    view.texture = texture;
+    view.anchor.set(0.5);
+    view.position.set(x, y);
+    view.width = width;
+    view.height = height;
+    view.tint = tint;
+    view.rotation = 0;
+    view.alpha = 1;
+    return view;
   }
+
+  private graphic(x: number, y: number) {
+    const view = this.graphics.pop() ?? new Graphics();
+    view.position.set(x, y);
+    view.scale.set(1);
+    view.rotation = 0;
+    view.alpha = 1;
+    return view;
+  }
+
+  private recycle(view: View) {
+    view.removeFromParent();
+    if (view instanceof Graphics) {
+      view.clear();
+      this.graphics.push(view);
+    } else this.sprites.push(view);
+  }
+
+  private add<T extends View>(
+    view: T,
+    life: number,
+    important: boolean,
+    update: (view: T, t: number) => void,
+  ) {
+    if (this.effects.length >= (this.density === 'full' ? 64 : 24)) {
+      const index = this.effects.findIndex((effect) => important || !effect.important);
+      if (index < 0) {
+        this.recycle(view);
+        return;
+      }
+      this.recycle(this.effects[index].view);
+      this.effects.splice(index, 1);
+    }
+    update(view, 0);
+    this.layer.addChild(view);
+    this.effects.push({ view, age: 0, life, important, update: (t) => update(view, t) });
+  }
+
+  /** Coalesce nearby decoration from simultaneous strikes without losing threat telegraphs. */
+  private accept(key: string, x: number, y: number, gap: number) {
+    const cell = `${key}:${Math.floor(x / 24)}:${Math.floor(y / 24)}`;
+    if ((this.recent.get(cell) ?? -1) > this.clock) return false;
+    if (this.recent.size >= 160) this.recent.delete(this.recent.keys().next().value!);
+    this.recent.set(cell, this.clock + gap);
+    return true;
+  }
+
+  private publish(cue: CombatEffectCue, gap: number, key: string = cue.kind, x = cue.x, y = cue.y) {
+    if ((!this.record && this.density === 'off') || !this.accept(key, x, y, gap)) return false;
+    this.record?.(cue);
+    return this.density !== 'off';
+  }
+
   signature(skill: SkillDef, x: number, y: number, angle: number, tx: number, ty: number) {
     if (this.density === 'off' || (this.density === 'reduced' && skill.kind === 'basic')) return;
-    // Flying missiles and persistent ground spells carry their own artwork on the actual entity.
+    // Flying missiles and persistent ground spells carry their artwork on the entity.
     if (entityEffects.has(skill.effect)) return;
     const texture = getSkillTexture(skill.id);
-    if (!texture) return;
-    const glyph = new Sprite(texture);
-    glyph.anchor.set(0.5);
+    if (!texture || !this.accept(skill.id, x, y, 0.075)) return;
     const travel = skill.kind === 'movement' && skill.effect !== 'teleport';
     const directed = travel || directionalEffects.has(skill.effect);
     const targeted = targetedEffects.has(skill.effect);
     const ritual = skill.kind === 'ultimate' || skill.kind === 'defense';
-    const size = ritual ? 134 : skill.kind === 'basic' ? 67 : 98;
+    const size = ritual ? 92 : skill.kind === 'basic' ? 49 : 68;
     const dx = directed ? Math.cos(angle) : 0;
     const dy = directed ? Math.sin(angle) : 0;
-    const offset = directed ? 31 : 0;
-    const startX = targeted ? tx : x + dx * offset;
-    const startY = (targeted ? ty : y + dy * offset) - (ritual ? 29 : 16);
-    glyph.position.set(startX, startY);
+    const startX = targeted ? tx : x + dx * 23;
+    const startY = (targeted ? ty : y + dy * 23) - (ritual ? 22 : 13);
+    const glyph = this.sprite(texture, startX, startY, size, directed ? size * 0.7 : size);
     glyph.rotation = directed ? angle : 0;
-    glyph.width = glyph.height = size * 0.68;
-    const life = ritual ? 0.66 : travel ? 0.37 : skill.kind === 'basic' ? 0.23 : 0.41;
-    this.add(glyph, life, (view, t) => {
-      const sweep = 1 - (1 - t) ** 2;
-      const retreat = travel ? -37 : 16;
-      view.position.set(startX + dx * retreat * sweep, startY + dy * retreat * sweep);
-      view.alpha = Math.min(1, t * 12) * (1 - t) ** (ritual ? 0.8 : 1.3);
-      view.width = size * (0.68 + sweep * (travel ? 0.76 : 0.46));
-      view.height = size * (0.68 + sweep * (travel ? 0.12 : 0.46));
-      if (directed && !travel) view.rotation = angle - 0.19 + 0.46 * sweep;
+    const life = ritual ? 0.38 : travel ? 0.28 : 0.21;
+    this.add(glyph, life, ritual || travel, (view, t) => {
+      const advance = 1 - (1 - t) ** 2;
+      const slide = travel ? -29 : 13;
+      view.position.set(startX + dx * slide * advance, startY + dy * slide * advance);
+      view.alpha = (this.density === 'full' ? 0.6 : 0.48) * (1 - t) ** 1.55;
+      if (directed && !travel) view.rotation = angle - 0.22 + advance * 0.46;
     });
   }
-  private stamp(
-    art: EffectArt,
+
+  private emitSparks(
     x: number,
     y: number,
     color: number,
-    width: number,
-    height: number,
-    angle: number,
-    life: number,
-    animate: (view: Sprite, t: number) => void,
+    count: number,
+    reach: number,
+    lift = false,
   ) {
-    const authoredMeteor =
-      art === 'meteor' && color === ELEMENT_COLORS.fire ? getSkillTexture('meteor') : undefined;
-    const texture = authoredMeteor ?? getEffectTexture(art);
-    if (!texture) return false;
-    const sprite = new Sprite(texture);
-    sprite.anchor.set(0.5);
-    sprite.position.set(x, y);
-    sprite.tint = authoredMeteor ? 0xffffff : color;
-    sprite.width = width;
-    sprite.height = height;
-    sprite.rotation = angle;
-    this.add(sprite, life, animate);
-    return true;
-  }
-  burst(x: number, y: number, color: number, count = 10, large = false, heal = false) {
-    this.record?.({ kind: 'burst', x, y, color, count, large, heal });
-    if (this.density === 'off') return;
-    if (this.density === 'reduced') count = Math.min(4, count);
-    const diameter = large ? 110 : 22 + count * 2;
-    const art = heal
-      ? 'heal'
-      : color === ELEMENT_COLORS.ice
-        ? 'frostfield'
-        : color === ELEMENT_COLORS.poison
-          ? 'vortex'
-          : color === ELEMENT_COLORS.lightning
-            ? 'lightning'
-            : 'burst';
-    if (
-      this.stamp(
-        art,
+    const budget = this.density === 'full' ? 100 : 26;
+    const total = Math.min(count, budget - this.sparks.length);
+    const phase = this.clock * 17 + x * 0.11 + y * 0.07;
+    for (let i = 0; i < total; i++) {
+      const heading = phase + i * 2.39996;
+      const speed = reach * (0.56 + (i % 3) * 0.23);
+      const size = 1.5 + (i % 3);
+      const vx = Math.cos(heading) * speed * (lift ? 0.45 : 1);
+      const vy = lift ? -26 - speed * 0.45 : Math.sin(heading) * speed * 0.62 - 8;
+      const view = this.sprite(Texture.WHITE, x, y, size * 1.35, size, color);
+      view.rotation = Math.atan2(vy, vx);
+      view.alpha = 0.83;
+      this.layer.addChild(view);
+      this.sparks.push({
+        view,
         x,
         y,
-        color,
-        diameter,
-        diameter,
-        heal || art === 'frostfield' ? 0 : Math.random() * Math.PI,
-        heal ? 0.44 : 0.3,
-        (v, t) => {
-          const release = 1 - (1 - t) ** 2;
-          v.width = diameter * (0.42 + release * 0.78);
-          v.height = v.width * (heal ? 1.1 : art === 'lightning' ? 0.55 : 1);
-          v.y = y - (heal ? release * 20 : 0);
-          v.alpha = (1 - t) ** 1.5;
-        },
-      )
-    )
-      return;
-    const g = new Graphics();
-    g.position.set(Math.round(x), Math.round(y));
-    const pieces = Array.from({ length: count }, (_, i) => ({
-      a: (i / count) * Math.PI * 2 + Math.random() * 0.3,
-      d: 20 + Math.random() * (large ? 100 : 35),
-    }));
-    this.add(g, 0.5, (v, t) => {
-      v.clear();
-      for (const p of pieces) {
-        const px = snapPixel(Math.cos(p.a) * p.d * t),
-          py = snapPixel(Math.sin(p.a) * p.d * t);
-        const size = large ? 6 : 3;
-        v.rect(px, py, size, size).fill({ color, alpha: 1 - t });
-        if (t < 0.4) v.rect(px, py, 3, 3).fill(0xfff2d2);
-      }
+        vx,
+        vy,
+        age: 0,
+        life: 0.16 + (i % 4) * 0.035,
+        gravity: lift ? 4 : 45,
+      });
+    }
+  }
+
+  burst(x: number, y: number, color: number, count = 10, large = false, heal = false) {
+    const key = heal ? 'heal' : `hit:${color}:${large}`;
+    if (!this.publish({ kind: 'burst', x, y, color, count, large, heal }, 0.075, key)) return;
+    const n = Math.min(count, this.density === 'full' ? (large ? 12 : 7) : 3);
+    this.emitSparks(x, y, color, n, large ? 144 : 87, heal);
+    if (!heal && !large && count < 5) return;
+    const texture = getEffectTexture(heal ? 'heal' : 'burst');
+    if (!texture) return;
+    const size = heal ? 32 : large ? 39 : 21;
+    const core = this.sprite(texture, x, y, size, size, color);
+    this.add(core, heal ? 0.32 : 0.13, heal, (view, t) => {
+      view.alpha = (heal ? 0.57 : 0.51) * (1 - t) ** 2;
+      if (heal) view.y = y - t * 14;
     });
   }
+
   ring(x: number, y: number, color: number, radius = 80) {
-    this.record?.({ kind: 'ring', x, y, color, radius });
-    if (this.density === 'off') return;
-    if (
-      this.stamp('ring', x, y, color, 1, 1, 0, 0.55, (v, t) => {
-        v.width = 2 * radius * t;
-        v.height = radius * 1.3 * t;
-        v.alpha = 0.85 * (1 - t);
-      })
-    )
-      return;
-    const g = new Graphics();
-    g.position.set(Math.round(x), Math.round(y));
-    this.add(g, 0.55, (v, t) => {
-      v.clear();
-      pixelEllipse(v, 0, 0, radius * t, radius * t * 0.65, color, 4, 1 - t, true);
-      pixelEllipse(v, 0, 0, radius * t * 0.7, radius * t * 0.45, color, 3, (1 - t) * 0.6, true);
+    if (!this.publish({ kind: 'ring', x, y, color, radius }, 0.095, `pulse:${color}`)) return;
+    const r = Math.max(8, Math.min(172, radius));
+    const view = this.graphic(x, y);
+    view.ellipse(0, 0, r, r * 0.65).stroke({ width: 2.2, color, alpha: 0.76 });
+    this.add(view, 0.26, false, (edge, t) => {
+      edge.scale.set(0.38 + 0.62 * (1 - (1 - t) ** 2));
+      edge.alpha = (1 - t) ** 1.7 * 0.62;
     });
   }
+
   slash(x: number, y: number, angle: number, color: number, radius = 65) {
-    this.record?.({ kind: 'slash', x, y, color, angle, radius });
-    if (this.density === 'off') return;
-    if (
-      this.stamp('slash', x, y, color, radius * 2, radius * 2, angle - 0.35, 0.25, (v, t) => {
-        v.rotation = angle - 0.35 + t * 0.7;
-        v.alpha = 1 - t;
-      })
-    )
-      return;
-    const g = new Graphics();
-    g.position.set(Math.round(x), Math.round(y));
-    this.add(g, 0.25, (v, t) => {
-      v.clear();
-      const r = radius * (0.5 + t * 0.5);
-      // Arc cells are positioned directly, keeping the pixel grid upright at any strike angle.
-      for (let a = -0.8; a < 1; a += 4 / r) {
-        const xx = Math.cos(a + angle) * r,
-          yy = Math.sin(a + angle) * r;
-        v.rect(snapPixel(xx), snapPixel(yy), t < 0.5 ? 6 : 3, t < 0.5 ? 6 : 3).fill({
-          color,
-          alpha: 1 - t,
-        });
-        if (a > -0.4 && a < 0.6)
-          v.rect(snapPixel(xx * 0.9), snapPixel(yy * 0.9), 3, 3).fill({
-            color: 0xfff3d8,
-            alpha: 1 - t,
-          });
+    const key = `slash:${color}:${Math.round(angle * 3)}`;
+    if (!this.publish({ kind: 'slash', x, y, color, angle, radius }, 0.065, key)) return;
+    const r = Math.max(12, Math.min(160, radius));
+    const view = this.graphic(x, y);
+    const points: number[] = [];
+    for (let side = 0; side < 2; side++)
+      for (let i = 0; i <= 9; i++) {
+        const arc = (side ? 9 - i : i) / 9;
+        const theta = -0.7 + arc * 1.4;
+        const reach = r - (side ? Math.sin(arc * Math.PI) * Math.min(7, r * 0.13) : 0);
+        points.push(Math.cos(theta) * reach, Math.sin(theta) * reach);
       }
+    view.poly(points).fill({ color, alpha: 0.8 });
+    this.add(view, 0.19, true, (edge, t) => {
+      const follow = 1 - (1 - t) ** 3;
+      edge.rotation = angle + (this.density === 'full' ? (follow - 0.5) * 0.55 : 0);
+      edge.alpha = (1 - t) ** 1.45;
     });
   }
+
   lightning(x: number, y: number, tx: number, ty: number, color = 0xc3b3ff) {
-    this.record?.({ kind: 'lightning', x, y, tx, ty, color });
-    if (this.density === 'off') return;
     const length = Math.hypot(tx - x, ty - y);
     if (
-      this.stamp(
-        'lightning',
-        (x + tx) / 2,
-        (y + ty) / 2,
-        color,
-        length,
-        Math.min(72, 16 + length * 0.2),
-        Math.atan2(ty - y, tx - x),
-        0.18,
-        (v, t) => {
-          v.alpha = 1 - t;
-        },
-      )
+      length < 1 ||
+      !this.publish({ kind: 'lightning', x, y, tx, ty, color }, 0.065, `bolt:${color}`, tx, ty)
     )
       return;
-    const g = new Graphics();
-    let px = x,
-      py = y;
-    for (let i = 1; i <= 7; i++) {
-      const t = i / 7;
-      const xx = x + (tx - x) * t + (i === 7 ? 0 : (Math.random() - 0.5) * 20);
-      const yy = y + (ty - y) * t + (i === 7 ? 0 : (Math.random() - 0.5) * 20);
-      pixelLine(g, px, py, xx, yy, color, 6, 0.8);
-      pixelLine(g, px, py, xx, yy, 0xf6eaff, 3);
-      px = xx;
-      py = yy;
+    const view = this.graphic(x, y);
+    view.rotation = Math.atan2(ty - y, tx - x);
+    const points = [0, 0];
+    const segments = Math.ceil(Math.min(7, 2 + length / 46));
+    for (let i = 1; i < segments; i++)
+      points.push(
+        (length * i) / segments,
+        Math.sin(i * 2.1 + this.clock * 16) * Math.min(6, length * 0.1),
+      );
+    points.push(length, 0);
+    for (const [width, ink, alpha] of [
+      [5, color, 0.43],
+      [1.65, 0xf5ead7, 0.75],
+    ]) {
+      view.moveTo(0, 0);
+      for (let i = 2; i < points.length; i += 2) view.lineTo(points[i], points[i + 1]);
+      view.stroke({ width, color: ink, alpha });
     }
-    this.add(g, 0.18, (v, t) => {
-      v.alpha = 1 - t;
+    this.add(view, 0.15, true, (edge, t) => {
+      edge.alpha = (1 - t) ** 1.6;
     });
   }
+
   meteor(x: number, y: number, color: number, radius: number) {
-    this.record?.({ kind: 'meteor', x, y, color, radius });
-    if (this.density === 'off') return;
-    if (
-      this.stamp('meteor', x - 72, y - 250, color, 85, 85, 0, 0.43, (v, t) => {
-        v.position.set(x - 72 * (1 - t), y - 250 * (1 - t));
-        v.alpha = 1 - Math.max(0, t - 0.86) * 5;
-      })
-    )
-      return;
-    const g = new Graphics();
-    this.add(g, 0.65, (v, t) => {
-      v.clear();
-      if (t < 0.65) {
-        const py = y - (1 - t / 0.65) * 250;
-        pixelLine(v, x - 45, py - 72, x, py, color, 6, 0.55);
-        pixelPolygon(
-          v,
-          [
-            x - 15,
-            py,
-            x - 9,
-            py - 24,
-            x + 3,
-            py - 27,
-            x + 18,
-            py - 6,
-            x + 9,
-            py + 12,
-            x - 9,
-            py + 9,
-          ],
-          color,
-        );
-        pixelPolygon(
-          v,
-          [x - 6, py - 9, x, py - 18, x + 9, py, x + 3, py + 6, x - 6, py + 3],
-          0xffefb8,
-        );
-      } else
-        pixelEllipse(
-          v,
-          x,
-          y,
-          radius * (t - 0.65) * 3,
-          radius * (t - 0.65) * 2,
-          color,
-          6,
-          1 - t,
-          true,
-        );
-    });
-  }
-  tick(dt: number) {
-    for (let i = this.effects.length - 1; i >= 0; i--) {
-      const e = this.effects[i];
-      e.age += dt;
-      if (e.age >= e.life) {
-        e.view.destroy();
-        this.effects.splice(i, 1);
-      } else e.update(e.age / e.life);
+    if (!this.publish({ kind: 'meteor', x, y, color, radius }, 0.085)) return;
+    const authored = color === ELEMENT_COLORS.fire ? getSkillTexture('meteor') : undefined;
+    const texture = authored ?? getEffectTexture('meteor');
+    if (texture) {
+      const size = Math.max(39, Math.min(70, radius * 0.52));
+      const ember = this.sprite(texture, x, y, size, size, authored ? 0xffffff : color);
+      this.add(ember, 0.17, true, (view, t) => {
+        // Damage has already landed. The taper collapses into the strike point.
+        view.position.set(x - 22 * (1 - t), y - 28 * (1 - t));
+        view.alpha = 0.72 * (1 - t) ** 1.65;
+      });
     }
+    this.emitSparks(x, y, color, this.density === 'full' ? 9 : 3, 161);
+  }
+
+  tick(dt: number) {
+    this.clock += dt;
+    for (let i = this.effects.length - 1; i >= 0; i--) {
+      const effect = this.effects[i];
+      effect.age += dt;
+      if (effect.age >= effect.life) {
+        this.recycle(effect.view);
+        this.effects.splice(i, 1);
+      } else effect.update(effect.age / effect.life);
+    }
+    for (let i = this.sparks.length - 1; i >= 0; i--) {
+      const spark = this.sparks[i];
+      spark.age += dt;
+      if (spark.age >= spark.life) {
+        this.recycle(spark.view);
+        this.sparks.splice(i, 1);
+        continue;
+      }
+      spark.view.position.set(
+        Math.round(spark.x + spark.vx * spark.age),
+        Math.round(spark.y + spark.vy * spark.age + spark.gravity * spark.age ** 2),
+      );
+      spark.view.alpha = 0.83 * (1 - spark.age / spark.life) ** 1.4;
+    }
+  }
+
+  destroy() {
+    for (const { view } of this.effects) view.destroy();
+    for (const { view } of this.sparks) view.destroy();
+    for (const view of this.sprites) view.destroy();
+    for (const view of this.graphics) view.destroy();
+    this.effects.length = this.sparks.length = this.sprites.length = this.graphics.length = 0;
+    this.recent.clear();
   }
 }

@@ -6,7 +6,7 @@ import type { CoopRoom, CoopRoomMember } from '../src/core/coopRoom';
 import type { AccountData, CombatSnapshot, RunResult } from '../src/core/types';
 import { RARITY_COLORS, SLOTS } from '../src/core/types';
 import { EQUIPMENT_DROP_INDEX } from '../src/data/visuals';
-import { applyRunResult, createCombatConfig } from '../src/state/gameStore';
+import { applyRunResult, createCombatConfig, PENDING_LOOT_NOTICE } from '../src/state/gameStore';
 import { newSave, validateSave } from '../src/state/saveData';
 import { SKILLS } from '../src/data/skillTrees';
 import { BOSSES, MONSTERS } from '../src/data/monsters';
@@ -85,7 +85,10 @@ export function validCoopInput(
   if (
     !object(value) ||
     Object.keys(value).some(
-      (key) => !['sequence', 'movement', 'casts', 'commands', 'autoSkills', 'pylon'].includes(key),
+      (key) =>
+        !['sequence', 'movement', 'focusId', 'casts', 'commands', 'autoSkills', 'pylon'].includes(
+          key,
+        ),
     )
   )
     return false;
@@ -99,6 +102,7 @@ export function validCoopInput(
   );
   return (
     sequence(value.sequence) &&
+    (value.focusId === undefined || sequence(value.focusId)) &&
     object(value.movement) &&
     finite(value.movement.x) &&
     finite(value.movement.y) &&
@@ -760,6 +764,15 @@ export function registerCoop(
       if (!entry.ready || now - entry.lastSeen >= 5000)
         return error(reply, 409, 'NOT_READY', '请等待所有队员在线并准备。');
       const saved = profile(entry.userId, room.stage);
+      if (saved?.character.save.pendingLoot?.length) {
+        entry.ready = false;
+        return error(
+          reply,
+          409,
+          'RESULT_LOOT_PENDING',
+          `「${entry.name}」需先回营领取保留战利品。`,
+        );
+      }
       if (
         !saved ||
         saved.character.id !== entry.characterId ||
@@ -911,6 +924,10 @@ export function registerCoop(
           'RESULT_CHARACTER_MISSING',
           '该奖励属于已移除的角色，请先恢复对应角色再领取。',
         );
+      }
+      if (character.save.pendingLoot?.length) {
+        db.exec('ROLLBACK');
+        return error(reply, 409, 'RESULT_LOOT_PENDING', PENDING_LOOT_NOTICE);
       }
       const notice = applyRunResult(character.save, result, account.stash);
       const updatedAt = Date.now();

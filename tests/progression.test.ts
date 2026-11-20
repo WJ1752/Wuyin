@@ -4,8 +4,11 @@ import {
   newSave,
   newAccountSave,
   validateSave,
+  validateAccountSave,
   useGameStore,
   computeStats,
+  MAX_INVENTORY,
+  MAX_STASH,
   cubeSlot,
   emptySlotItems,
   snapshotAccounts,
@@ -89,7 +92,7 @@ test('quick equip fills empty slots with compatible gear and preserves choices a
   );
 });
 
-test('settlement reports drops actually stored or salvaged after the chapter gift takes a slot', () => {
+test('settlement reports drops stored, stashed, or salvaged after a chapter gift', () => {
   reset();
   const save = newSave();
   const common = generateLoot('ranger', 1, { rarity: 'common' });
@@ -109,12 +112,77 @@ test('settlement reports drops actually stored or salvaged after the chapter gif
   const state = useGameStore.getState();
   assert.equal(state.save.inventory.length, 240);
   assert.equal(state.save.inventory.at(-1)?.id, relic.id);
-  assert.equal(state.save.crystals - save.crystals, 16);
-  assert.equal(state.save.souls - save.souls, 2);
-  assert.match(
-    state.notice,
-    /战场装备入包 1 件，按设置分解 1 件，背包满额分解 1 件（其中传奇及以上 1 件），分解所得 16 结晶、2 遗忘之魂/,
+  assert.equal(state.save.crystals - save.crystals, 4);
+  assert.equal(state.save.souls, save.souls);
+  assert.deepEqual(
+    state.accounts[0].stash.map((item) => item.id),
+    ['overflow'],
   );
+  assert.match(state.notice, /战场装备入包 1 件，共享仓库 1 件，按设置分解 1 件，分解所得 4 结晶/);
+});
+
+test('retained loot survives a full backpack and warehouse, reloads, and can be claimed in parts', () => {
+  const { save, accounts } = reset();
+  const common = generateLoot('ranger', 1, { rarity: 'common' });
+  const relic = generateLoot('ranger', 16, { rarity: 'legendary', legendaryId: 'dawn' });
+  const gem = { id: 'ruby', level: 1 };
+  save.autoSalvage = true;
+  save.keepRareAffix = 'cooldown';
+  save.inventory = Array.from({ length: MAX_INVENTORY }, (_, i) => ({ ...common, id: `bag-${i}` }));
+  accounts[0].stash = Array.from({ length: MAX_STASH }, (_, i) => ({
+    ...common,
+    id: `stash-${i}`,
+  }));
+  const protectedRare = {
+    ...generateLoot('ranger', 16, { rarity: 'rare' }),
+    affixes: [{ id: 'cooldown', value: 0.05 }],
+  };
+  const result = {
+    won: false,
+    stage: 1,
+    seconds: 30,
+    kills: 2,
+    gold: 50,
+    shards: 1,
+    items: [common, { ...relic, gem }, protectedRare],
+  };
+  const state = useGameStore.getState;
+  state().completeRun(result);
+  assert.match(state().notice, /营地待领 2 件/);
+  assert.equal(state().save.crystals, save.crystals + 4);
+  assert.equal(state().save.souls, save.souls);
+  const backup = JSON.stringify(snapshotAccounts(state()));
+  const restored = validateAccountSave(JSON.parse(backup));
+  const restoredSave = restored.accounts[0].characters[0].save;
+  assert.deepEqual(
+    restoredSave.pendingLoot?.map((item) => item.id),
+    [relic.id, protectedRare.id],
+  );
+  assert.deepEqual(restoredSave.pendingLoot?.[0].gem, gem);
+  const duplicate = JSON.parse(backup);
+  duplicate.accounts[0].stash[0] = restoredSave.pendingLoot?.[0];
+  assert.throws(() => validateAccountSave(duplicate), /重复装备/);
+
+  useGameStore.setState({ save: restoredSave, accounts: restored.accounts });
+  state().claimPendingLoot();
+  assert.deepEqual(state().save.pendingLoot, restoredSave.pendingLoot);
+  state().completeRun(result);
+  assert.equal(state().save.gold, restoredSave.gold);
+
+  state().equip('bag-0');
+  state().claimPendingLoot();
+  assert.ok(state().save.inventory.some((item) => item.id === relic.id));
+  assert.deepEqual(
+    state().save.pendingLoot?.map((item) => item.id),
+    [protectedRare.id],
+  );
+  state().salvage('bag-1');
+  state().withdrawItem('stash-0');
+  state().claimPendingLoot();
+  state().claimPendingLoot();
+  assert.equal(state().save.pendingLoot, undefined);
+  assert.equal(state().save.inventory.filter((item) => item.id === relic.id).length, 1);
+  assert.equal(state().accounts[0].stash.filter((item) => item.id === protectedRare.id).length, 1);
 });
 
 test('gem combination, replacement and removal preserve total gem value', () => {

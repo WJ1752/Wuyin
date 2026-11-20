@@ -14,6 +14,7 @@ export interface Projectile {
   radius: number;
   pierce: number;
   homing: boolean;
+  focusId?: number;
   returning: boolean;
   originX: number;
   originY: number;
@@ -107,9 +108,20 @@ export class ProjectileSystem {
       const p = this.items[i];
       p.age += dt;
       if (p.homing) {
-        const target = targets
-          .filter((t) => t.hp > 0 && !p.hits.has(t.id))
-          .sort((a, b) => Math.hypot(a.x - p.x, a.y - p.y) - Math.hypot(b.x - p.x, b.y - p.y))[0];
+        let target: (typeof targets)[number] | undefined;
+        let nearest = Infinity;
+        for (const candidate of targets) {
+          if (candidate.hp <= 0 || p.hits.has(candidate.id)) continue;
+          if (candidate.id === p.focusId) {
+            target = candidate;
+            break;
+          }
+          const distance = (candidate.x - p.x) ** 2 + (candidate.y - p.y) ** 2;
+          if (distance < nearest) {
+            nearest = distance;
+            target = candidate;
+          }
+        }
         if (target) {
           const a = Math.atan2(target.y - p.y, target.x - p.x);
           p.vx += (Math.cos(a) * 520 - p.vx) * Math.min(1, dt * 8);

@@ -67,6 +67,7 @@ import { PetRig, preloadPetTexture } from '../render/PetTextures';
 import type { RunResult } from '../core/types';
 import { DEFAULT_KEYS, getPreferences } from '../core/preferences';
 import { CHALLENGES } from '../data/challenges';
+import { getRiftOpportunity, type RiftOpportunity } from '../data/campaign';
 import { boundCamera, combatFraming } from '../render/viewport';
 import { isSkillAutoEnabled } from '../data/progression';
 import { skillSound } from '../audio/SynthAudio';
@@ -80,7 +81,7 @@ class SimulationActor extends Container {
   defeat() {}
 }
 
-const arenaLimit = 780;
+const arenaLimit = RIFT_RULES.arenaLimit;
 const pylonReach = 190;
 const meleeEffects = new Set(['hammer', 'bash', 'frenzy', 'scythe', 'claw', 'spike', 'siphon']);
 function warningDecal(
@@ -276,8 +277,18 @@ export class GameEngine {
     resourceStarvedSeconds: 0,
   };
   private objectiveProgress = 0;
+  private opportunity?: RiftOpportunity;
   private environmentClock = 0;
-  private hazards: { x: number; y: number; delay: number; radius: number; view: Graphics }[] = [];
+  private hazards: {
+    x: number;
+    y: number;
+    delay: number;
+    radius: number;
+    view: Graphics;
+    target: GameEngine;
+    cue: CoopFrame['warnings'][number];
+  }[] = [];
+  private hazardSequence = 0;
   private objectiveMarker?: Graphics;
   private chargeWindow = 0;
   private bloodWindow = 0;
@@ -310,7 +321,10 @@ export class GameEngine {
   private movement = { x: 0, y: 0 };
   private dragMovement = { x: 0, y: 0 };
   private keys = new Set<string>();
-  private drag?: { x: number; y: number; pointerId: number; radius: number };
+  private drag?: { x: number; y: number; pointerId: number; radius: number; dragged?: boolean };
+  private focusId?: number;
+  private focusMarker?: Graphics;
+  private bufferedSkill?: { id: string; until: number };
   private hp = 1;
   private resource = 100;
   private shield = 0;
@@ -337,6 +351,10 @@ export class GameEngine {
   private petTimer = 0;
   private lastDamage = -10;
   private shake = 0;
+  private cameraTarget?: { x: number; y: number };
+  private travelVisual?: { dx: number; dy: number; remaining: number; duration: number };
+  private footTravel = 0;
+  private reducedMotion?: MediaQueryList;
   private attackStacks = 0;
   private attackCount = 0;
   private laserStacks = 0;
@@ -471,6 +489,7 @@ export class GameEngine {
       return;
     }
     if (input) {
+      this.focusId = input.focusId;
       this.setMovement(input.movement.x, input.movement.y);
       if (input.autoSkills) this.config.autoSkills = { ...input.autoSkills };
       for (const command of input.commands ?? []) {
@@ -504,12 +523,13 @@ export class GameEngine {
     this.host = host;
     this.portraitHud = window.matchMedia('(max-width: 760px) and (orientation: portrait)');
     this.compactViewport = window.matchMedia('(max-width: 960px)');
+    this.reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
     this.setupCharacter(config, callbacks);
     if (this.coop?.seed !== undefined || config.seed !== undefined)
       this.random = createRng(this.coop?.seed ?? config.seed!);
     const stage = STAGES[config.stage - 1] ?? STAGES[0];
     await Promise.all([
-      preloadCharacterTextures(config.classId),
+      preloadCharacterTextures(config.classId, config.equipment),
       preloadSkillTextures(this.skills.map((skill) => skill.id)),
       preloadPetTexture(config.petId),
       preloadAtlas(
@@ -560,7 +580,7 @@ export class GameEngine {
     this.app.stage.addChild(this.world, this.minimap);
     this.entityLayer.sortableChildren = true;
     this.floorLayer.addChild(createMap(stage));
-    this.hero = new CharacterRig(config.classId);
+    this.hero = new CharacterRig(config.classId, { equipment: config.equipment });
     this.entityLayer.addChild(this.hero);
     this.vfx = new VFXManager(
       this.effectsLayer,
@@ -607,6 +627,8 @@ export class GameEngine {
     this.emit();
   }
   private setupCharacter(config: CombatConfig, callbacks: GameCallbacks) {
+    this.opportunity =
+      !config.training && !config.challenge ? getRiftOpportunity(config.stage) : undefined;
     this.config = {
       ...config,
       autoSkills: { ...config.autoSkills },
@@ -636,7 +658,7 @@ export class GameEngine {
     await Promise.all(
       options.members.map((member) =>
         Promise.all([
-          preloadCharacterTextures(member.config.classId),
+          preloadCharacterTextures(member.config.classId, member.config.equipment),
           preloadSkillTextures(getActiveSkills(member.config).map((skill) => skill.id)),
           preloadPetTexture(member.config.petId),
         ]),
@@ -656,7 +678,9 @@ export class GameEngine {
         });
         actor.initialized = true;
         this.linkCoopActor(actor);
-        actor.hero = new CharacterRig(member.config.classId);
+        actor.hero = new CharacterRig(member.config.classId, {
+          equipment: member.config.equipment,
+        });
         this.entityLayer.addChild(actor.hero);
         actor.projectiles = new ProjectileSystem(this.effectsLayer);
         actor.createPet();
@@ -691,6 +715,7 @@ export class GameEngine {
       'pylons',
       'elapsed',
       'progress',
+      'objectiveProgress',
       'kills',
       'gold',
       'shards',
@@ -743,6 +768,27 @@ export class GameEngine {
     if (commands.length < 12) commands.push({ sequence: ++this.coopActionSequence, id });
   }
 
+  private cycleFocus() {
+    const near = this.enemies
+      .filter((e) => e.hp > 0 && this.distance(e) <= 420)
+      .sort(
+        (a, b) =>
+          Number(b.boss) - Number(a.boss) ||
+          Number(b.elite) - Number(a.elite) ||
+          this.distance(a) - this.distance(b),
+      );
+    const previous = near.findIndex((e) => e.id === this.focusId);
+    this.focusId = near[previous + 1]?.id;
+  }
+
+  private readFocusButton(pad: Gamepad) {
+    if (!pad.buttons[11]?.pressed) this.gamepadHeld.delete(11);
+    else if (!this.gamepadHeld.has(11)) {
+      this.gamepadHeld.add(11);
+      this.cycleFocus();
+    }
+  }
+
   private sendCoopInput(dt: number) {
     const pad = navigator.getGamepads?.()?.find((p) => p?.connected);
     let x =
@@ -758,10 +804,12 @@ export class GameEngine {
     if (pad && !this.paused && !this.hasInputDialog()) {
       if (this.gamepadBlocked)
         this.gamepadBlocked =
+          (pad.buttons[11]?.pressed ?? false) ||
           pad.buttons.slice(0, 6).some((b) => b.pressed) ||
           Math.abs(pad.axes[0] ?? 0) > 0.18 ||
           Math.abs(pad.axes[1] ?? 0) > 0.18;
       else {
+        this.readFocusButton(pad);
         if (Math.abs(pad.axes[0] ?? 0) > 0.18) x += pad.axes[0];
         if (Math.abs(pad.axes[1] ?? 0) > 0.18) y += pad.axes[1];
         for (let i = 0; i < 6; i++) {
@@ -778,6 +826,7 @@ export class GameEngine {
     if (this.coopInputClock > 0) return;
     this.coopInputClock = 0.08;
     this.coopInput.sequence++;
+    this.coopInput.focusId = this.focusId;
     this.coopInput.autoSkills = { ...this.config.autoSkills };
     this.coop?.onInput?.(structuredClone(this.coopInput));
   }
@@ -824,6 +873,7 @@ export class GameEngine {
       const control = this.coopControls.get(id);
       if (actor !== this || this.headless) {
         const live = control && performance.now() - control.receivedAt < 750;
+        if (live) actor.focusId = control.input.focusId;
         actor.setMovement(live ? control.input.movement.x : 0, live ? control.input.movement.y : 0);
         if (control && live) {
           if (control.input.autoSkills) actor.config.autoSkills = { ...control.input.autoSkills };
@@ -882,7 +932,7 @@ export class GameEngine {
         actor.hp <= 0
           ? `${name} · ${Math.ceil(actor.coopDownSeconds)}秒复苏`
           : `${name} · ${Math.ceil((actor.hp / actor.config.stats.hp) * 100)}%`;
-      label.position.set(actor.x, actor.y - 70);
+      label.position.set(actor.hero.x, actor.hero.y - 77);
     }
   }
 
@@ -946,7 +996,7 @@ export class GameEngine {
         appearanceKey: o.item ? getItemAppearanceKey(o.item) : undefined,
       })),
       warnings: [...this.warningAnimations]
-        .map(([id, w]) => ({
+        .map<CoopFrame['warnings'][number]>(([id, w]) => ({
           id,
           x: w.event.x,
           y: w.event.y,
@@ -956,19 +1006,10 @@ export class GameEngine {
           width: w.event.width,
           shape: w.event.shape,
           color: w.event.color,
+          progress: Math.min(1, w.age / Math.max(0.01, w.event.delay)),
         }))
         .concat(
-          this.hazards.map((hazard, i) => ({
-            id: 1000000 + i,
-            x: hazard.x,
-            y: hazard.y,
-            radius: hazard.radius,
-            angle: 0,
-            range: 0,
-            width: 0,
-            shape: 'circle',
-            color: 0xea8b68,
-          })),
+          this.hazards.map((hazard) => ({ ...hazard.cue, progress: 1 - hazard.delay / 1.2 })),
         ),
       pylons: this.pylons.map((p) => ({ id: p.id, used: p.used })),
       results: this.coopResults,
@@ -1024,8 +1065,10 @@ export class GameEngine {
       if (!state.cast || !near(state, 260)) continue;
       const lastCast = previous.actors.find((actor) => actor.id === state.id)?.cast;
       if (state.cast.sequence > (lastCast?.sequence ?? -1)) {
-        const skill = this.coopActors.get(state.id)?.skill(state.cast.skillId);
-        if (skill) this.callbacks.onSound(skillSound(skill));
+        const actor = this.coopActors.get(state.id);
+        const skill = actor?.skill(state.cast.skillId);
+        if (skill)
+          this.callbacks.onSound(skillSound(skill, actor?.config?.equipment?.weapon?.legendaryId));
       }
     }
     if (local.snapshot.hp < before.snapshot.hp) this.callbacks.onSound('hurt');
@@ -1064,6 +1107,7 @@ export class GameEngine {
       this.finished
     )
       return;
+    const snap = this.coopReceivedSequence < 0 || frame.elapsed - this.elapsed > 0.4;
     this.coopReceivedSequence = frame.sequence;
     this.replayCoopAudio(frame, this.coop!.localId);
     const dt = Math.max(0.001, frame.elapsed - this.elapsed);
@@ -1105,8 +1149,12 @@ export class GameEngine {
         actor.lastCast = state.cast;
       }
       actor.coopDownSeconds = state.downSeconds;
-      actor.hero.position.set(state.x, state.y);
-      actor.hero.zIndex = state.y;
+      if (
+        snap ||
+        state.snapshot.hp <= 0 ||
+        Math.hypot(actor.hero.x - state.x, actor.hero.y - state.y) > 300
+      )
+        actor.hero.position.set(state.x, state.y);
       actor.hero.alpha = state.snapshot.hp <= 0 ? 0.3 : 1;
       if (state.pet) {
         const dx = state.pet.x - actor.pet.x;
@@ -1126,6 +1174,10 @@ export class GameEngine {
         }
       });
       if (state.id === this.coop!.localId) {
+        this.drawWardMarker(
+          this.opportunity?.kind === 'ward' &&
+            (state.snapshot.objective?.progress ?? Infinity) < this.opportunity.target,
+        );
         this.coopInput.commands = this.coopInput.commands?.filter(
           (c) => c.sequence > (state.inputSequence ?? 0),
         );
@@ -1161,8 +1213,8 @@ export class GameEngine {
         hp: state.hp,
         maxHp: state.maxHp,
       });
-      enemy.view.position.set(state.x, state.y);
-      enemy.view.zIndex = state.y;
+      if (snap || Math.hypot(enemy.view.x - state.x, enemy.view.y - state.y) > 200)
+        enemy.view.position.set(state.x, state.y);
       enemy.view.alpha = state.hp > 0 ? 1 : 0.3;
       enemy.view.drawHealth(Math.max(0, state.hp / state.maxHp));
       next.push(enemy);
@@ -1212,8 +1264,9 @@ export class GameEngine {
       );
     }
     for (const z of frame.zones) {
-      const diameter = Math.min(270, z.radius * 2);
-      stamp(
+      const trap = z.skillId === 'tumble';
+      const diameter = trap ? z.radius : Math.min(270, z.radius * 2);
+      const placed = stamp(
         getZoneTexture(z.skillId, z.color === ELEMENT_COLORS.ice),
         z.x,
         z.y,
@@ -1221,9 +1274,12 @@ export class GameEngine {
         diameter * 0.68,
         0,
         0xffffff,
-        0.4,
+        trap ? 0.85 : 0.45,
       );
-      pixelEllipse(this.coopVisuals, z.x, z.y, z.radius, z.radius * 0.6, z.color, 6, 0.3, true);
+      if (!trap || !placed)
+        this.coopVisuals
+          .ellipse(z.x, z.y, z.radius, z.radius * 0.68)
+          .stroke({ color: z.color, width: 1.5, alpha: 0.32 });
     }
     for (const o of frame.orbs) {
       const color = o.kind === 'health' ? 0xdd5269 : o.kind === 'progress' ? 0xb49be7 : 0xd7bb76;
@@ -1246,7 +1302,12 @@ export class GameEngine {
     for (const w of frame.warnings) {
       const d = warningDecal(w);
       stamp(d.texture, d.x, d.y, d.width, d.height, d.angle, 0xffffff, 0.28);
-      drawWarning(this.coopWarningVisuals, w, colorAssist);
+      drawWarning(
+        this.coopWarningVisuals,
+        w,
+        colorAssist,
+        this.reducedMotion?.matches ? 1 : w.progress,
+      );
     }
     for (const state of frame.pylons) {
       const pylon = this.pylons.find((p) => p.id === state.id);
@@ -1331,6 +1392,7 @@ export class GameEngine {
     this.dragMovement = { x: 0, y: 0 };
     this.movementDirection = { x: 0, y: 0 };
     this.moving = false;
+    this.bufferedSkill = undefined;
     this.gamepadHeld.clear();
     this.gamepadBlocked = true;
     this.coopInput.commands = [];
@@ -1372,6 +1434,7 @@ export class GameEngine {
       return (
         { up: 'w', down: 's', left: 'a', right: 'd', movement: ' ' } as Record<string, string>
       )[action];
+    if (code === 'KeyQ') return 'focus';
     return ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Escape'].includes(code)
       ? code.toLowerCase()
       : '';
@@ -1407,6 +1470,10 @@ export class GameEngine {
       const skill = this.skills[Number(key) - 1];
       if (skill) this.cast(skill.id);
     }
+    if (key === 'focus' && !e.repeat) {
+      e.preventDefault();
+      this.cycleFocus();
+    }
     if (key === 'escape' && !e.repeat) this.togglePause();
   };
   private onKeyUp = (e: KeyboardEvent) => {
@@ -1439,49 +1506,103 @@ export class GameEngine {
     if (!this.drag || e.pointerId !== this.drag.pointerId) return;
     const x = (e.clientX - this.drag.x) / this.drag.radius;
     const y = (e.clientY - this.drag.y) / this.drag.radius;
+    if (Math.hypot(e.clientX - this.drag.x, e.clientY - this.drag.y) > 7) this.drag.dragged = true;
     const len = Math.max(1, Math.hypot(x, y));
     this.dragMovement = { x: x / len, y: y / len };
   };
   private onPointerUp = (e: PointerEvent) => {
     if (!this.drag || e.pointerId !== this.drag.pointerId) return;
+    if (
+      e.type === 'pointerup' &&
+      this.app &&
+      !this.drag.dragged &&
+      !this.paused &&
+      e.target === this.app.canvas &&
+      Math.hypot(e.clientX - this.drag.x, e.clientY - this.drag.y) <= 7
+    ) {
+      const bounds = this.app.canvas.getBoundingClientRect();
+      const point = this.world.toLocal({
+        x: ((e.clientX - bounds.left) * this.app.screen.width) / bounds.width,
+        y: ((e.clientY - bounds.top) * this.app.screen.height) / bounds.height,
+      });
+      let nearest = Infinity;
+      this.focusId = undefined;
+      for (const enemy of this.enemies) {
+        if (enemy.hp <= 0) continue;
+        const distance = Math.hypot(
+          point.x - enemy.view.x,
+          (point.y - enemy.view.y + enemy.radius) * 0.75,
+        );
+        if (distance < nearest && distance <= Math.max(26, enemy.radius * 1.6)) {
+          this.focusId = enemy.id;
+          nearest = distance;
+        }
+      }
+    }
     this.drag = undefined;
     this.dragMovement = { x: 0, y: 0 };
   };
   private tick = () => {
     if (!this.app || this.disposed) return;
-    const dt = Math.min(0.05, this.app.ticker.deltaMS / 1000);
+    const dt = Math.min(0.25, this.app.ticker.elapsedMS / 1000);
     this.fps = this.app.ticker.FPS;
-    if (!this.coop && !this.paused && !this.finished) this.update(dt);
+    if (!this.coop && !this.paused && !this.finished && dt > 0) {
+      // Consume slow visible frames in short collision steps. A long suspend never replays a whole encounter.
+      const steps = Math.ceil(dt * 30);
+      for (let i = 0; i < steps && !this.finished && !this.disposed; i++) this.update(dt / steps);
+    }
     if (this.isCoopGuest && !this.finished) {
       const time = performance.now() / 1000;
+      const blend = 1 - Math.exp(-dt * 24);
       for (const actor of this.coopActors.values()) {
+        actor.hero.position.set(
+          actor.hero.x + (actor.x - actor.hero.x) * blend,
+          actor.hero.y + (actor.y - actor.hero.y) * blend,
+        );
+        actor.hero.zIndex = actor.hero.y;
         if (actor.hp > 0) actor.hero.update(time, dt, actor.moving, actor.facing, false);
         actor.petRig?.updatePose(time, dt, actor.hp <= 0);
       }
       for (const e of this.enemies) {
+        const dx = (e.x - e.view.x) * blend,
+          dy = (e.y - e.view.y) * blend;
+        e.view.position.set(e.view.x + dx, e.view.y + dy);
+        e.view.zIndex = e.view.y;
         if (e.hp <= 0) {
           e.view.defeat?.(dt);
           continue;
         }
         if (!e.guestVelocity) continue;
         e.age += dt;
-        const movingTime = e.age <= 0.25 ? dt : 0;
-        e.view.update(
-          this.elapsed + e.age,
-          dt,
-          e.guestVelocity.x * movingTime,
-          e.guestVelocity.y * movingTime,
-          e.id,
-          e.pose,
-        );
+        e.view.update(this.elapsed + e.age, dt, dx, dy, e.id, e.pose);
       }
       this.vfx.tick(dt);
+      this.updateCoopLabels();
     }
     if (this.finished) {
       for (const e of this.enemies) if (e.hp <= 0) e.view.defeat?.(dt);
       this.vfx.tick(dt);
     }
     this.updateCamera(dt);
+    if (this.focusId !== undefined || this.focusMarker?.visible) {
+      const enemy = this.enemies.find((e) => e.id === this.focusId && e.hp > 0);
+      if (enemy) {
+        if (!this.focusMarker) {
+          this.focusMarker = new Graphics()
+            .ellipse(0, 1, 19, 8)
+            .stroke({ color: 0xffdc9a, width: 2 })
+            .poly([-4, 12, 0, 8, 4, 12, 0, 15])
+            .fill(0xffdc9a);
+          this.floorLayer.addChild(this.focusMarker);
+        }
+        this.focusMarker.position.copyFrom(enemy.view.position);
+        this.focusMarker.scale.set(Math.max(1, enemy.radius / 19));
+        this.focusMarker.visible = true;
+      } else {
+        this.focusId = undefined;
+        if (this.focusMarker) this.focusMarker.visible = false;
+      }
+    }
   };
   private update(dt: number) {
     this.elapsed += dt;
@@ -1534,10 +1655,12 @@ export class GameEngine {
     if (pad && !this.hasInputDialog() && this.gamepadBlocked) {
       // Require neutral input after a pause or reconnect before accepting a held action.
       this.gamepadBlocked =
+        (pad.buttons[11]?.pressed ?? false) ||
         pad.buttons.slice(0, 6).some((button) => button.pressed) ||
         Math.abs(pad.axes[0] ?? 0) > 0.18 ||
         Math.abs(pad.axes[1] ?? 0) > 0.18;
     } else if (pad && !this.hasInputDialog()) {
+      this.readFocusButton(pad);
       if (Math.abs(pad.axes[0] ?? 0) > 0.18) mx += pad.axes[0];
       if (Math.abs(pad.axes[1] ?? 0) > 0.18) my += pad.axes[1];
       for (let i = 0; i < 6; i++) {
@@ -1555,7 +1678,6 @@ export class GameEngine {
     mx /= len;
     my /= len;
     this.moving = Math.hypot(mx, my) > 0.1;
-    if (this.moving && !this.headless) this.callbacks.onSound('footstep');
     this.movementDirection = { x: mx, y: my };
     if (mx) this.facing = mx;
     for (const skill of gamepadSkills) this.cast(skill.id);
@@ -1567,6 +1689,8 @@ export class GameEngine {
       (this.buffs.has('wolf') ? 1.4 : 1) *
       (this.set('wasteland', 2) && this.buffs.has('whirlwind') ? 1.4 : 1) *
       (this.power('bulkathos') && this.buffs.has('whirlwind') ? 1 + this.power('bulkathos') : 1);
+    const oldX = this.x,
+      oldY = this.y;
     this.x += mx * speed * dt;
     this.y += my * speed * dt;
     if (
@@ -1585,8 +1709,21 @@ export class GameEngine {
     }
     this.x = clampArena(this.x);
     this.y = clampArena(this.y);
-    this.hero.position.set(this.x, this.y);
-    this.hero.zIndex = this.y;
+    if (this.moving && !this.headless) {
+      this.footTravel += Math.hypot(this.x - oldX, this.y - oldY);
+      if (this.footTravel >= 53) {
+        this.footTravel %= 53;
+        this.callbacks.onSound('footstep');
+      }
+    }
+    const travel = this.travelVisual;
+    if (travel) {
+      travel.remaining = Math.max(0, travel.remaining - dt);
+      const offset = (travel.remaining / travel.duration) ** 2;
+      this.hero.position.set(this.x - travel.dx * offset, this.y - travel.dy * offset);
+      if (!travel.remaining) this.travelVisual = undefined;
+    } else this.hero.position.set(this.x, this.y);
+    this.hero.zIndex = this.hero.y;
     this.hero.update(
       this.elapsed,
       dt,
@@ -1600,6 +1737,13 @@ export class GameEngine {
     );
     this.hp = Math.min(this.config.stats.hp, this.hp + this.config.stats.regen * dt);
     this.castTimer -= dt;
+    if (this.bufferedSkill) {
+      const { id, until } = this.bufferedSkill;
+      if (this.elapsed > until || !this.cooldowns[id]) {
+        this.bufferedSkill = undefined;
+        if (this.elapsed <= until) this.cast(id);
+      }
+    }
     const targets = this.enemies.filter((e) => e.hp > 0 && this.distance(e) < 420);
     if (
       targets.length &&
@@ -1613,7 +1757,7 @@ export class GameEngine {
       )
     )
       this.report.resourceStarvedSeconds! += dt;
-    if (this.castTimer <= 0 && targets.length) {
+    if (!this.bufferedSkill && this.castTimer <= 0 && targets.length) {
       const selected = selectAutoCast(
         this.skills.filter((skill) => this.hasAutoTarget(skill, targets)),
         {
@@ -1729,48 +1873,100 @@ export class GameEngine {
     const rule = CHALLENGES.find((c) => c.id === this.config.challenge?.id);
     return !rule || this.objectiveProgress >= rule.target;
   }
+  private advanceOpportunity(kind: RiftOpportunity['kind'], amount = 1) {
+    const rule = this.opportunity;
+    if (!rule || rule.kind !== kind || this.bossSpawned || this.objectiveProgress >= rule.target)
+      return;
+    this.objectiveProgress = Math.min(rule.target, this.objectiveProgress + amount);
+    if (this.objectiveProgress < rule.target) return;
+    this.progress = Math.min(100, this.progress + rule.bonus);
+    this.callbacks.onSound('progress');
+    this.numbers.show(this.x, this.y - 45, `${rule.name} · 进度 +${rule.bonus}%`, true, 0xe5c48d);
+  }
+  private drawWardMarker(active: boolean) {
+    if (this.headless) return;
+    if (active && !this.objectiveMarker) {
+      this.objectiveMarker = new Graphics()
+        .circle(0, 0, 140)
+        .fill({ color: 0x69acac, alpha: 0.1 })
+        .stroke({ color: 0x9ccac3, width: 2 });
+      for (let i = 0; i < 8; i++) {
+        const a = (i * Math.PI) / 4,
+          x = Math.cos(a) * 140,
+          y = Math.sin(a) * 140;
+        this.objectiveMarker.poly([x, y - 5, x + 4, y, x, y + 5, x - 4, y]).fill(0xe0be83);
+      }
+      this.floorLayer.addChild(this.objectiveMarker);
+    }
+    if (this.objectiveMarker) this.objectiveMarker.visible = active;
+  }
   private updateEnvironment(dt: number) {
     if (this.config.training || this.finished) return;
     const mode = this.config.challenge?.id;
-    if (mode === 'ward' && this.objectiveProgress < 18) {
-      if (!this.headless && !this.objectiveMarker) {
-        this.objectiveMarker = new Graphics()
-          .circle(0, 0, 140)
-          .fill({ color: 0x70c5e8, alpha: 0.12 })
-          .stroke({ color: 0xb9e5f5, width: 4 });
-        this.floorLayer.addChild(this.objectiveMarker);
+    const ward =
+      mode === 'ward'
+        ? this.objectiveProgress < 18
+        : this.opportunity?.kind === 'ward' &&
+          !this.bossSpawned &&
+          this.objectiveProgress < this.opportunity.target;
+    this.drawWardMarker(ward);
+    if (ward) {
+      for (const actor of this.coop ? this.coopActors.values() : [this]) {
+        if (actor.hp <= 0 || Math.hypot(actor.x, actor.y) > 140) continue;
+        if (mode === 'ward') this.objectiveProgress = Math.min(18, this.objectiveProgress + dt);
+        else this.advanceOpportunity('ward', dt);
+        break;
       }
-      if (this.hp > 0 && Math.hypot(this.x, this.y) <= 140)
-        this.objectiveProgress = Math.min(18, this.objectiveProgress + dt);
     }
     this.environmentClock += dt;
-    const interval = mode === 'hazards' ? 4 : 13;
+    const seekingEmbers =
+      this.opportunity?.kind === 'evade' &&
+      !this.bossSpawned &&
+      this.objectiveProgress < this.opportunity.target;
+    const interval = mode === 'hazards' || seekingEmbers ? 4 : 13;
     if ((mode === 'hazards' || this.config.stage >= 16) && this.environmentClock >= interval) {
       this.environmentClock = 0;
       const view = new Graphics();
       const radius = mode === 'hazards' ? 110 : 85;
-      const x = this.x,
-        y = this.y;
+      const target =
+        this.coop && this.hp <= 0
+          ? ([...this.coopActors.values()].find((actor) => actor.hp > 0) ?? this)
+          : this;
+      const x = target.x,
+        y = target.y;
+      const cue = {
+        id: 1000000 + ++this.hazardSequence,
+        x,
+        y,
+        radius,
+        angle: 0,
+        range: 0,
+        width: 0,
+        shape: 'circle',
+        color: 0xea8b68,
+      };
       if (!this.headless) {
-        view
-          .circle(x, y, radius)
-          .fill({ color: 0xea8b68, alpha: 0.15 })
-          .stroke({ color: 0xffb68b, width: 4 });
-        view
-          .moveTo(x - 10, y)
-          .lineTo(x + 10, y)
-          .moveTo(x, y - 10)
-          .lineTo(x, y + 10)
-          .stroke({ color: 0xffedc5, width: 3 });
-        this.floorLayer.addChild(view);
+        this.warningLayer.addChild(view);
+        this.callbacks.onSound('warning');
       }
-      this.hazards.push({ x, y, radius, delay: 1.2, view });
+      this.hazards.push({ x, y, radius, delay: 1.2, view, target, cue });
     }
     for (let i = this.hazards.length - 1; i >= 0; i--) {
       const hazard = this.hazards[i];
       hazard.delay -= dt;
-      if (hazard.delay > 0) continue;
+      if (hazard.delay > 0) {
+        if (!this.headless)
+          drawWarning(
+            hazard.view.clear(),
+            hazard.cue,
+            !!this.config.preferences?.colorAssist,
+            this.reducedMotion?.matches ? 1 : 1 - hazard.delay / 1.2,
+          );
+        continue;
+      }
       if (mode === 'hazards') this.objectiveProgress = Math.min(6, this.objectiveProgress + 1);
+      if (hazard.target.hp > 0 && hazard.target.distance(hazard) > hazard.radius)
+        this.advanceOpportunity('evade');
       for (const actor of this.coop ? this.coopActors.values() : [this]) {
         if (actor.hp <= 0 || Math.hypot(actor.x - hazard.x, actor.y - hazard.y) > hazard.radius)
           continue;
@@ -1806,14 +2002,26 @@ export class GameEngine {
     const halfMap = (RIFT_MAP_SIZE * scale) / 2;
     this.world.scale.set(scale);
     this.shake = Math.max(0, this.shake - dt * 22);
-    const shake =
-      getPreferences(this.config.preferences).screenShake &&
-      !globalThis.matchMedia?.('(prefers-reduced-motion: reduce)').matches
-        ? this.shake
-        : 0;
+    const reduced = this.reducedMotion?.matches;
+    const shake = this.config.preferences?.screenShake !== false && !reduced ? this.shake : 0;
+    const subject =
+      this.bossSpawned && !reduced
+        ? this.enemies.find((enemy) => enemy.boss && enemy.hp > 0)
+        : undefined;
+    const cx =
+      this.hero.x +
+      (subject ? Math.max(-66, Math.min(66, (subject.view.x - this.hero.x) * 0.24)) : 0);
+    const cy =
+      this.hero.y +
+      (subject ? Math.max(-54, Math.min(54, (subject.view.y - this.hero.y) * 0.24)) : 0);
+    const camera = (this.cameraTarget ??= { x: cx, y: cy });
+    const blend = reduced ? 1 : 1 - Math.exp(-dt * 14);
+    camera.x += (cx - camera.x) * blend;
+    camera.y += (cy - camera.y) * blend;
+    const seconds = performance.now() / 1000;
     this.world.position.set(
-      boundCamera(framing.x - this.x * scale + (Math.random() - 0.5) * shake, w, halfMap),
-      boundCamera(framing.y - this.y * scale + (Math.random() - 0.5) * shake, h, halfMap),
+      boundCamera(framing.x - camera.x * scale + Math.sin(seconds * 67) * shake * 0.32, w, halfMap),
+      boundCamera(framing.y - camera.y * scale + Math.sin(seconds * 49) * shake * 0.23, h, halfMap),
     );
   }
   private drawMinimap() {
@@ -1995,7 +2203,7 @@ export class GameEngine {
   }
   private summonBoss() {
     this.bossSpawned = true;
-    for (const id of this.enemyWarnings.keys()) this.clearWarning(id);
+    for (const id of this.warningAnimations.keys()) this.clearWarning(id);
     for (const e of this.enemies) {
       e.hp = 0;
       if (e.brain) e.brain.pending.length = 0;
@@ -2015,7 +2223,7 @@ export class GameEngine {
       false,
       true,
     );
-    this.numbers.show(boss.x, boss.y + 90, def.name, true, 0xf2ba9b);
+    this.vfx.burst(boss.x, boss.y + 3, 0xf2ba9b, 9, true);
   }
   private updateEnemies(dt: number) {
     for (let i = this.enemies.length - 1; i >= 0; i--) {
@@ -2176,23 +2384,21 @@ export class GameEngine {
     this.warningAnimations.delete(id);
   }
   private updateWarningAnimations(dt: number) {
+    const reduced = this.config.preferences?.effects === 'reduced' || this.reducedMotion?.matches;
     for (const [id, animation] of this.warningAnimations) {
+      animation.age += dt;
+      if (this.headless) continue;
       const view = this.enemyWarnings.get(id);
       if (!view) {
         this.warningAnimations.delete(id);
         continue;
       }
-      animation.age += dt;
-      const preferences = getPreferences(this.config.preferences);
-      const reduced =
-        preferences.effects === 'reduced' ||
-        globalThis.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
       const t = reduced ? 1 : Math.min(1, animation.age / Math.max(0.01, animation.event.delay));
       const e = animation.event;
       view.alpha = 0.6 + t * 0.4;
       if (e.shape === 'circle') {
         view.clear();
-        drawWarning(view, e, preferences.colorAssist, t);
+        drawWarning(view, e, !!this.config.preferences?.colorAssist, t);
       }
     }
   }
@@ -2207,6 +2413,10 @@ export class GameEngine {
     }
     if (event.kind === 'telegraph') {
       this.clearWarning(event.id);
+      if (this.headless) {
+        this.warningAnimations.set(event.id, { event, age: 0 });
+        return;
+      }
       const g = new Graphics();
       drawWarning(g, event, getPreferences(this.config.preferences).colorAssist);
       const decal = warningDecal(event);
@@ -2396,10 +2606,14 @@ export class GameEngine {
       !skill ||
       skill.classId !== this.config.classId ||
       skill.kind === 'passive' ||
-      !this.learned(id) ||
-      this.cooldowns[id]
+      !this.learned(id)
     )
       return;
+    if (this.cooldowns[id]) {
+      if (this.cooldowns[id] <= 0.15) this.bufferedSkill = { id, until: this.elapsed + 0.18 };
+      return;
+    }
+    this.bufferedSkill = undefined;
     this.perform(skill, false);
   }
   private meleeRadius(skill: SkillDef) {
@@ -2496,19 +2710,27 @@ export class GameEngine {
     const targets = this.enemies
       .filter((e) => e.hp > 0 && this.distance(e) < 600)
       .sort((a, b) => this.distance(a) - this.distance(b));
-    const nearest = targets[0];
-    const cluster = [...targets].sort(
-      (a, b) =>
-        targets.filter((e) => Math.hypot(e.x - b.x, e.y - b.y) < 120).length -
-        targets.filter((e) => Math.hypot(e.x - a.x, e.y - a.y) < 120).length,
-    )[0];
+    const marked = targets.find((e) => e.id === this.focusId);
+    const nearest = marked ?? targets[0];
+    let cluster = nearest;
+    let largestGroup = 0;
+    for (const center of targets) {
+      let count = 0;
+      for (const enemy of targets)
+        if ((enemy.x - center.x) ** 2 + (enemy.y - center.y) ** 2 < 120 ** 2) count++;
+      if (count > largestGroup) {
+        largestGroup = count;
+        cluster = center;
+      }
+      if (count === targets.length) break;
+    }
     const angle = nearest
       ? Math.atan2(nearest.y - this.y, nearest.x - this.x)
       : this.facing < 0
         ? Math.PI
         : 0;
-    const tx = cluster?.x ?? this.x,
-      ty = cluster?.y ?? this.y;
+    const tx = marked?.x ?? cluster?.x ?? this.x,
+      ty = marked?.y ?? cluster?.y ?? this.y;
     const color = ELEMENT_COLORS[skill.element];
     if (!free) {
       this.hero.attack(skill, angle, this.castTimer);
@@ -2516,7 +2738,7 @@ export class GameEngine {
         this.lastCast = { sequence: this.attackCount, skillId: skill.id, angle, tx, ty };
     }
     this.vfx.signature(skill, this.x, this.y, angle, tx, ty);
-    if (!free) this.callbacks.onSound(skillSound(skill));
+    if (!free) this.callbacks.onSound(skillSound(skill, this.config.equipment.weapon?.legendaryId));
     if (!free && this.config.petId.includes('imp'))
       this.vfx.burst(this.x, this.y - 20, 0xff9b58, 5);
     if (!free && ['basic', 'core'].includes(skill.kind) && this.buffs.has('vengeance')) {
@@ -2602,6 +2824,10 @@ export class GameEngine {
       } else this.buffs.add('invulnerable', '无敌', skill.duration);
       const dx = this.x - start.x,
         dy = this.y - start.y;
+      if (!this.headless && !this.reducedMotion?.matches && skill.effect !== 'teleport') {
+        const duration = skill.effect === 'shadowstep' ? 0.09 : 0.15;
+        this.travelVisual = { dx, dy, duration, remaining: duration };
+      }
       const crossed = this.enemies.filter((e) => {
         const u = Math.max(
           0,
@@ -2951,6 +3177,7 @@ export class GameEngine {
   ) {
     this.projectiles.spawn(this.x, this.y - 20, angle, ELEMENT_COLORS[skill.element], skill.id, {
       ...options,
+      focusId: this.focusId,
       scale: (options.scale as number) ?? 1,
       multiplier,
     });
@@ -3111,19 +3338,22 @@ export class GameEngine {
     this.report.damageDealt += dealt;
     this.report.damageBySkill[skill.id] = (this.report.damageBySkill[skill.id] ?? 0) + dealt;
     if (crit) this.report.criticalHits++;
-    e.view.hit();
+    if (!dot && dealt > 0) e.view.hit();
     this.hp = Math.min(stats.hp, this.hp + stats.lifeOnHit * (dot ? 0.1 : 1));
-    if (!dot) this.numbers.show(e.x, e.y, damage, crit);
+    if (!dot && dealt > 0) this.numbers.show(e.x, e.y, dealt, crit, undefined, e.id);
     if (!dot && !crit && dealt > 0) this.callbacks.onSound('impact');
     if (crit) {
-      this.callbacks.onSound('critical');
+      if (!dot && dealt > 0) this.callbacks.onSound('critical');
       if (!e.boss) {
         const distance = Math.max(1, this.distance(e));
         e.x += ((e.x - this.x) / distance) * 4;
         e.y += ((e.y - this.y) / distance) * 4;
       }
-      this.shake = Math.max(this.shake, 2.5);
-      if (this.random() < 0.25) this.vfx.burst(e.x, e.y, ELEMENT_COLORS[skill.element], 5);
+      const sparks = this.random() < 0.25;
+      if (!dot && dealt > 0) {
+        this.shake = Math.max(this.shake, 2.5);
+        this.vfx.burst(e.x, e.y - 12, ELEMENT_COLORS[skill.element], sparks ? 6 : 3);
+      }
     }
     if (this.buffs.has('archon') && skill.effect === 'archon_beam')
       this.laserStacks = Math.min(60, this.laserStacks + 1);
@@ -3271,6 +3501,7 @@ export class GameEngine {
     e.deadTime = 0.4;
     this.kills++;
     if (this.config.challenge?.id === 'pursuit' && e.elite && !e.minion) this.objectiveProgress++;
+    if (e.elite && !e.minion) this.advanceOpportunity('hunt');
     this.combo++;
     this.comboTimer = 3;
     this.gold += 3;
@@ -3428,7 +3659,7 @@ export class GameEngine {
     if (art) {
       art.anchor.set(0.5);
       art.position.set(x, y);
-      art.width = Math.min(270, radius * 2);
+      art.width = skill.effect === 'caltrops' ? radius : Math.min(270, radius * 2);
       art.height = art.width * 0.68;
       art.alpha = 0.4;
       this.floorLayer.addChild(art);
@@ -3483,22 +3714,15 @@ export class GameEngine {
         z.view.clear();
         if (z.art) {
           z.art.position.set(z.x, z.y);
-          z.art.alpha = (0.4 + 0.12 * Math.sin(z.age * 4)) * Math.min(1, (z.life - z.age) * 4);
+          z.art.alpha =
+            (z.skill.effect === 'caltrops' ? 0.85 : 0.45 + 0.1 * Math.sin(z.age * 4)) *
+            Math.min(1, (z.life - z.age) * 4);
         }
-        pixelEllipse(z.view, z.x, z.y, z.radius, z.radius * 0.68, color, 6, 0.08);
-        pixelEllipse(z.view, z.x, z.y, z.radius, z.radius * 0.68, color, 6, 0.4, true);
-        for (let j = 0; j < 5; j++) {
-          const a = this.elapsed * 2 + j * Math.PI * 0.4;
-          pixelLine(
-            z.view,
-            z.x + Math.cos(a) * z.radius * 0.7,
-            z.y + Math.sin(a) * z.radius * 0.5,
-            z.x + Math.cos(a + 0.4) * z.radius * 0.9,
-            z.y + Math.sin(a + 0.4) * z.radius * 0.6,
-            color,
-            3,
-            0.7,
-          );
+        if (z.skill.effect !== 'caltrops' || !z.art) {
+          z.view
+            .ellipse(z.x, z.y, z.radius, z.radius * 0.68)
+            .fill({ color, alpha: 0.07 })
+            .stroke({ color, width: 1.5, alpha: 0.32 });
         }
       }
       if (z.pull)
@@ -3594,7 +3818,10 @@ export class GameEngine {
     }
   }
   private drop(kind: Orb['kind'], x: number, y: number, value = 0, item?: Item) {
-    if (this.orbs.length > 180) return;
+    if (this.orbs.length > 180) {
+      if (kind === 'item' && item) this.earned.push(item);
+      return;
+    }
     const view = new Container(),
       g = new Graphics();
     let color = kind === 'health' ? 0xdd5269 : kind === 'progress' ? 0xb49be7 : 0xd7bb76;
@@ -3741,9 +3968,10 @@ export class GameEngine {
           this.vfx.burst(this.x, this.y - 18, 0xaff3ba, 12, false, true);
         }
         if (o.kind === 'progress') {
+          this.advanceOpportunity('crystal');
           this.progress = Math.min(100, this.progress + o.value);
           this.callbacks.onSound('progress');
-          this.numbers.show(this.x, this.y - 35, '秘境进度 +12%', false, 0xc5a5ef);
+          this.vfx.burst(o.x, o.y - 6, 0xc5a5ef, 5);
         }
         if (o.kind === 'gold') {
           this.gold += o.value;
@@ -3969,6 +4197,7 @@ export class GameEngine {
       return;
     }
     p.used = true;
+    this.advanceOpportunity('shrine');
     p.view.alpha = 0.4;
     const def = PYLONS.find((d) => d.id === id)!;
     for (const actor of this.coopHost.coop ? this.coopHost.coopActors.values() : [this])
@@ -4127,7 +4356,14 @@ export class GameEngine {
             progress: this.objectiveProgress,
             target: CHALLENGES.find((c) => c.id === this.config.challenge!.id)!.target,
           }
-        : undefined,
+        : this.opportunity && !this.bossSpawned
+          ? {
+              name: this.opportunity.name,
+              progress: this.objectiveProgress,
+              target: this.opportunity.target,
+              bonus: this.opportunity.bonus,
+            }
+          : undefined,
       hp: Math.max(0, this.hp),
       maxHp: this.config.stats.hp,
       resource: this.resource,
@@ -4201,6 +4437,7 @@ export class GameEngine {
     if (this.initialized && this.app) {
       this.app.canvas.removeEventListener('pointerdown', this.onPointerDown);
       this.numbers.destroy();
+      this.vfx.destroy();
       this.app.destroy(true, { children: true });
     }
   }

@@ -1,6 +1,7 @@
 import {
   MAX_INVENTORY,
   MAX_STASH,
+  MAX_PENDING_LOOT,
   MAX_CHARACTERS,
   MAX_IMPORT_BYTES,
   newSave,
@@ -44,6 +45,8 @@ import { RIFT_RULES } from '../data/stages';
 import { SKILLS } from '../data/skillTrees';
 import { SETS } from '../data/sets';
 import { LEGENDARIES } from '../data/legendaries';
+import { equipmentName, itemClass } from '../data/equipment';
+export { itemClass } from '../data/equipment';
 import { AFFIXES, GEMS, PETS } from '../data/affixes';
 import { generateLoot } from '../engine/LootGenerator';
 import {
@@ -237,7 +240,12 @@ export function createCombatConfig(save: SaveData, stash: Item[] = []): CombatCo
     cube: { ...save.cube },
     petId: save.petId,
     petLevel: save.petLevels[save.petId] ?? 1,
-    ownedSetPieces: [...save.inventory, ...Object.values(save.equipment), ...stash]
+    ownedSetPieces: [
+      ...save.inventory,
+      ...Object.values(save.equipment),
+      ...stash,
+      ...(save.pendingLoot ?? []),
+    ]
       .filter((item): item is Item => !!item?.setId)
       .map((item) => `${item.setId}:${item.slot}`),
   };
@@ -404,6 +412,7 @@ interface GameState {
   deleteCharacter: (id: string) => void;
   depositItem: (id: string) => void;
   withdrawItem: (id: string) => void;
+  claimPendingLoot: () => void;
   setInCombat: (value: boolean) => void;
   selectStage: (stage: number) => void;
   updateSettings: (settings: Partial<SaveData>) => void;
@@ -445,13 +454,6 @@ interface GameState {
   importSave: (text: string) => void;
   resetProgress: () => void;
 }
-export function itemClass(item: Item) {
-  return (
-    SETS.find((set) => set.id === item.setId)?.classId ??
-    LEGENDARIES.find((legendary) => legendary.id === item.legendaryId)?.classId
-  );
-}
-
 // Fill only vacant slots. Use the item's visible base stats to choose among candidates.
 export function emptySlotItems(save: SaveData): Item[] {
   const picks = new Map<Slot, Item>();
@@ -527,34 +529,42 @@ function materialValue(item: Item) {
 function refundGem(save: SaveData, item: Item) {
   if (item.gem) save.gems[item.gem.id][item.gem.level - 1]++;
 }
-function addItems(save: SaveData, items: Item[]) {
+export const PENDING_LOOT_NOTICE = '请先在装备面板领取保留战利品，再继续远征。';
+
+function addItems(save: SaveData, items: Item[], stash?: Item[]) {
   const receipt = {
     stored: 0,
+    stashed: 0,
+    retained: 0,
     autoSalvaged: 0,
     overflow: 0,
-    preciousOverflow: 0,
     crystals: 0,
-    souls: 0,
   };
-  for (const item of items) {
-    const precious = isPrecious(item);
-    if (save.autoSalvage && bulkSalvageable(item, save.keepRareAffix)) {
+  for (const received of items) {
+    const name = equipmentName(received);
+    const item = name === received.name ? received : { ...received, name };
+    const salvageable = bulkSalvageable(item, save.keepRareAffix);
+    if (save.autoSalvage && salvageable) {
       receipt.autoSalvaged++;
-    } else if (save.inventory.length >= MAX_INVENTORY) {
-      receipt.overflow++;
-      if (precious) receipt.preciousOverflow++;
-    } else {
+    } else if (save.inventory.length < MAX_INVENTORY) {
       save.inventory.push(item);
       receipt.stored++;
       continue;
+    } else if (salvageable) {
+      receipt.overflow++;
+    } else if (stash && stash.length < MAX_STASH) {
+      stash.push(item);
+      receipt.stashed++;
+      continue;
+    } else {
+      (save.pendingLoot ??= []).push(item);
+      receipt.retained++;
+      continue;
     }
-    const material = materialValue(item);
-    receipt.crystals += material.crystals;
-    receipt.souls += material.souls;
+    receipt.crystals += materialValue(item).crystals;
     refundGem(save, item);
   }
   save.crystals += receipt.crystals;
-  save.souls += receipt.souls;
   return receipt;
 }
 function chapterRewards(
@@ -593,6 +603,7 @@ function chapterRewards(
               ...Object.values(save.equipment),
               ...runItems,
               ...stash,
+              ...(save.pendingLoot ?? []),
             ]
               .filter((part): part is Item => !!part?.setId)
               .map((part) => `${part.setId}:${part.slot}`),
@@ -613,7 +624,9 @@ function chapterRewards(
   return earned;
 }
 /** Shared settlement for local runs and transactional server reward claims. */
-export function applyRunResult(s: SaveData, result: RunResult, stash: Item[] = []): string {
+export function applyRunResult(s: SaveData, result: RunResult, stash: Item[]): string {
+  if (s.pendingLoot?.length) throw new Error(PENDING_LOOT_NOTICE);
+  if (result.items.length > MAX_PENDING_LOOT) throw new Error('远征战利品超过单场结算上限。');
   const priorLevel = s.level;
   const chapterNotices: string[] = [];
   if (result.challenge) {
@@ -709,20 +722,14 @@ export function applyRunResult(s: SaveData, result: RunResult, stash: Item[] = [
     const gem = GEMS[Math.floor(Math.random() * GEMS.length)];
     s.gems[gem.id][Math.min(9, Math.floor(result.stage / 20))]++;
   }
-  const receipt = addItems(s, result.items);
+  const receipt = addItems(s, result.items, stash);
   if (result.items.length) {
     const loot = [`战场装备入包 ${receipt.stored} 件`];
+    if (receipt.stashed) loot.push(`共享仓库 ${receipt.stashed} 件`);
+    if (receipt.retained) loot.push(`营地待领 ${receipt.retained} 件`);
     if (receipt.autoSalvaged) loot.push(`按设置分解 ${receipt.autoSalvaged} 件`);
-    if (receipt.overflow) {
-      const precious = receipt.preciousOverflow
-        ? `（其中传奇及以上 ${receipt.preciousOverflow} 件）`
-        : '';
-      loot.push(`背包满额分解 ${receipt.overflow} 件${precious}`);
-    }
-    if (receipt.crystals)
-      loot.push(
-        `分解所得 ${receipt.crystals} 结晶${receipt.souls ? `、${receipt.souls} 遗忘之魂` : ''}`,
-      );
+    if (receipt.overflow) loot.push(`背包满额分解 ${receipt.overflow} 件`);
+    if (receipt.crystals) loot.push(`分解所得 ${receipt.crystals} 结晶`);
     chapterNotices.push(loot.join('，'));
   }
   if (priorKills < 100 && s.kills >= 100) s.gold += 500;
@@ -1146,6 +1153,29 @@ export const useGameStore = create<GameState>((set, get) => {
       set({ accounts: data.accounts, save, notice: `已取出 ${item.name} 到当前角色背包。` });
       void get().persist();
     },
+    claimPendingLoot() {
+      if (!requireCamp() || !get().save.pendingLoot?.length) return;
+      const data = snapshotAccounts(get());
+      const account = data.accounts.find((entry) => entry.id === data.activeAccountId)!;
+      const save = activeSave(data);
+      const pending = save.pendingLoot!;
+      const carried = pending.splice(0, MAX_INVENTORY - save.inventory.length);
+      const stashed = pending.splice(0, MAX_STASH - account.stash.length);
+      if (!carried.length && !stashed.length) {
+        set({ notice: '背包与共享仓库已满，腾出空间后可继续领取保留战利品。' });
+        return;
+      }
+      save.inventory.push(...carried);
+      account.stash.push(...stashed);
+      const receipt = [
+        ...(carried.length ? [`背包 ${carried.length} 件`] : []),
+        ...(stashed.length ? [`共享仓库 ${stashed.length} 件`] : []),
+        ...(pending.length ? [`仍待领 ${pending.length} 件`] : []),
+      ];
+      if (!pending.length) delete save.pendingLoot;
+      set({ accounts: data.accounts, save, notice: `已领取保留战利品 · ${receipt.join('，')}` });
+      void get().persist();
+    },
     selectClass(id) {
       if (!requireCamp() || !CLASSES.some((hero) => hero.id === id)) return;
       if (get().save.classId === id) return;
@@ -1228,17 +1258,21 @@ export const useGameStore = create<GameState>((set, get) => {
       void get().persist();
     },
     completeRun(result) {
-      if (get().labBackup) {
+      const state = get();
+      if (state.cloudTransition) return;
+      if (state.labBackup) {
         set({ notice: '演武结束。体验装备与奖励不会写入开荒存档。' });
         return;
       }
-      mutate((s) =>
-        applyRunResult(
-          s,
-          result,
-          get().accounts.find((account) => account.id === get().activeAccountId)!.stash,
-        ),
-      );
+      if (state.save.pendingLoot?.length) {
+        set({ notice: PENDING_LOOT_NOTICE });
+        return;
+      }
+      const data = snapshotAccounts(state);
+      const save = activeSave(data);
+      const account = data.accounts.find((entry) => entry.id === data.activeAccountId)!;
+      const notice = applyRunResult(save, result, account.stash);
+      set({ accounts: data.accounts, save, notice });
       void get().persist();
     },
     getStats: () => computeStats(get().save),
@@ -1380,6 +1414,7 @@ export const useGameStore = create<GameState>((set, get) => {
               ...s.inventory,
               ...Object.values(s.equipment).filter((i): i is Item => !!i),
               ...get().accounts.find((account) => account.id === get().activeAccountId)!.stash,
+              ...(s.pendingLoot ?? []),
             ]
               .filter((i) => i.setId)
               .map((i) => `${i.setId}:${i.slot}`),
@@ -1416,6 +1451,8 @@ export const useGameStore = create<GameState>((set, get) => {
         const base = [...s.inventory, ...Object.values(s.equipment)].find((i) => i?.id === baseId);
         const donor = s.inventory.find((i) => i.id === donorId);
         if (!base || !donor) return '底材或素材已离开行囊。';
+        const requiredClass = itemClass(base);
+        if (requiredClass && requiredClass !== s.classId) return '底材属于其他职业。';
         const recipe = craftRecipe(base, donor, affixId);
         if (!recipe) return '请选择未重复的素材词条。';
         if (s.crystals < recipe.crystals || s.gold < recipe.gold) return '加工材料不足。';

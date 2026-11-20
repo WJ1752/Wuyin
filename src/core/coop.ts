@@ -4,6 +4,7 @@ import type { CombatConfig, CombatSnapshot, Rarity, RunResult, Slot } from './ty
 export interface CoopInput {
   sequence: number;
   movement: { x: number; y: number };
+  focusId?: number;
   casts: string[];
   commands?: { sequence: number; id: string }[];
   autoSkills?: Record<string, boolean>;
@@ -90,6 +91,7 @@ export interface CoopFrame {
     width: number;
     shape: string;
     color: number;
+    progress?: number;
   }[];
   pylons: { id: string; used: boolean }[];
   results?: Record<string, RunResult>;

@@ -7,7 +7,9 @@ import { DatabaseSync } from 'node:sqlite';
 import { createApp } from '../server/app';
 import { recordVerifiedRun } from '../server/verifiedRuns';
 import { officialTrialConfig } from '../server/trials';
-import { newAccountSave } from '../src/state/saveData';
+import { MAX_INVENTORY, MAX_STASH, newAccountSave } from '../src/state/saveData';
+import { generateLoot } from '../src/engine/LootGenerator';
+import type { AccountData } from '../src/core/types';
 
 const origin = 'http://localhost:5173';
 const password = 'long-original-password-42';
@@ -149,6 +151,13 @@ test('durable reward claims survive restarts, enforce ownership and revisions, a
   const account = newAccountSave().accounts[0];
   account.id = user.id;
   const characterId = account.activeCharacterId;
+  const common = generateLoot('ranger', 1, { rarity: 'common' });
+  const relic = generateLoot('ranger', 16, { rarity: 'legendary', legendaryId: 'dawn' });
+  account.characters[0].save.inventory = Array.from({ length: MAX_INVENTORY }, (_, i) => ({
+    ...common,
+    id: `bag-${i}`,
+  }));
+  account.stash = Array.from({ length: MAX_STASH }, (_, i) => ({ ...common, id: `stash-${i}` }));
   assert.equal((await owner.request('PUT', '/save', { account, revision: 0 })).statusCode, 200);
   const result = {
     won: true,
@@ -158,15 +167,23 @@ test('durable reward claims survive restarts, enforce ownership and revisions, a
     kills: 10,
     gold: 100,
     shards: 5,
-    items: [],
+    items: [relic],
   };
   let db = new DatabaseSync(f.dbPath);
-  db.prepare(
+  const addPending = db.prepare(
     'INSERT INTO coop_results(run_id,user_id,character_id,result_json,created_at) VALUES (?,?,?,?,?)',
-  ).run('durable-run', user.id, characterId, JSON.stringify(result), Date.now());
+  );
+  addPending.run('durable-run', user.id, characterId, JSON.stringify(result), Date.now());
+  addPending.run(
+    'next-run',
+    user.id,
+    characterId,
+    JSON.stringify({ ...result, items: [] }),
+    Date.now(),
+  );
   db.close();
   await f.restart();
-  assert.equal((await owner.request('GET', '/coop/results')).json().rewards.length, 1);
+  assert.equal((await owner.request('GET', '/coop/results')).json().rewards.length, 2);
   assert.equal(
     (await owner.request('POST', '/coop/claim', { runId: 'durable-run', revision: 0 })).statusCode,
     409,
@@ -178,6 +195,7 @@ test('durable reward claims survive restarts, enforce ownership and revisions, a
     account.characters[0].save.gold + 100,
   );
   assert.equal(claimed.json().account.characters[0].save.clears, 1);
+  assert.equal(claimed.json().account.characters[0].save.pendingLoot[0].id, relic.id);
   assert.equal(claimed.json().revision, 2);
   assert.equal((await owner.request('PUT', '/save', { account, revision: 1 })).statusCode, 409);
   await f.restart();
@@ -188,6 +206,27 @@ test('durable reward claims survive restarts, enforce ownership and revisions, a
   assert.equal(repeated.json().alreadyClaimed, true);
   assert.equal(repeated.json().revision, 2);
   assert.equal(repeated.json().account.characters[0].save.clears, 1);
+  assert.equal(repeated.json().account.characters[0].save.pendingLoot[0].id, relic.id);
+  const blocked = await owner.request('POST', '/coop/claim', { runId: 'next-run', revision: 2 });
+  assert.equal(blocked.statusCode, 409);
+  assert.equal(blocked.json().code, 'RESULT_LOOT_PENDING');
+  assert.deepEqual(
+    (await owner.request('GET', '/coop/results'))
+      .json()
+      .rewards.map((reward: { runId: string }) => reward.runId),
+    ['next-run'],
+  );
+  const restored: AccountData = repeated.json().account;
+  const restoredSave = restored.characters[0].save;
+  restoredSave.inventory.pop();
+  restoredSave.inventory.push(restoredSave.pendingLoot![0]);
+  delete restoredSave.pendingLoot;
+  const uploaded = await owner.request('PUT', '/save', { account: restored, revision: 2 });
+  assert.equal(uploaded.statusCode, 200, uploaded.body);
+  assert.equal(
+    (await owner.request('POST', '/coop/claim', { runId: 'next-run', revision: 3 })).statusCode,
+    200,
+  );
   assert.deepEqual((await owner.request('GET', '/coop/results')).json().rewards, []);
   const other = f.browser();
   await other.request('GET', '/session');
@@ -213,10 +252,20 @@ test('durable reward claims survive restarts, enforce ownership and revisions, a
     kills: 60,
     setName: '风暴召唤者',
   });
+  db.prepare(
+    `INSERT INTO verified_runs
+    (run_id,user_id,character_id,name,class_id,level,stage,seconds,kills,set_name,created_at)
+    SELECT 'old-official',user_id,character_id,'初版行者',class_id,level,stage,1,kills,set_name,created_at
+    FROM verified_runs WHERE run_id = 'official-run'`,
+  ).run();
   db.close();
   const board = await owner.request('GET', '/leaderboard/verified?classId=ranger');
   assert.equal(board.json().source, 'verified');
   assert.equal(board.json().entries[0].name, '试炼者');
+  assert.equal(board.json().total, 1);
+  const archive = await owner.request('GET', '/leaderboard/verified?classId=ranger&ruleset=1');
+  assert.equal(archive.json().entries[0].name, '初版行者');
+  assert.equal(archive.json().total, 1);
   assert.ok(!board.body.includes(user.id));
   const trial = await owner.request('POST', '/trials/start', { setId: 'stormcaller' });
   assert.equal(trial.statusCode, 201, trial.body);

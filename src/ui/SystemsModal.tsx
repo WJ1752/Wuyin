@@ -1,6 +1,5 @@
-import { useEffect, useId, useRef, useState } from 'react';
-import { createPortal } from 'react-dom';
-import type { CSSProperties, ReactNode } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import type { CSSProperties, MouseEvent, ReactNode } from 'react';
 import {
   X,
   Sword,
@@ -13,7 +12,6 @@ import {
   CircleDot,
   Sparkles,
   ArrowUp,
-  ArrowDown,
   ArrowLeft,
   Check,
   FlaskConical,
@@ -35,6 +33,8 @@ import {
 import type { ClassId, Item, LeaderboardResponse, RunRecord, Slot, Stats } from '../core/types';
 import { RARITY_COLORS, RARITY_NAMES, SLOTS, SLOT_NAMES } from '../core/types';
 import { CLASSES } from '../data/classes';
+import { equipmentName } from '../data/equipment';
+import { CURRENT_TRIAL_RULESET } from '../data/stages';
 import type { CampaignChapter } from '../data/campaign';
 import { SKILLS } from '../data/skillTrees';
 import { SETS } from '../data/sets';
@@ -148,7 +148,7 @@ function affixLabel(id: string, value: number) {
   const d = AFFIXES.find((a) => a.id === id);
   return `${d?.name ?? id} +${d?.unit === '%' ? (value * 100).toFixed(1) : Math.round(value)}${d?.unit ?? ''}`;
 }
-function SalvageButton({ item }: { item: Item }) {
+function SalvageButton({ item, onSalvaged }: { item: Item; onSalvaged?: () => void }) {
   const salvage = useGameStore((state) => state.salvage);
   const keep = useGameStore((state) => state.save.keepRareAffix);
   const [confirm, setConfirm] = useState(false);
@@ -163,7 +163,10 @@ function SalvageButton({ item }: { item: Item }) {
           data-sound={confirm || !needsConfirmation ? 'forge' : undefined}
           onClick={() => {
             if (needsConfirmation && !confirm) setConfirm(true);
-            else salvage(item.id);
+            else {
+              salvage(item.id);
+              onSalvaged?.();
+            }
           }}
         >
           {confirm ? '确认分解' : `分解 · ${precious ? '12 结晶 / 2 魂' : '4 结晶'}`}
@@ -215,77 +218,40 @@ function ItemTile({
   selected = false,
 }: {
   item: Item;
-  onClick?: () => void;
+  onClick?: (event: MouseEvent<HTMLButtonElement>) => void;
   selected?: boolean;
 }) {
-  const equipped = useGameStore((s) => s.save.equipment[item.slot]);
-  const [hovered, setHovered] = useState(false);
-  const [focused, setFocused] = useState(false);
-  const [position, setPosition] = useState({ left: 16, top: 16 });
-  const button = useRef<HTMLButtonElement>(null);
-  const tooltipId = useId();
-  const show = hovered || focused;
-  const compare = equipped && equipped.id !== item.id ? equipped : undefined;
-  const placeTooltip = () => {
-    const rect = button.current?.getBoundingClientRect();
-    if (!rect) return;
-    const width = Math.min(compare ? 650 : 330, window.innerWidth - 32);
-    setPosition({
-      left: Math.max(16, Math.min(window.innerWidth - width - 16, rect.right + 12)),
-      top: Math.max(16, Math.min(rect.top, window.innerHeight - 490)),
-    });
-  };
-  return (
+  const className = `item-card rarity-${item.rarity}${selected ? ' selected' : ''}`;
+  const style = { '--rarity': RARITY_COLORS[item.rarity] } as CSSProperties;
+  const content = (
     <>
-      <button
-        ref={button}
-        className={`item-card rarity-${item.rarity} ${selected ? 'selected' : ''}`}
-        style={{ '--rarity': RARITY_COLORS[item.rarity] } as CSSProperties}
-        onClick={onClick}
-        aria-pressed={onClick ? selected : undefined}
-        aria-describedby={show ? tooltipId : undefined}
-        onMouseEnter={() => {
-          placeTooltip();
-          setHovered(true);
-        }}
-        onMouseLeave={() => setHovered(false)}
-        onFocus={() => {
-          placeTooltip();
-          setFocused(true);
-        }}
-        onBlur={() => setFocused(false)}
-      >
-        <span className="item-tile-art">
-          <ItemIcon item={item} size={42} />
-          {item.gem && <i style={{ color: GEMS.find((g) => g.id === item.gem!.id)?.color }}>◆</i>}
-        </span>
-        <span className="item-tile-name">{item.name}</span>
-        <span className="item-tile-meta">
-          {RARITY_NAMES[item.rarity]} · Lv.{item.level}
-        </span>
-      </button>
-      {show &&
-        createPortal(
-          <div
-            id={tooltipId}
-            role="tooltip"
-            className={`systems-modal item-comparison-tooltip ${compare ? 'has-comparison' : ''}`}
-            style={position}
-          >
-            <section>
-              <span className="eyebrow">{equipped?.id === item.id ? '当前穿戴' : '选中装备'}</span>
-              <ItemDetails item={item} compare={compare} />
-            </section>
-            {compare && (
-              <section>
-                <span className="eyebrow">当前穿戴 · 同部位</span>
-                <ItemDetails item={compare} />
-              </section>
-            )}
-          </div>,
-          document.body,
-        )}
+      <span className="item-tile-art">
+        <ItemIcon item={item} size={42} />
+        {item.gem && <i style={{ color: GEMS.find((g) => g.id === item.gem!.id)?.color }}>◆</i>}
+      </span>
+      <span className="item-tile-name">{equipmentName(item)}</span>
+      <span className="item-tile-meta">
+        {RARITY_NAMES[item.rarity]} · {item.level} 级
+      </span>
     </>
+  );
+  return onClick ? (
+    <button
+      className={className}
+      style={style}
+      onClick={onClick}
+      aria-pressed={selected}
+      data-item-id={item.id}
+    >
+      {content}
+    </button>
+  ) : (
+    <details className="readonly-item">
+      <summary className={className} style={style}>
+        {content}
+      </summary>
+      <ItemDetails item={item} />
+    </details>
   );
 }
 function ItemDetails({
@@ -312,11 +278,11 @@ function ItemDetails({
         {RARITY_NAMES[item.rarity]} / {SLOT_NAMES[item.slot]}
       </span>
       <p className="item-class-label">
-        {CLASSES.find((hero) => hero.id === (set?.classId ?? l?.classId))?.name ?? '全职业'}适用
+        {CLASSES.find((hero) => hero.id === itemClass(item))?.name ?? '全职业'}适用
       </p>
       <div className="item-detail-heading">
         <ItemIcon item={item} size={54} />
-        <h3>{item.name}</h3>
+        <h3>{equipmentName(item)}</h3>
       </div>
       {item.rarity === 'rare' && (
         <p className="muted">
@@ -325,28 +291,25 @@ function ItemDetails({
         </p>
       )}
       <div className="item-base-stats">
-        {item.attack > 0 && (
-          <strong>
-            {item.attack} <small>攻击</small>
-            {compare && (
-              <span className={item.attack >= compare.attack ? 'positive' : 'negative'}>
-                {item.attack >= compare.attack ? <ArrowUp size={12} /> : <ArrowDown size={12} />}{' '}
-                {Math.abs(item.attack - compare.attack)}
-              </span>
-            )}
-          </strong>
-        )}
-        {item.armor > 0 && (
-          <strong>
-            {item.armor} <small>护甲</small>
-            {compare && (
-              <span className={item.armor >= compare.armor ? 'positive' : 'negative'}>
-                {item.armor >= compare.armor ? <ArrowUp size={12} /> : <ArrowDown size={12} />}{' '}
-                {Math.abs(item.armor - compare.armor)}
-              </span>
-            )}
-          </strong>
-        )}
+        {(
+          [
+            ['attack', '攻击'],
+            ['armor', '护甲'],
+          ] as const
+        ).map(([key, label]) => {
+          const difference = item[key] - (compare?.[key] ?? 0);
+          return item[key] > 0 || difference < 0 ? (
+            <strong key={key}>
+              {item[key]} <small>{label}</small>
+              {compare && difference !== 0 && (
+                <span className={difference > 0 ? 'positive' : 'negative'}>
+                  {difference > 0 ? '+' : '−'}
+                  {Math.abs(difference)}
+                </span>
+              )}
+            </strong>
+          ) : null;
+        })}
       </div>
       <ul className="affix-list">
         {item.affixes.map((a) => {
@@ -355,10 +318,10 @@ function ItemDetails({
           return (
             <li key={a.id}>
               {affixLabel(a.id, a.value)}
-              {compare && (
-                <small className={difference >= 0 ? 'positive' : 'negative'}>
+              {compare && difference !== 0 && (
+                <small className={difference > 0 ? 'positive' : 'negative'}>
                   {' '}
-                  {difference >= 0 ? '↑' : '↓'}{' '}
+                  {difference > 0 ? '↑' : '↓'}{' '}
                   {unit === '%'
                     ? `${(Math.abs(difference) * 100).toFixed(1)}%`
                     : Math.round(Math.abs(difference))}
@@ -412,6 +375,127 @@ function ItemDetails({
     </article>
   );
 }
+
+type EquipmentSelection = {
+  selected: string;
+  selectItem: (id: string, trigger?: HTMLButtonElement) => void;
+  closeItem: () => void;
+};
+
+function PendingLoot() {
+  const {
+    save,
+    accounts,
+    activeAccountId,
+    claimPendingLoot,
+    labBackup,
+    cloudTransition,
+    inCombat,
+  } = useGameStore();
+  const count = save.pendingLoot?.length ?? 0;
+  if (!count || labBackup) return null;
+  const stash = accounts.find((account) => account.id === activeAccountId)?.stash ?? [];
+  const inventorySpace = Math.max(0, MAX_INVENTORY - save.inventory.length);
+  const stashSpace = Math.max(0, MAX_STASH - stash.length);
+  const available = Math.min(count, inventorySpace + stashSpace);
+  return (
+    <section className="pending-loot" aria-label="保留战利品">
+      <Package size={26} />
+      <div>
+        <h3>{count} 件保留战利品</h3>
+        <p>背包和仓库腾出空间后可领取，领完即可开始下一次远征。</p>
+        <small>
+          背包空余 {inventorySpace} · 仓库空余 {stashSpace}
+        </small>
+      </div>
+      <button
+        className="gold-button"
+        data-sound="equip"
+        onClick={claimPendingLoot}
+        disabled={!available || inCombat || cloudTransition}
+      >
+        {available > 0 ? `领取保留战利品 · ${available} 件` : '请先腾出空间'}
+      </button>
+    </section>
+  );
+}
+
+function EquipmentInspector({
+  item,
+  compare,
+  caption,
+  onClose,
+  children,
+}: {
+  item?: Item;
+  compare?: Item;
+  caption?: string;
+  onClose: () => void;
+  children?: ReactNode;
+}) {
+  const closeButton = useRef<HTMLButtonElement>(null);
+  const id = item?.id;
+  useEffect(() => {
+    if (!id) return;
+    const close = closeButton.current;
+    close?.focus({ preventScroll: true });
+    if (window.matchMedia('(max-width: 1080px)').matches)
+      close?.closest('.modal-body')?.scrollTo({ top: 0 });
+  }, [id]);
+
+  return (
+    <aside className="equipment-inspector" aria-label="装备详情">
+      <header className="equipment-inspector-heading">
+        <h3>{item ? '装备详情' : '装备鉴览'}</h3>
+        {item && (
+          <button
+            ref={closeButton}
+            className="icon-button"
+            onClick={onClose}
+            aria-label="关闭装备详情"
+          >
+            <X size={18} />
+          </button>
+        )}
+      </header>
+      {item ? (
+        <>
+          <div className="equipment-inspector-body" key={item.id}>
+            {caption && (
+              <p className="equipment-status" role="status">
+                {caption}
+              </p>
+            )}
+            {compare && <p className="equipment-reference">对比 · {equipmentName(compare)}</p>}
+            <ItemDetails item={item} compare={compare} />
+            {compare && (
+              <details className="equipment-comparison">
+                <summary>
+                  <ItemIcon item={compare} size={30} />
+                  <span>
+                    <small>当前穿戴 · {SLOT_NAMES[compare.slot]}</small>
+                    <strong style={{ color: RARITY_COLORS[compare.rarity] }}>
+                      {equipmentName(compare)}
+                    </strong>
+                  </span>
+                  <ChevronRight size={15} />
+                </summary>
+                <ItemDetails item={compare} />
+              </details>
+            )}
+          </div>
+          <div className="equipment-inspector-actions">{children}</div>
+        </>
+      ) : (
+        <div className="equipment-inspector-empty">
+          <Shield size={38} />
+          <p>选择一件装备，查看属性变化和可用操作。</p>
+        </div>
+      )}
+    </aside>
+  );
+}
+
 const statNames: Record<keyof Stats, string> = {
   hp: '最大生命',
   attack: '基础攻击',
@@ -451,10 +535,9 @@ const percentStats = [
   'bonusDamage',
   'luck',
 ];
-function CharacterPanel({ inspectItem }: { inspectItem?: string }) {
+function CharacterPanel({ selected, selectItem, closeItem }: EquipmentSelection) {
   const store = useGameStore();
   const { save } = store;
-  const [selected, setSelected] = useState(inspectItem ?? '');
   const [filter, setFilter] = useState('all');
   const [slotFilter, setSlotFilter] = useState('all');
   const [search, setSearch] = useState('');
@@ -463,10 +546,6 @@ function CharacterPanel({ inspectItem }: { inspectItem?: string }) {
   const [dossierOpen, setDossierOpen] = useState(
     () => !window.matchMedia('(max-width: 960px)').matches,
   );
-  const detail = useRef<HTMLDivElement>(null);
-  const selectItem = (id: string) => {
-    setSelected(id);
-  };
   const item = [...save.inventory, ...Object.values(save.equipment)].find(
     (i) => i?.id === selected,
   );
@@ -496,125 +575,219 @@ function CharacterPanel({ inspectItem }: { inspectItem?: string }) {
     return () => media.removeEventListener('change', sync);
   }, []);
   return (
-    <div className="system-columns">
-      <section>
-        <div className="mobile-character-summary">
-          <CharacterPreview classId={save.classId} />
-          <div>
-            <strong>
-              {hero.name} · Lv. {save.level}
-            </strong>
-            <span>
-              {hero.mainStat} · {hero.title}
-            </span>
-            <small>
-              攻击 {formatBigNumber(stats.attack)} · 护甲 {formatBigNumber(stats.armor)} · 生命{' '}
-              {formatBigNumber(stats.hp)}
-            </small>
-          </div>
-        </div>
-        <details className="mobile-character-dossier" open={dossierOpen}>
-          <summary
-            onClick={(event) => {
-              event.preventDefault();
-              setDossierOpen((value) => !value);
-            }}
-          >
-            {dossierOpen ? '收起纸娃娃与完整属性' : '查看纸娃娃与完整属性'}
-          </summary>
-          <div
-            className="character-dossier"
-            style={{ '--class-color': hero.color } as CSSProperties}
-          >
-            <div className="dossier-top">
-              <span className="eyebrow">已穿戴</span>
-              <span>Lv. {save.level}</span>
+    <>
+      <PendingLoot />
+      <div className="equipment-workspace" data-inspecting={!!item}>
+        <div className="system-columns equipment-browser">
+          <section>
+            <div className="mobile-character-summary">
+              <CharacterPreview classId={save.classId} equipment={save.equipment} />
+              <div>
+                <strong>
+                  {hero.name} · Lv. {save.level}
+                </strong>
+                <span>
+                  {hero.mainStat} · {hero.title}
+                </span>
+                <small>
+                  攻击 {formatBigNumber(stats.attack)} · 护甲 {formatBigNumber(stats.armor)} · 生命{' '}
+                  {formatBigNumber(stats.hp)}
+                </small>
+              </div>
             </div>
-            <div className="paperdoll-slots">
-              {SLOTS.map((slot) => (
-                <button
-                  key={slot}
-                  className={`paperdoll-slot ${save.equipment[slot] ? 'occupied' : ''}`}
-                  style={{
-                    color: save.equipment[slot]
-                      ? RARITY_COLORS[save.equipment[slot]!.rarity]
-                      : undefined,
-                  }}
-                  onClick={() => selectItem(save.equipment[slot]?.id ?? '')}
-                  title={SLOT_NAMES[slot]}
-                >
-                  {save.equipment[slot] ? (
-                    <ItemIcon item={save.equipment[slot]!} size={34} />
-                  ) : (
-                    <EquipmentIcon slot={slot} />
-                  )}
-                  <small>{SLOT_NAMES[slot]}</small>
-                  {save.forge[slot] > 0 && <b>+{save.forge[slot]}</b>}
-                </button>
-              ))}
-            </div>
-            <div className="dossier-emblem">
-              <CharacterPreview classId={save.classId} />
-              <span className="sigil-ring" />
-            </div>
-            <h3>
-              {hero.name} <small>{hero.mainStat}</small>
-            </h3>
-            <p className="muted">{hero.title}</p>
-            <div className="dossier-numbers">
-              <span>
-                <Sword size={15} />
-                {formatBigNumber(stats.attack)}
-                <small>攻击</small>
-              </span>
-              <span>
-                <Shield size={15} />
-                {formatBigNumber(stats.armor)}
-                <small>护甲</small>
-              </span>
-              <span>
-                <CircleDot size={15} />
-                {formatBigNumber(stats.hp)}
-                <small>生命</small>
-              </span>
-            </div>
-          </div>
-          <button
-            className="ghost-button wide"
-            aria-expanded={showStats}
-            onClick={() => setShowStats(!showStats)}
-          >
-            {showStats ? '收起' : '查看'}完整属性面板 <ChevronRight size={14} />
-          </button>
-          {showStats && (
-            <div className="stats-grid">
-              {Object.entries(stats).map(([key, value]) => (
-                <div className="stat" key={key}>
-                  <span>{statNames[key as keyof Stats]}</span>
-                  <b>
-                    {Array.isArray(value)
-                      ? `×${value.reduce((n, v) => n * (1 + v), 1).toFixed(2)}`
-                      : percentStats.includes(key)
-                        ? `${(value * 100).toFixed(1)}%`
-                        : typeof value === 'number'
-                          ? value.toFixed(key === 'attackSpeed' ? 2 : 0)
-                          : value}
-                  </b>
+            <details className="mobile-character-dossier" open={dossierOpen}>
+              <summary
+                onClick={(event) => {
+                  event.preventDefault();
+                  setDossierOpen((value) => !value);
+                }}
+              >
+                {dossierOpen ? '收起已穿戴装备和属性' : '查看已穿戴装备和属性'}
+              </summary>
+              <div
+                className="character-dossier"
+                style={{ '--class-color': hero.color } as CSSProperties}
+              >
+                <div className="dossier-top">
+                  <span className="eyebrow">已穿戴</span>
+                  <span>Lv. {save.level}</span>
                 </div>
+                <div className="paperdoll-slots">
+                  {SLOTS.map((slot) => (
+                    <button
+                      key={slot}
+                      className={`paperdoll-slot ${save.equipment[slot] ? 'occupied' : ''}`}
+                      style={{
+                        color: save.equipment[slot]
+                          ? RARITY_COLORS[save.equipment[slot]!.rarity]
+                          : undefined,
+                      }}
+                      onClick={(event) =>
+                        selectItem(save.equipment[slot]?.id ?? '', event.currentTarget)
+                      }
+                      aria-pressed={!!selected && save.equipment[slot]?.id === selected}
+                      data-item-id={save.equipment[slot]?.id}
+                      title={SLOT_NAMES[slot]}
+                    >
+                      {save.equipment[slot] ? (
+                        <ItemIcon item={save.equipment[slot]!} size={34} />
+                      ) : (
+                        <EquipmentIcon slot={slot} />
+                      )}
+                      <small>{SLOT_NAMES[slot]}</small>
+                      {save.forge[slot] > 0 && <b>+{save.forge[slot]}</b>}
+                    </button>
+                  ))}
+                </div>
+                <div className="dossier-emblem">
+                  <CharacterPreview classId={save.classId} equipment={save.equipment} />
+                  <span className="sigil-ring" />
+                </div>
+                <h3>
+                  {hero.name} <small>{hero.mainStat}</small>
+                </h3>
+                <p className="muted">{hero.title}</p>
+                <div className="dossier-numbers">
+                  <span>
+                    <Sword size={15} />
+                    {formatBigNumber(stats.attack)}
+                    <small>攻击</small>
+                  </span>
+                  <span>
+                    <Shield size={15} />
+                    {formatBigNumber(stats.armor)}
+                    <small>护甲</small>
+                  </span>
+                  <span>
+                    <CircleDot size={15} />
+                    {formatBigNumber(stats.hp)}
+                    <small>生命</small>
+                  </span>
+                </div>
+              </div>
+              <button
+                className="ghost-button wide"
+                aria-expanded={showStats}
+                onClick={() => setShowStats(!showStats)}
+              >
+                {showStats ? '收起' : '查看'}完整属性面板 <ChevronRight size={14} />
+              </button>
+              {showStats && (
+                <div className="stats-grid">
+                  {Object.entries(stats).map(([key, value]) => (
+                    <div className="stat" key={key}>
+                      <span>{statNames[key as keyof Stats]}</span>
+                      <b>
+                        {Array.isArray(value)
+                          ? `×${value.reduce((n, v) => n * (1 + v), 1).toFixed(2)}`
+                          : percentStats.includes(key)
+                            ? `${(value * 100).toFixed(1)}%`
+                            : typeof value === 'number'
+                              ? value.toFixed(key === 'attackSpeed' ? 2 : 0)
+                              : value}
+                      </b>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </details>
+          </section>
+          <section>
+            <div className="section-heading">
+              <h3>行囊</h3>
+              <span>
+                {save.inventory.length} / {MAX_INVENTORY} · 空余{' '}
+                {MAX_INVENTORY - save.inventory.length}
+              </span>
+            </div>
+            {emptyPicks.length > 0 && (
+              <button
+                className="gold-button"
+                data-sound="equip"
+                title="同部位优先穿戴基础攻击与护甲之和最高的一件"
+                onClick={store.equipEmptySlots}
+              >
+                <Shirt size={16} /> 补齐 {emptyPicks.length} 个装备空位
+              </button>
+            )}
+            <div className="inventory-filters">
+              <input
+                aria-label="搜索背包装备"
+                placeholder="搜索装备名称"
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+              />
+              <select
+                aria-label="筛选装备部位"
+                className="system-select"
+                value={slotFilter}
+                onChange={(event) => setSlotFilter(event.target.value)}
+              >
+                <option value="all">全部部位</option>
+                {SLOTS.map((slot) => (
+                  <option key={slot} value={slot}>
+                    {SLOT_NAMES[slot]}
+                  </option>
+                ))}
+              </select>
+              <label>
+                <input
+                  type="checkbox"
+                  checked={usableOnly}
+                  onChange={(event) => setUsableOnly(event.target.checked)}
+                />
+                只看本职业可用
+              </label>
+            </div>
+            <div className="panel-tabs compact">
+              <button className={filter === 'all' ? 'active' : ''} onClick={() => setFilter('all')}>
+                全部
+              </button>
+              <button
+                className={filter === 'legendary' ? 'active' : ''}
+                onClick={() => setFilter('legendary')}
+              >
+                传奇
+              </button>
+              <button className={filter === 'set' ? 'active' : ''} onClick={() => setFilter('set')}>
+                套装
+              </button>
+              <button
+                className={filter === 'primal' ? 'active' : ''}
+                onClick={() => setFilter('primal')}
+              >
+                太古
+              </button>
+            </div>
+            <div className="item-grid">
+              {visibleItems.map((i) => (
+                <ItemTile
+                  key={i.id}
+                  item={i}
+                  selected={i.id === selected}
+                  onClick={(event) => selectItem(i.id, event.currentTarget)}
+                />
               ))}
             </div>
-          )}
-        </details>
-        {item && (
-          <div ref={detail} className="mobile-item-inspector" role="region" aria-label="装备详情">
-            <button
-              className="mobile-item-close ghost-button"
-              aria-label="关闭装备详情"
-              onClick={() => setSelected('')}
-            >
-              <X size={16} /> 关闭详情
-            </button>
-            <ItemDetails item={item} compare={equipped ? undefined : save.equipment[item.slot]}>
+            {save.inventory.length === 0 && <Empty>行囊空空。秘境深处，遗物正等待重见天日。</Empty>}
+            {save.inventory.length > 0 && !visibleItems.length && (
+              <Empty>没有符合条件的装备，试试切换品质或清空筛选。</Empty>
+            )}
+            {save.inventory.length >= MAX_INVENTORY - 10 && (
+              <p className="muted system-hint">
+                背包将满。远征溢出的传奇、套装和太古会送入共享仓库，仓库满后保留待领。其余溢出装备转为材料。
+              </p>
+            )}
+          </section>
+        </div>
+        <EquipmentInspector
+          item={item}
+          compare={item && !equipped ? save.equipment[item.slot] : undefined}
+          caption={equipped ? '当前穿戴' : usable ? '行囊装备' : '其他职业专属'}
+          onClose={closeItem}
+        >
+          {item && (
+            <>
               <div className="button-row">
                 <button
                   className="gold-button"
@@ -622,6 +795,7 @@ function CharacterPanel({ inspectItem }: { inspectItem?: string }) {
                   disabled={!usable || (equipped && save.inventory.length >= MAX_INVENTORY)}
                   onClick={() => (equipped ? store.unequip(item.slot) : store.equip(item.id))}
                 >
+                  {equipped ? <Check size={16} /> : <Sword size={16} />}
                   {!usable
                     ? '其他职业专属'
                     : equipped
@@ -632,9 +806,12 @@ function CharacterPanel({ inspectItem }: { inspectItem?: string }) {
                 </button>
                 {!equipped && (
                   <button
-                    className="ghost-button"
+                    className="outline-button"
                     disabled={!!store.labBackup || stash.length >= MAX_STASH}
-                    onClick={() => store.depositItem(item.id)}
+                    onClick={() => {
+                      store.depositItem(item.id);
+                      closeItem();
+                    }}
                   >
                     {store.labBackup
                       ? '演武期间不可存入'
@@ -644,108 +821,19 @@ function CharacterPanel({ inspectItem }: { inspectItem?: string }) {
                   </button>
                 )}
               </div>
-              {!equipped && <SalvageButton key={item.id} item={item} />}
-            </ItemDetails>
-          </div>
-        )}
-      </section>
-      <section>
-        <div className="section-heading">
-          <h3>行囊</h3>
-          <span>
-            {save.inventory.length} / {MAX_INVENTORY} · 空余 {MAX_INVENTORY - save.inventory.length}
-          </span>
-        </div>
-        {emptyPicks.length > 0 && (
-          <button
-            className="gold-button"
-            data-sound="equip"
-            title="同部位优先穿戴基础攻击与护甲之和最高的一件"
-            onClick={store.equipEmptySlots}
-          >
-            <Shirt size={16} /> 补齐 {emptyPicks.length} 个装备空位
-          </button>
-        )}
-        <div className="inventory-filters">
-          <input
-            aria-label="搜索背包装备"
-            placeholder="搜索装备名称"
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-          />
-          <select
-            aria-label="筛选装备部位"
-            className="system-select"
-            value={slotFilter}
-            onChange={(event) => setSlotFilter(event.target.value)}
-          >
-            <option value="all">全部部位</option>
-            {SLOTS.map((slot) => (
-              <option key={slot} value={slot}>
-                {SLOT_NAMES[slot]}
-              </option>
-            ))}
-          </select>
-          <label>
-            <input
-              type="checkbox"
-              checked={usableOnly}
-              onChange={(event) => setUsableOnly(event.target.checked)}
-            />
-            只看本职业可用
-          </label>
-        </div>
-        <div className="panel-tabs compact">
-          <button className={filter === 'all' ? 'active' : ''} onClick={() => setFilter('all')}>
-            全部
-          </button>
-          <button
-            className={filter === 'legendary' ? 'active' : ''}
-            onClick={() => setFilter('legendary')}
-          >
-            传奇
-          </button>
-          <button className={filter === 'set' ? 'active' : ''} onClick={() => setFilter('set')}>
-            套装
-          </button>
-          <button
-            className={filter === 'primal' ? 'active' : ''}
-            onClick={() => setFilter('primal')}
-          >
-            太古
-          </button>
-        </div>
-        <div className="item-grid">
-          {visibleItems.map((i) => (
-            <ItemTile
-              key={i.id}
-              item={i}
-              selected={i.id === selected}
-              onClick={() => selectItem(i.id)}
-            />
-          ))}
-        </div>
-        {save.inventory.length === 0 && <Empty>行囊空空。秘境深处，遗物正等待重见天日。</Empty>}
-        {save.inventory.length > 0 && !visibleItems.length && (
-          <Empty>没有符合条件的装备，试试切换品质或清空筛选。</Empty>
-        )}
-        <p className="muted system-hint">
-          选择装备查看数值与已穿戴装备的对比。背包上限 240，溢出掉落将转为锻造材料。
-        </p>
-      </section>
-    </div>
+              {!equipped && <SalvageButton key={item.id} item={item} onSalvaged={closeItem} />}
+            </>
+          )}
+        </EquipmentInspector>
+      </div>
+    </>
   );
 }
 
-function StashPanel() {
+function StashPanel({ selected, selectItem, closeItem }: EquipmentSelection) {
   const store = useGameStore();
   const account = store.accounts.find((entry) => entry.id === store.activeAccountId)!;
-  const [selected, setSelected] = useState('');
   const [filter, setFilter] = useState('all');
-  const detail = useRef<HTMLDivElement>(null);
-  const selectItem = (id: string) => {
-    setSelected(id);
-  };
   const locked = !!store.labBackup || store.inCombat || store.cloudTransition;
   const inStash = account.stash.some((item) => item.id === selected);
   const item = [...account.stash, ...store.save.inventory].find((entry) => entry.id === selected);
@@ -758,81 +846,85 @@ function StashPanel() {
           : itemClass(entry) === filter),
     );
   return (
-    <div>
-      <p className="muted">
-        {account.name}的共享仓库。存取保留装备、词条、宝石和洗练进度；角色背包不会随切换而共用。
-      </p>
-      {locked && <p className="positive">演武与远征期间不能存取仓库，请先返回开荒营地。</p>}
-      <label className="stash-filter">
-        装备职业
-        <select
-          className="system-select"
-          value={filter}
-          onChange={(event) => setFilter(event.target.value)}
+    <>
+      <PendingLoot />
+      <div className="equipment-workspace" data-inspecting={!!item}>
+        <div className="equipment-browser">
+          <p className="muted">
+            {account.name}的共享仓库。存取保留装备、词条、宝石和洗练进度；角色背包不会随切换而共用。
+          </p>
+          {locked && <p className="positive">演武与远征期间不能存取仓库，请先返回开荒营地。</p>}
+          <label className="stash-filter">
+            装备职业
+            <select
+              className="system-select"
+              value={filter}
+              onChange={(event) => setFilter(event.target.value)}
+            >
+              <option value="all">全部装备</option>
+              <option value="usable">当前角色可用</option>
+              {CLASSES.map((hero) => (
+                <option key={hero.id} value={hero.id}>
+                  {hero.name}专属
+                </option>
+              ))}
+            </select>
+          </label>
+          <div className="system-columns stash-columns">
+            <section>
+              <div className="section-heading">
+                <h3>角色背包</h3>
+                <span>
+                  {store.save.inventory.length} / {MAX_INVENTORY}
+                </span>
+              </div>
+              <div className="item-grid">
+                {filterItems(store.save.inventory).map((entry) => (
+                  <ItemTile
+                    key={entry.id}
+                    item={entry}
+                    selected={selected === entry.id}
+                    onClick={(event) => selectItem(entry.id, event.currentTarget)}
+                  />
+                ))}
+              </div>
+              {!filterItems(store.save.inventory).length && (
+                <Empty>暂无符合筛选条件的背包装备。</Empty>
+              )}
+            </section>
+            <section>
+              <div className="section-heading">
+                <h3>账号共享仓库</h3>
+                <span>
+                  {account.stash.length} / {MAX_STASH}
+                </span>
+              </div>
+              <div className="item-grid">
+                {filterItems(account.stash).map((entry) => (
+                  <ItemTile
+                    key={entry.id}
+                    item={entry}
+                    selected={selected === entry.id}
+                    onClick={(event) => selectItem(entry.id, event.currentTarget)}
+                  />
+                ))}
+              </div>
+              {!filterItems(account.stash).length && (
+                <Empty>把异职业装备或备用装备存入这里，供同账号角色领取。</Empty>
+              )}
+            </section>
+          </div>
+        </div>
+        <EquipmentInspector
+          item={item}
+          compare={item ? store.save.equipment[item.slot] : undefined}
+          caption={inStash ? '存于共享仓库' : '存于角色行囊'}
+          onClose={closeItem}
         >
-          <option value="all">全部装备</option>
-          <option value="usable">当前角色可用</option>
-          {CLASSES.map((hero) => (
-            <option key={hero.id} value={hero.id}>
-              {hero.name}专属
-            </option>
-          ))}
-        </select>
-      </label>
-      <div className="system-columns stash-columns">
-        <section>
-          <div className="section-heading">
-            <h3>角色背包</h3>
-            <span>
-              {store.save.inventory.length} / {MAX_INVENTORY}
-            </span>
-          </div>
-          <div className="item-grid">
-            {filterItems(store.save.inventory).map((entry) => (
-              <ItemTile
-                key={entry.id}
-                item={entry}
-                selected={selected === entry.id}
-                onClick={() => selectItem(entry.id)}
-              />
-            ))}
-          </div>
-          {!filterItems(store.save.inventory).length && <Empty>暂无符合筛选条件的背包装备。</Empty>}
-        </section>
-        <section>
-          <div className="section-heading">
-            <h3>账号共享仓库</h3>
-            <span>
-              {account.stash.length} / {MAX_STASH}
-            </span>
-          </div>
-          <div className="item-grid">
-            {filterItems(account.stash).map((entry) => (
-              <ItemTile
-                key={entry.id}
-                item={entry}
-                selected={selected === entry.id}
-                onClick={() => selectItem(entry.id)}
-              />
-            ))}
-          </div>
-          {!filterItems(account.stash).length && (
-            <Empty>把异职业装备或备用装备存入这里，供同账号角色领取。</Empty>
-          )}
-        </section>
-      </div>
-      {item && (
-        <div ref={detail} className="mobile-item-inspector" role="region" aria-label="仓库装备详情">
-          <button
-            className="mobile-item-close ghost-button"
-            aria-label="关闭装备详情"
-            onClick={() => setSelected('')}
-          >
-            <X size={16} /> 关闭详情
-          </button>
-          <ItemDetails item={item} compare={store.save.equipment[item.slot]}>
+          {item && (
             <button
               className="gold-button"
+              data-sound="equip"
               disabled={
                 locked ||
                 (inStash
@@ -842,7 +934,6 @@ function StashPanel() {
               onClick={() => {
                 if (inStash) store.withdrawItem(item.id);
                 else store.depositItem(item.id);
-                setSelected('');
               }}
             >
               {locked
@@ -855,38 +946,67 @@ function StashPanel() {
                     ? '共享仓库已满'
                     : '存入账号共享仓库'}
             </button>
-          </ItemDetails>
-        </div>
-      )}
-    </div>
+          )}
+        </EquipmentInspector>
+      </div>
+    </>
   );
 }
 
-function SkillsPanel() {
+function SkillsPanel({ selected: inspected, selectItem, closeItem }: EquipmentSelection) {
   const store = useGameStore();
   const { save } = store;
   const nodes = SKILLS.filter((n) => n.classId === save.classId);
-  const [selected, setSelected] = useState(
-    () => nodes.find((n) => skillLearningStatus(save, n).canLearn)?.id ?? nodes[0]?.id ?? '',
-  );
+  const points = skillPoints(save);
+  const learnable = nodes.filter((n) => skillLearningStatus(save, n).canLearn);
+  const next = learnable.find((n) => n.kind === 'movement' && !save.skills[n.id]) ?? learnable[0];
   const [recommended, setRecommended] = useState('');
-  const [mobileDetailOpen, setMobileDetailOpen] = useState(false);
-  const description = useRef<HTMLDivElement>(null);
+  const selected =
+    inspected ||
+    SETS.find((entry) => entry.id === recommended)?.skillId ||
+    next?.id ||
+    nodes[0]?.id;
+  const description = useRef<HTMLButtonElement>(null);
   const node = nodes.find((n) => n.id === selected);
+  const status = node ? skillLearningStatus(save, node) : undefined;
+  useEffect(() => {
+    if (inspected && window.matchMedia('(max-width: 960px)').matches) {
+      description.current?.focus({ preventScroll: true });
+      description.current?.closest('.modal-body')?.scrollTo({ top: 0 });
+    }
+  }, [inspected]);
   const recommend = (setId: string) => {
     const build = SETS.find((entry) => entry.id === setId && entry.classId === save.classId);
     if (!build) return;
     store.recommendSkills(build.id);
     setRecommended(build.id);
-    setSelected(build.skillId);
   };
   return (
     <>
       <div className="mobile-skill-toolbar">
+        <div className="skill-overview">
+          <div>
+            <h3>战斗技能</h3>
+            <p>
+              {nodes.filter((skill) => skill.kind !== 'passive' && !!save.skills[skill.id]).length}{' '}
+              项主动已掌握 · {points} 点可分配
+            </p>
+          </div>
+          {next && (
+            <button
+              className="outline-button"
+              onClick={(event) => selectItem(next.id, event.currentTarget)}
+            >
+              <SkillIcon skillId={next.id} size={24} />
+              {next.kind === 'movement' && !save.skills[next.id] ? '学习位移' : '可提升'} ·{' '}
+              {next.name}
+            </button>
+          )}
+        </div>
         <div className="system-toolbar">
           <span className="skill-points">
             <Sparkles size={17} />
-            可用技能点 <b>{skillPoints(save)}</b>
+            可用技能点 <b>{points}</b>
           </span>
           <button
             className="ghost-button"
@@ -925,25 +1045,26 @@ function SkillsPanel() {
           ))}
         </select>
         <p className="muted system-hint">
-          已分配 {skillPointBudget(save.level) - skillPoints(save)} / {skillPointBudget(save.level)}{' '}
-          点， 满级总预算 {skillPointBudget(100)} 点。
+          已分配 {skillPointBudget(save.level) - points} / {skillPointBudget(save.level)} 点，
+          满级总预算 {skillPointBudget(100)} 点。
           {nextSkillPointLevel(save.level)
             ? `下一点在 Lv.${nextSkillPointLevel(save.level)} 获得。`
             : '已获得全部技能点。'}
           核心强化、辅助分支与备用技能需要取舍；选择流派可推荐加点，仍可免费洗点调整。
         </p>
       </div>
-      {node && (
+      {node && status && (
         <div
-          ref={description}
-          className={`card skill-description mobile-skill-detail ${mobileDetailOpen ? 'mobile-open' : ''}`}
+          className={`card skill-description mobile-skill-detail ${inspected ? 'mobile-open' : ''}`}
+          aria-label="技能说明"
         >
           <button
+            ref={description}
             className="mobile-skill-close ghost-button"
-            onClick={() => setMobileDetailOpen(false)}
+            onClick={closeItem}
             aria-label="关闭技能说明"
           >
-            <X size={18} /> 关闭说明
+            <ArrowLeft size={18} /> 返回技能树
           </button>
           <div>
             <span className="eyebrow">
@@ -955,10 +1076,27 @@ function SkillsPanel() {
               <h3>{node.name}</h3>
             </div>
             <p>{node.description}</p>
-            <small className="muted">
-              伤害倍率 ×{node.multiplier} · 消耗 {node.cost} · 冷却 {node.cooldown}s
-              {node.parent ? ` · 前置：${SKILLS.find((n) => n.id === node.parent)?.name}` : ''}
-            </small>
+            {node.kind !== 'passive' && (
+              <dl className="skill-quick-stats">
+                <div>
+                  <dt>伤害倍率</dt>
+                  <dd>×{node.multiplier}</dd>
+                </div>
+                <div>
+                  <dt>资源消耗</dt>
+                  <dd>{node.cost}</dd>
+                </div>
+                <div>
+                  <dt>冷却</dt>
+                  <dd>{node.cooldown} 秒</dd>
+                </div>
+              </dl>
+            )}
+            {node.parent && (
+              <small className="muted">
+                前置 · {SKILLS.find((n) => n.id === node.parent)?.name}
+              </small>
+            )}
           </div>
           <div className="skill-actions">
             <button
@@ -968,11 +1106,11 @@ function SkillsPanel() {
                 store.allocateSkill(node.id);
                 setRecommended('');
               }}
-              disabled={!skillLearningStatus(save, node).canLearn}
+              disabled={!status.canLearn}
             >
-              {skillLearningStatus(save, node).canLearn
+              {status.canLearn
                 ? `${save.skills[node.id] ? '提升节点' : '学习技能'} · 1 点`
-                : skillLearningStatus(save, node).reason}
+                : status.reason}
               <ArrowUp size={15} />
             </button>
             {node.kind !== 'passive' && !!save.skills[node.id] && (
@@ -1017,10 +1155,8 @@ function SkillsPanel() {
                     key={n.id}
                     className={`skill-node ${save.skills[n.id] ? 'unlocked' : ''} ${save.level < skillUnlockLevel(n) ? 'locked' : ''} ${selected === n.id ? 'selected' : ''}`}
                     aria-pressed={selected === n.id}
-                    onClick={() => {
-                      setSelected(n.id);
-                      setMobileDetailOpen(true);
-                    }}
+                    onClick={(event) => selectItem(n.id, event.currentTarget)}
+                    data-item-id={n.id}
                   >
                     <span className="skill-symbol">
                       <SkillIcon skillId={n.id} size={36} />
@@ -1323,7 +1459,7 @@ function RareAffixFilter() {
           </option>
         ))}
       </select>
-      <small>自动分解和一键分解会保留带此词条的黄装。背包满时溢出掉落仍会转为材料。</small>
+      <small>自动分解和一键分解会保留带此词条的黄装。背包满时，溢出的黄装仍会转为材料。</small>
     </label>
   );
 }
@@ -1333,7 +1469,12 @@ function RareCraftPanel() {
   const [donorId, setDonor] = useState('');
   const [affixId, setAffix] = useState('');
   const bases = [...Object.values(save.equipment), ...save.inventory].filter(
-    (i): i is Item => !!i && i.rarity === 'rare' && i.affixes.length >= 2 && i.affixes.length < 4,
+    (i): i is Item =>
+      !!i &&
+      i.rarity === 'rare' &&
+      i.affixes.length >= 2 &&
+      i.affixes.length < 4 &&
+      (!itemClass(i) || itemClass(i) === save.classId),
   );
   const base = bases.find((i) => i.id === baseId);
   const donors = base
@@ -1352,7 +1493,8 @@ function RareCraftPanel() {
       <section>
         <h3>选择稀有底材</h3>
         <RareAffixFilter />
-        <p>保留已有词条，为黄装追加至四条。加工过的底材会在一键分解时保留。</p>
+        <p>保留已有词条，为稀有装备追加至四条。加工过的底材会在一键分解时保留。</p>
+        <p className="muted">主副手按职业打造，通用护甲与首饰可跨职业使用。</p>
         <select
           className="system-select"
           aria-label="稀有底材"
@@ -1756,6 +1898,7 @@ function LeaderboardPanel({
   const store = useGameStore();
   const account = store.accounts.find((entry) => entry.id === store.activeAccountId)!;
   const [source, setSource] = useState<'local' | 'cloud' | 'verified'>('local');
+  const [ruleset, setRuleset] = useState(CURRENT_TRIAL_RULESET);
   const [classId, setClassId] = useState<ClassId>((store.labBackup ?? store.save).classId);
   const [buildId, setBuildId] = useState('all');
   const [reload, setReload] = useState(0);
@@ -1770,7 +1913,7 @@ function LeaderboardPanel({
     let active = true;
     setOnline({ data: null, loading: true, error: '' });
     void apiRequest<LeaderboardResponse>(
-      `/leaderboard${source === 'verified' ? '/verified' : ''}?classId=${classId}`,
+      `/leaderboard${source === 'verified' ? '/verified' : ''}?classId=${classId}${source === 'verified' ? `&ruleset=${ruleset}` : ''}`,
     )
       .then((data) => {
         if (data.classId !== classId || data.source !== source || !Array.isArray(data.entries))
@@ -1788,7 +1931,7 @@ function LeaderboardPanel({
     return () => {
       active = false;
     };
-  }, [source, classId, reload]);
+  }, [source, classId, ruleset, reload]);
   const localRecords = account.characters
     .flatMap((character) => {
       const save =
@@ -1810,7 +1953,11 @@ function LeaderboardPanel({
     buildId === 'all' || (buildId === 'custom' ? !setId : buildId === setId);
   const visibleLocal = localRecords.filter(({ record }) => matchesBuild(recordSet(record)?.id));
   const cloudData =
-    online.data?.classId === classId && online.data.source === source ? online.data : null;
+    online.data?.classId === classId &&
+    online.data.source === source &&
+    (source !== 'verified' || online.data.ruleset === ruleset)
+      ? online.data
+      : null;
   const visibleOnline = (cloudData?.entries ?? []).filter((entry) =>
     matchesBuild(SETS.find((set) => set.name === entry.setName)?.id),
   );
@@ -1863,7 +2010,24 @@ function LeaderboardPanel({
       </div>
       {source === 'verified' && (
         <div className="operation-review">
-          <p>使用统一配装挑战第 150 层，由服务器推演与记录；成长装备不会影响验证成绩。</p>
+          <label>
+            试炼规则{' '}
+            <select
+              value={ruleset}
+              onChange={(event) => {
+                setRuleset(Number(event.target.value));
+                setBuildId('all');
+              }}
+            >
+              <option value={CURRENT_TRIAL_RULESET}>当前 · 第 {CURRENT_TRIAL_RULESET} 版</option>
+              <option value={1}>历史 · 初版</option>
+            </select>
+          </label>
+          <p>
+            {ruleset === CURRENT_TRIAL_RULESET
+              ? '使用统一配装挑战第 150 层，服务器按本版规则记录成绩。'
+              : '初版试炼已结束。这里保留当时的成绩与配装名称。'}
+          </p>
           <button
             className="gold-button"
             disabled={!onNavigate || !!store.labBackup}
@@ -1888,22 +2052,24 @@ function LeaderboardPanel({
           </button>
         ))}
       </div>
-      <label className="stash-filter">
-        流派筛选
-        <select
-          className="system-select"
-          value={buildId}
-          onChange={(event) => setBuildId(event.target.value)}
-        >
-          <option value="all">全部流派</option>
-          {SETS.filter((set) => set.classId === classId).map((set) => (
-            <option key={set.id} value={set.id}>
-              {set.name} · {BUILD_GUIDES[set.id]?.style}
-            </option>
-          ))}
-          <option value="custom">自定义配装</option>
-        </select>
-      </label>
+      {(source !== 'verified' || ruleset === CURRENT_TRIAL_RULESET) && (
+        <label className="stash-filter">
+          流派筛选
+          <select
+            className="system-select"
+            value={buildId}
+            onChange={(event) => setBuildId(event.target.value)}
+          >
+            <option value="all">全部流派</option>
+            {SETS.filter((set) => set.classId === classId).map((set) => (
+              <option key={set.id} value={set.id}>
+                {set.name} · {BUILD_GUIDES[set.id]?.style}
+              </option>
+            ))}
+            <option value="custom">自定义配装</option>
+          </select>
+        </label>
+      )}
       <div className="leaderboard-meta">
         <span>
           {source !== 'local' && cloudData
@@ -1942,7 +2108,9 @@ function LeaderboardPanel({
             <Empty>
               {buildId === 'all'
                 ? source === 'verified'
-                  ? `尚无${hero.name}验证战绩，参加服务器验证挑战后即可参与。`
+                  ? ruleset === CURRENT_TRIAL_RULESET
+                    ? `尚无${hero.name}验证战绩，参加服务器验证挑战后即可参与。`
+                    : `初版未收录${hero.name}的成绩。`
                   : `尚无${hero.name}社区战绩，完成正式远征并同步云档后即可参与。`
                 : '当前职业前 20 名中暂无此流派战绩。'}
             </Empty>
@@ -1962,8 +2130,9 @@ function LeaderboardPanel({
                     第 {entry.stage} 层 · {entry.seconds.toFixed(1)} 秒 · 击败 {entry.kills} 个敌人
                   </p>
                   <p className="muted">
-                    {entry.setName ?? '自定义配装'} ·{' '}
-                    {buildLabel(SETS.find((set) => set.name === entry.setName)?.id)}
+                    {entry.setName ?? '自定义配装'}
+                    {(source !== 'verified' || ruleset === CURRENT_TRIAL_RULESET) &&
+                      ` · ${buildLabel(SETS.find((set) => set.name === entry.setName)?.id)}`}
                   </p>
                 </div>
               </div>
@@ -2077,7 +2246,7 @@ function ServicesPanel({ onNavigate }: { onNavigate?: (panel: string) => void })
     cube: '萃取传奇、装配三槽满值共鸣',
     gamble: '指定装备部位，使用碎片寻宝',
     forge: '槽位强化、词条洗练、分解与宝石',
-    pets: '契约伙伴、切换出战、查看赛季进度',
+    pets: '契约伙伴、切换出战、领取守望功绩',
     leaderboard: '查看五职业独立的在线与本机战绩',
     settings: '调整音量、画面方向与存档备份',
     lab: '免费体验十五套成型流派与操作循环',
@@ -2085,38 +2254,51 @@ function ServicesPanel({ onNavigate }: { onNavigate?: (panel: string) => void })
   return (
     <div className="services-overview">
       <CampWallet />
-      <div className="services-grid">
-        {Object.entries(TITLES)
-          .filter(([id]) => id !== 'services')
-          .map(([id, [label, Icon]]) => (
-            <button
-              className="service-card"
-              key={id}
-              onClick={() => onNavigate?.(id)}
-              disabled={!onNavigate}
-            >
-              <Icon size={27} />
-              <strong>{SYSTEM_LINKS[id] ?? label}</strong>
-              <span>{descriptions[id]}</span>
-              <ChevronRight size={16} />
-            </button>
-          ))}
-        <button className="service-card" onClick={() => onNavigate?.('guide')}>
-          <BookOpen size={27} />
-          <strong>冒险指南</strong>
-          <ChevronRight size={16} />
-        </button>
-        <button className="service-card" onClick={() => onNavigate?.('training')}>
-          <Sword size={27} />
-          <strong>训练场</strong>
-          <ChevronRight size={16} />
-        </button>
-        <button className="service-card" onClick={() => onNavigate?.('coop')}>
-          <Compass size={27} />
-          <strong>好友组队</strong>
-          <ChevronRight size={16} />
-        </button>
-      </div>
+      {SYSTEM_GROUPS.map((group) => (
+        <section className="service-district" key={group.label}>
+          <h3>{group.label}</h3>
+          <div className="services-grid">
+            {group.panels
+              .filter((id) => id !== 'services')
+              .map((id) => {
+                const [title, Icon] = TITLES[id];
+                return (
+                  <button
+                    className="service-card"
+                    key={id}
+                    onClick={() => onNavigate?.(id)}
+                    disabled={!onNavigate}
+                  >
+                    <Icon size={27} />
+                    <strong>{SYSTEM_LINKS[id] ?? title}</strong>
+                    <span>{descriptions[id]}</span>
+                    <ChevronRight size={16} />
+                  </button>
+                );
+              })}
+          </div>
+        </section>
+      ))}
+      <section className="service-district">
+        <h3>训练与组队</h3>
+        <div className="services-grid">
+          <button className="service-card" onClick={() => onNavigate?.('guide')}>
+            <BookOpen size={27} />
+            <strong>冒险指南</strong>
+            <ChevronRight size={16} />
+          </button>
+          <button className="service-card" onClick={() => onNavigate?.('training')}>
+            <Sword size={27} />
+            <strong>训练场</strong>
+            <ChevronRight size={16} />
+          </button>
+          <button className="service-card" onClick={() => onNavigate?.('coop')}>
+            <Compass size={27} />
+            <strong>好友组队</strong>
+            <ChevronRight size={16} />
+          </button>
+        </div>
+      </section>
     </div>
   );
 }
@@ -2216,7 +2398,7 @@ function PetsPanel({
         })}
       </div>
       <div className="section-heading">
-        <h3>第一赛季 · 守夜者誓约</h3>
+        <h3>守望功绩</h3>
         <span>本地旅程</span>
       </div>
       <div className="season-goals">
@@ -2538,7 +2720,51 @@ export function SystemsModal({
   inspectItem?: string;
 }) {
   const title = panel ? TITLES[panel] : undefined;
-  const ref = useDialog(!!panel && !!title, onClose);
+  const trigger = useRef<HTMLButtonElement>(null);
+  const [selection, setSelection] = useState({ panel, inspectItem, id: inspectItem ?? '' });
+  const selected =
+    selection.panel === panel && selection.inspectItem === inspectItem
+      ? selection.id
+      : (inspectItem ?? '');
+  useEffect(() => {
+    setSelection({ panel, inspectItem, id: inspectItem ?? '' });
+    trigger.current = null;
+  }, [panel, inspectItem]);
+  const selectItem = (id: string, button?: HTMLButtonElement) => {
+    trigger.current = button ?? null;
+    setSelection({ panel, inspectItem, id });
+  };
+  const closeItem = () => {
+    const opener = trigger.current;
+    selectItem('');
+    requestAnimationFrame(() => {
+      const replacement = ref.current?.querySelector<HTMLElement>(
+        `[data-item-id="${CSS.escape(selected)}"]`,
+      );
+      if (opener?.isConnected && opener.offsetParent) opener.focus();
+      else if (replacement?.offsetParent) replacement.focus();
+      else ref.current?.focus({ preventScroll: true });
+    });
+  };
+  const canCloseItem = useGameStore((state) => {
+    if (!selected) return false;
+    if (panel === 'skills')
+      return SKILLS.some((skill) => skill.id === selected && skill.classId === state.save.classId);
+    if (panel === 'character')
+      return (
+        state.save.inventory.some((item) => item.id === selected) ||
+        Object.values(state.save.equipment).some((item) => item?.id === selected)
+      );
+    if (panel === 'stash')
+      return (
+        state.save.inventory.some((item) => item.id === selected) ||
+        !!state.accounts
+          .find((entry) => entry.id === state.activeAccountId)
+          ?.stash.some((item) => item.id === selected)
+      );
+    return false;
+  });
+  const ref = useDialog(!!panel && !!title, () => (canCloseItem ? closeItem() : onClose()));
   const notice = useGameStore((state) => state.notice);
   if (!panel || !title) return null;
   const [heading, Icon] = title;
@@ -2562,8 +2788,8 @@ export function SystemsModal({
           {onNavigate && (
             <button
               className="camp-back"
-              onClick={() => (panel === 'services' ? onClose() : onNavigate('services'))}
-              aria-label={panel === 'services' ? '返回营地' : '返回营地服务'}
+              onClick={canCloseItem ? closeItem : onClose}
+              aria-label={canCloseItem ? '返回列表' : '返回营地'}
             >
               <ArrowLeft size={20} />
             </button>
@@ -2645,13 +2871,13 @@ export function SystemsModal({
             ) : panel === 'accounts' ? (
               <AccountPanel onEnterHall={onEnterHall} />
             ) : panel === 'stash' ? (
-              <StashPanel />
+              <StashPanel selected={selected} selectItem={selectItem} closeItem={closeItem} />
             ) : panel === 'character' ? (
-              <CharacterPanel inspectItem={inspectItem} />
+              <CharacterPanel selected={selected} selectItem={selectItem} closeItem={closeItem} />
             ) : panel === 'journey' ? (
               <JourneyPanel onNavigate={onNavigate} onReadChapter={onReadChapter} />
             ) : panel === 'skills' ? (
-              <SkillsPanel />
+              <SkillsPanel selected={selected} selectItem={selectItem} closeItem={closeItem} />
             ) : panel === 'cube' ? (
               <CubePanel />
             ) : panel === 'gamble' ? (
@@ -2671,7 +2897,9 @@ export function SystemsModal({
         </div>
         <footer className="modal-footer">
           <span>
-            守望者营地 <i aria-hidden="true">◆</i> Esc 返回大厅
+            {canCloseItem
+              ? `Esc 关闭${panel === 'skills' ? '技能说明' : '装备详情'}`
+              : 'Esc 返回营地'}
           </span>
           <button className="ghost-button" onClick={onClose}>
             返回大厅 <ChevronRight size={14} />

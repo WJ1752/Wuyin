@@ -59,6 +59,64 @@ export const CAMPAIGN_CHAPTERS = [
 export const CAMPAIGN_FINALE = CAMPAIGN_CHAPTERS[CAMPAIGN_CHAPTERS.length - 1];
 export type CampaignChapter = (typeof CAMPAIGN_CHAPTERS)[number];
 
+const opportunities = {
+  crystal: {
+    kind: 'crystal',
+    name: '拾取首枚紫晶',
+    hint: '击败领队后靠近紫晶，借晶光引出守关者。',
+    target: 1,
+    bonus: 15,
+  },
+  ward: {
+    kind: 'ward',
+    name: '守护中央灯座',
+    hint: '在中央灯阵内累计守护 5 秒。可以离开躲避攻击，再回来续火。',
+    target: 5,
+    bonus: 30,
+  },
+  evade: {
+    kind: 'evade',
+    name: '避开炉火喷涌',
+    hint: '让脚下的两次火印落空，借喷涌的余烬点灯。',
+    target: 2,
+    bonus: 30,
+  },
+  hunt: {
+    kind: 'hunt',
+    name: '击破两名精英领队',
+    hint: '优先追击带光环的精英领队，削弱钟声的守卫。',
+    target: 2,
+    bonus: 30,
+  },
+  shrine: {
+    kind: 'shrine',
+    name: '唤醒一座圣坛',
+    hint: '移动到任一圣坛旁并激活，借圣坛之光照出雾路。',
+    target: 1,
+    bonus: 35,
+  },
+} as const;
+export type RiftOpportunity = (typeof opportunities)[keyof typeof opportunities];
+
+export function getRiftOpportunity(stage: number): RiftOpportunity | undefined {
+  switch (stage) {
+    case 1:
+      return opportunities.crystal;
+    case 8:
+      return opportunities.ward;
+    case 16:
+      return opportunities.evade;
+    case 31:
+      return opportunities.hunt;
+    case 50:
+      return opportunities.shrine;
+  }
+  if (stage > 50 && stage < 150)
+    return [opportunities.hunt, opportunities.shrine, opportunities.ward, opportunities.evade][
+      (stage - 51) % 4
+    ];
+}
+
 export function getCampaignChapter(stage: number) {
   return CAMPAIGN_CHAPTERS.find((chapter) => chapter.stage === stage);
 }

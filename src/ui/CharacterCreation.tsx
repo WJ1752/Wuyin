@@ -15,6 +15,14 @@ const classIcons: Record<ClassId, typeof Swords> = {
   druid: PawPrint,
 };
 
+const classPlaystyles: Record<ClassId, string> = {
+  ranger: '远程射击 · 走位拉开距离',
+  barbarian: '近身重击 · 交战积攒怒气',
+  sorcerer: '远程法术 · 用元素控制战场',
+  necromancer: '亡魂法术 · 召唤伙伴作战',
+  druid: '混合打法 · 利用风暴与毒藤',
+};
+
 export function CharacterCreation({
   onAccount,
   onCreated,
@@ -32,7 +40,7 @@ export function CharacterCreation({
       <div className="creation-select">
         <header className="creation-heading">
           <h1>雾隐</h1>
-          <p>选择职业并留下名字。守望者营地在雾墙之后等你。</p>
+          <p>选择你的行者。营地是首场远征的起点。</p>
         </header>
         <div className="creation-classes" role="group" aria-label="选择职业">
           {CLASSES.map((entry) => {
@@ -56,8 +64,9 @@ export function CharacterCreation({
         <div className="creation-portrait" aria-hidden="true">
           <HeroArt classId={hero.id} key={hero.id} />
         </div>
-        <div className="creation-intro">
+        <div className="creation-intro" aria-live="polite">
           <h2>{hero.title}</h2>
+          <b className="creation-role">{classPlaystyles[classId]}</b>
           <p>{hero.lore}</p>
           <dl className="creation-facts">
             <div>

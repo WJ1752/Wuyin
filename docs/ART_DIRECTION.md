@@ -9,7 +9,7 @@
 | 营地与归路 | 内置 ImageGen 独立出图并转码。传送门、七处服务点和角色脚点按新地图定位。雾流、灯光、传送门气流和炉火余烬沿各自时序运动。结局灯火会随背景渐入 |
 | 人物、居民与伙伴 | 五职业有独立待机、实跑和施法姿势，七名居民有待机和交互反馈，六类伙伴按位移和技能活动切换姿势。受击、倒地按战斗状态驱动。详见 [人物与伙伴](PAINTED_ACTORS.md) |
 | 战场 | 四种地貌及地标、24 种小怪、8 位首领、盗宝者、训练靶、四座圣坛、四种拾取物换用手绘资源。怪物有落脚、蓄势、攻击、受击和退场动作。详见 [战斗美术](PAINTED_BATTLE_ART.md) |
-| 技能与装备 | 75 个技能法印、40 张主动施法图与 20 张通用弹道、地面和命中图。221 个装备身份位置使用手绘物件和刻印，背包与掉落共用。装备品质有掉落提示，穿戴、学习、领取与锻造使用各自的界面反馈。详见 [界面美术](UI_ART.md) |
+| 技能与装备 | 75 个技能法印、40 张主动施法图与 20 张通用弹道、地面和命中图。231 个装备身份位置使用手绘物件和刻印，背包与掉落共用。装备品质有掉落提示，穿戴、学习、领取与锻造使用各自的界面反馈。详见 [界面美术](UI_ART.md) |
 | 危险、音效与音乐 | 敌方预警轮廓在普通特效之上，色弱辅助改变预警描边，治疗瓶与进度晶石的形状不同。营地、远征、首领和结局各有配乐，交互、打击、拾取和圣坛各有声响；托管远征和验证试炼根据新到战斗状态播放反馈 |
 | 减少动态 | 跟随系统偏好停用环境和界面的循环装饰，并保留移动、施法状态与危险边界的信息 |
 
@@ -95,7 +95,31 @@ Avoid: realism, smooth painted highlights, synthetic filters on an illustration,
 
 角色、伙伴、营地、秘境和战斗图集通过现有载入接口进入游戏。地图按楼层生成布局；十二种材质使用连续边缘的镜像平铺。技能图标按原技能构图逐格限色，施法与地面效果独立保留透明区域。UI 的多尺寸框线使用九宫格角件，文字保持原生渲染。
 
-装备的目录、八个部位、可掉落与预留组合见[装备外观审计](EQUIPMENT_ART.md)。背包、装备槽和地面掉落使用相同外观键，联机接收端也据此选图。五职业在营地、装备页和战斗中均使用完整职业原画，换装不改变人物轮廓。设计板内的英文排版和示意数值仅用于展示方案。
+装备的目录、八个部位、可掉落与预留组合见[装备外观审计](EQUIPMENT_ART.md)。背包、装备槽和地面掉落使用相同外观键，联机接收端也据此选图。
+
+### 四地貌战场
+
+本轮四张战场底图分别为[密林](../public/assets/maps/painted/forest-arena.webp)、[墓园](../public/assets/maps/painted/crypt-arena.webp)、[熔炉](../public/assets/maps/painted/ember-arena.webp)和[圣殿](../public/assets/maps/painted/void-arena.webp)。内置 imagegen 生成 2 × 2 完整场景后逐象限切为 627 × 627 WebP。运行时只加载本层的一张，按近邻像素采样覆盖战场，叠加场景交互物、敌人和预警。
+
+<details>
+<summary>四地貌战场图集的生成提示词</summary>
+
+Single production environment atlas for an original premium 2D pixel-art dark fantasy ARPG. Square, exactly 2 columns by 2 rows of full square outdoor arenas touching edge to edge without margins or lines. Each cell is ONE continuous environment, carefully composed as a whole rather than a repeating tile. Top left: an overgrown old royal forest path, tufts of muted sage and ferns, leaf litter, long shale stepping stones, roots and tree silhouettes at outer edges. Top right: ruined cloister cemetery, offset irregular old blue-gray flagstones, moss and fallen petals, outer edges hint at broken sepulchral colonnades. Bottom left: ochre-black abandoned volcanic foundry basin, jagged cooled basalt plate veins, small ember-red fissures thinly crossing the floor, clinker gravel, scattered charcoal, battered grated channels along edges. Bottom right: a violet-gray ancient astral sanctuary, hand-chiseled stone paving interrupted by soil, fragments of a worn incomplete celestial inlay and broken plinths along the edges. Every environment has a broad open traversable center, with asymmetrically meandering paths, low contrast terrain especially in the center, a few islands of fine detail, shallow grounding shadows, strongest environment detail at the outer fifth. Top-down three-quarter overhead looking down almost vertically with consistent light from upper left. Use pixel clusters with stair-stepped edges and restrained 24-color ramps, distinctly hand-pixeled 1990s 16-bit fantasy RPG environment art, dark mineral shadows and old copper highlights, precise graphic shapes readable in the game. Wide-scale overhead view covers a whole arena roughly 20 screens of character widths, small gravel and flagstones rather than boulders the size of a character. Each quadrant has all four edges, no horizon, no drop shadows between cells, no unpainted space, no labels, no text, no borders, no sprites, no humanoids, no enemies, no treasures, no elevated buildings, no central icon, no burning furnace model, no central logo or spotlight. No perfect mirrored textures, no repeated tiles. Full bleed square atlas.
+
+</details>
+
+### 五职业持械外观
+
+游侠持晨哨手弩、野蛮人持方锤、法师持暮星秤杖、魂灵师提逆潮灯、德鲁伊持绿炉裂影匕时，营地、装备预览、战斗和队友所见的角色会换为对应的持械画。普通职业战锤与冥灯也复用匹配的持械形状。其他携行装备仍沿用职业形象。把装备放在背包或仅在魔盒启用其力量，均不会切换人物图。
+
+内置 imagegen 根据五职业的 5 × 3 姿势参考生成[持械像素原画](art/painted-actors/equipped-atlas.webp)。用 `pnpm exec tsx scripts/prepare-painted-actors.ts --equipped` 处理为 15 个 128 × 128 的透明 WebP，脚底位于第 124 行。营地使用站立与跑步两种构图，战斗通过骨骼网格驱动，减少动态时使用静态出手图。
+
+<details>
+<summary>持械图集的生成提示词</summary>
+
+Use case: precise-object-edit. One production pixel-art character animation atlas for a dark fantasy Chinese ARPG. Reference/edit target is the supplied 5-column by 3-row sprite contact sheet. Keep the exact same five people, clothing, hairstyles, class colors, poses, pixel clusters, face direction, height and foot anchors, but replace their held equipment clearly in ALL three rows. Column 1 teal ranger uses a substantial etched bronze horizontal crossbow with visible stock, limbs and bolt held across the body or aiming right, no vertical longbow. Column 2 fur-cloaked heavy warrior holds a heavy square iron-headed two-handed warhammer with bronze bands, no axe. Column 3 purple arcanist holds a pale brass long wizard staff capped with a bright orange-red sun in an open bronze cage, no purple diamond. Column 4 dark necromancer keeps bone scythe in leading hand and prominently carries a blue-green glowing iron hanging lantern in the other hand, separately readable next to waist. Column 5 druid keeps the wolf pelt and carries two conspicuous long pale jade hooked daggers. Each held weapon present in all three frames of its own column. Exactly fifteen detached full body sprites centered in fifteen equal cells. Top row feet planted in 3/4 standing pose, middle row running right, bottom row distinct attacking right. Empty safe gutters around every figure, all hands feet weapons visible, no overlaps between cells, no text, no grid, no solid panel, no ground shadows. Pixel-perfect 16-bit hand-pixeled clusters, tiny directional highlights, limited muted palette, genuine transparent alpha outside each silhouette. Landscape 5:3 atlas. Match the source art at in-game 128px.
+
+</details>
 
 ### 历史版主线视觉修订
 

@@ -106,6 +106,8 @@ export interface Item {
   id: string;
   name: string;
   slot: Slot;
+  /** Rolled on ordinary main-hand and off-hand equipment. Named items use their template. */
+  classId?: ClassId;
   rarity: Rarity;
   level: number;
   attack: number;
@@ -198,6 +200,7 @@ export interface SaveData {
   highestStage: number;
   selectedStage: number;
   inventory: Item[];
+  pendingLoot?: Item[];
   equipment: Partial<Record<Slot, Item>>;
   extracted: string[];
   cube: { weapon?: string; armor?: string; jewelry?: string };
@@ -308,7 +311,7 @@ export interface CombatConfig {
 }
 export interface CombatSnapshot {
   stats?: CombatStats;
-  objective?: { name: string; progress: number; target: number };
+  objective?: { name: string; progress: number; target: number; bonus?: number };
   hp: number;
   maxHp: number;
   resource: number;
@@ -354,6 +357,7 @@ export interface LeaderboardResponse {
   entries: LeaderboardEntry[];
   total: number;
   source: 'cloud' | 'verified';
+  ruleset?: number;
   updatedAt: number;
 }
 export type LobbyActivity =
@@ -368,7 +372,10 @@ export interface LobbyPlayer {
   activity: LobbyActivity;
   updatedAt: number;
   isSelf: boolean;
-  equipment: Pick<Item, 'slot' | 'name' | 'rarity' | 'level' | 'setId' | 'legendaryId'>[];
+  equipment: Pick<
+    Item,
+    'slot' | 'name' | 'rarity' | 'level' | 'classId' | 'setId' | 'legendaryId'
+  >[];
   achievements: { clears: number; clearedStage: number; kills: number };
 }
 export interface LobbyResponse {

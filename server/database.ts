@@ -7,13 +7,13 @@ export function openDatabase(path: string) {
   if (path !== ':memory:') mkdirSync(dirname(resolve(path)), { recursive: true, mode: 0o700 });
   const db = new DatabaseSync(path);
   db.exec('PRAGMA foreign_keys = ON; PRAGMA journal_mode = WAL; PRAGMA busy_timeout = 5000;');
-  const version = db.prepare('PRAGMA user_version').get()?.user_version;
-  if (![0, 1, 2, 3].includes(Number(version))) {
+  db.exec('BEGIN IMMEDIATE;');
+  const version = Number(db.prepare('PRAGMA user_version').get()?.user_version);
+  if (![0, 1, 2, 3, 4].includes(version)) {
     db.close();
     throw new Error('数据库版本不受支持，请使用匹配的服务器版本。');
   }
   db.exec(`
-    BEGIN IMMEDIATE;
     CREATE TABLE IF NOT EXISTS users (
       id TEXT PRIMARY KEY,
       username TEXT NOT NULL UNIQUE COLLATE NOCASE,
@@ -73,7 +73,8 @@ export function openDatabase(path: string) {
       set_name TEXT,
       created_at INTEGER NOT NULL
     ) STRICT;
-    CREATE INDEX IF NOT EXISTS verified_runs_ranking ON verified_runs(class_id, stage DESC, seconds);
+    ${version < 4 ? 'ALTER TABLE verified_runs ADD COLUMN ruleset INTEGER NOT NULL DEFAULT 1;' : ''}
+    CREATE INDEX IF NOT EXISTS verified_runs_by_ruleset ON verified_runs(ruleset, class_id, stage DESC, seconds);
     CREATE TABLE IF NOT EXISTS player_feedback (
       id TEXT PRIMARY KEY,
       user_id TEXT REFERENCES users(id) ON DELETE SET NULL,
@@ -81,7 +82,7 @@ export function openDatabase(path: string) {
       message TEXT NOT NULL,
       created_at INTEGER NOT NULL
     ) STRICT;
-    PRAGMA user_version = 3;
+    PRAGMA user_version = 4;
     COMMIT;
   `);
   db.prepare('INSERT OR IGNORE INTO metadata(key, value) VALUES (?, ?)').run(

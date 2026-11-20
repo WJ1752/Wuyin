@@ -11,7 +11,7 @@
 | 框角、主次按钮、嵌槽与石纹 | [像素界面四联图](art/ui-pixel-release/interface-source.webp)。内置 ImageGen 新绘无字透明图，按象限裁切并以最近邻缩放 | `public/assets/ui/pixel-{panel,primary,secondary,slot,slate}.webp` |
 | 导航图标 | [16 枚像素图标原图](art/ui-pixel-release/navigation-source.webp)。内置 ImageGen 新绘，4 × 4 保持原坐标。紧凑控件如返回箭头及音量沿用 Lucide | `public/assets/ui/pixel-nav.webp` |
 | 75 种技能法印 | [法印线稿](../scripts/icon-engravings.ts)。从 34 种基本图案组合 11 种构图，按现有技能语义绘制明暗分层 | `public/assets/ui/skills-*.webp` |
-| 221 个装备外观 | [25 类像素装备原图](art/ui-pixel-release/equipment-shapes-source.webp)。内置 ImageGen 新绘，修整透明底后逐格裁切，再叠加目录身份法印 | `public/assets/maps/equipment-drops.webp` |
+| 231 个装备外观 | [25 类像素装备原图](art/ui-pixel-release/equipment-shapes-source.webp)。内置 ImageGen 新绘，修整透明底后逐格裁切，再叠加目录身份法印 | `public/assets/maps/equipment-drops.webp` |
 
 各职业技能图集为 4 × 4，每格 48 px，每职业使用 15 格。装备图集采用 16 列、48 px 格，背包、穿戴槽和地面掉落复用装备外观键。前版概念原图归档于 `docs/art/ui-v3` 和 `docs/art/ui-engraved`。游戏构建引用 `public/assets` 下的压缩图集。
 

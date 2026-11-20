@@ -6,7 +6,7 @@ import { CLASSES } from '../data/classes';
 import { clampHallPosition, HALL_LAYOUT, HALL_NPCS } from '../data/npcHall';
 import type { HallNpc } from '../data/npcHall';
 import { NPC_ART, NPC_ATLAS } from '../data/npcVisuals';
-import { CHARACTER_ART } from '../render/CharacterTextures';
+import { CHARACTER_ART, getCharacterArt } from '../data/characterArt';
 import { apiRequest, useCloudStore } from '../state/cloudStore';
 import { useGameStore } from '../state/gameStore';
 import { formatBigNumber } from '../core/format';
@@ -57,12 +57,12 @@ const INTERACTION_DISTANCE = 82;
 const ART_LOAD_TIMEOUT = 15000;
 const HALL_ASPECT = HALL_LAYOUT.world.width / HALL_LAYOUT.world.height;
 // CSS and Pixi use the same image origin: the actor's coordinate is its ground contact.
-const characterOrigin = (classId: keyof typeof CHARACTER_ART): CSSProperties =>
+const characterOrigin = (art: (typeof CHARACTER_ART)[keyof typeof CHARACTER_ART]): CSSProperties =>
   ({
-    '--art-left': `${(0.5 - CHARACTER_ART[classId].anchorX) * 100}%`,
-    '--art-bottom': `${(CHARACTER_ART[classId].ground - 1) * 100}%`,
-    '--art-anchor': `${CHARACTER_ART[classId].anchorX * 100}% ${CHARACTER_ART[classId].ground * 100}%`,
-    '--art-walk': `url("${new URL(CHARACTER_ART[classId].walk, document.baseURI).href}")`,
+    '--art-left': `${(0.5 - art.anchorX) * 100}%`,
+    '--art-bottom': `${(art.ground - 1) * 100}%`,
+    '--art-anchor': `${art.anchorX * 100}% ${art.ground * 100}%`,
+    '--art-walk': `url("${new URL(art.walk, document.baseURI).href}")`,
   }) as CSSProperties;
 
 export function NpcHall({
@@ -109,7 +109,8 @@ export function NpcHall({
   const [artAttempt, setArtAttempt] = useState(0);
   const [artStatus, setArtStatus] = useState<Record<string, 'ready' | 'error'>>({});
   const artSrc = (src: string) => (artAttempt ? `${src}?retry=${artAttempt}` : src);
-  const heroArt = artSrc(CHARACTER_ART[save.classId].src);
+  const wornArt = getCharacterArt(save.classId, save.equipment);
+  const heroArt = artSrc(wornArt.src);
   const mapArt = artSrc(CAMP_ART);
   const npcArt = artSrc(NPC_ATLAS);
   const waitingForArt = [mapArt, npcArt, heroArt].some((src) => !artStatus[src]);
@@ -462,7 +463,11 @@ export function NpcHall({
               onClick={() => setInspectedPlayer(player)}
               title={`查看${player.name}的装备与成就`}
             >
-              <img src={CHARACTER_ART[player.classId].src} alt="" draggable={false} />
+              <img
+                src={getCharacterArt(player.classId, player.equipment).src}
+                alt=""
+                draggable={false}
+              />
               <span>{player.name}</span>
               <small>Lv.{player.level}</small>
             </button>
@@ -604,7 +609,7 @@ export function NpcHall({
               data-actor-class={player.classId}
               style={
                 {
-                  ...characterOrigin(player.classId),
+                  ...characterOrigin(getCharacterArt(player.classId, player.equipment)),
                   left: `${location.x * 100}%`,
                   top: `${location.y * 100}%`,
                   zIndex: Math.round(location.y * 100) + 1,
@@ -619,7 +624,11 @@ export function NpcHall({
               </span>
               <span className="hall-sprite">
                 <span className="hall-idle-body actor-idle">
-                  <img src={CHARACTER_ART[player.classId].src} alt="" draggable={false} />
+                  <img
+                    src={getCharacterArt(player.classId, player.equipment).src}
+                    alt=""
+                    draggable={false}
+                  />
                 </span>
               </span>
               <span className="hall-actor-name">{ACTIVITIES[player.activity] ?? '营地休整'}</span>
@@ -639,7 +648,7 @@ export function NpcHall({
           data-actor-class={save.classId}
           style={
             {
-              ...characterOrigin(save.classId),
+              ...characterOrigin(wornArt),
               left: `${position.x * 100}%`,
               top: `${position.y * 100}%`,
               zIndex: Math.round(position.y * 100) + 2,
@@ -754,7 +763,7 @@ export function NpcHall({
             </header>
             <div className="modal-body">
               <div className="hall-profile-hero">
-                <HeroArt classId={inspectedPlayer.classId} />
+                <HeroArt classId={inspectedPlayer.classId} equipment={inspectedPlayer.equipment} />
                 <div>
                   <h3>
                     {CLASSES.find((hero) => hero.id === inspectedPlayer.classId)?.name} · Lv.

@@ -4,6 +4,7 @@ import { CLASSES } from '../data/classes';
 import { SKILLS } from '../data/skillTrees';
 import { SETS } from '../data/sets';
 import { LEGENDARIES } from '../data/legendaries';
+import { equipmentName, isHandSlot, itemClass } from '../data/equipment';
 import { AFFIXES, GEMS, PETS } from '../data/affixes';
 import {
   PROGRESSION_MILESTONES,
@@ -21,6 +22,8 @@ const clone = <T>(value: T): T => JSON.parse(JSON.stringify(value));
 const starters = starterSkills;
 export const MAX_INVENTORY = 240;
 export const MAX_STASH = 480;
+// One rift: 300 seconds of five-second waves, or boss adds after waves stop.
+export const MAX_PENDING_LOOT = 1200;
 export const MAX_CHARACTERS = 6;
 export const MAX_IMPORT_BYTES = 20 * 1024 * 1024;
 
@@ -133,6 +136,14 @@ export function validateSave(input: unknown, historical = false): SaveData {
     )
       return false;
     if (
+      v.classId !== undefined &&
+      (!isHandSlot(v.slot as Slot) ||
+        v.legendaryId !== undefined ||
+        v.setId !== undefined ||
+        !CLASSES.some((hero) => hero.id === v.classId))
+    )
+      return false;
+    if (
       v.gem !== undefined &&
       (!isRecord(v.gem) ||
         !GEMS.some((g) => g.id === (v.gem as Record<string, unknown>).id) ||
@@ -149,18 +160,24 @@ export function validateSave(input: unknown, historical = false): SaveData {
     !isRecord(s.equipment)
   )
     throw new Error('存档装备无效。');
+  if (
+    s.pendingLoot !== undefined &&
+    (!Array.isArray(s.pendingLoot) ||
+      s.pendingLoot.length > MAX_PENDING_LOOT ||
+      !s.pendingLoot.every(checkItem))
+  )
+    throw new Error('待领战利品无效。');
   for (const [slot, item] of Object.entries(s.equipment)) {
     if (!SLOTS.includes(slot as Slot) || !checkItem(item) || item.slot !== slot)
       throw new Error('装备槽位无效。');
-    const legendary = LEGENDARIES.find((l) => l.id === item.legendaryId);
-    const setDef = SETS.find((t) => t.id === item.setId);
-    if (
-      (legendary?.classId && legendary.classId !== s.classId) ||
-      (setDef && setDef.classId !== s.classId)
-    )
-      throw new Error('穿戴装备与当前职业不匹配。');
+    const requiredClass = itemClass(item);
+    if (requiredClass && requiredClass !== s.classId) throw new Error('穿戴装备与当前职业不匹配。');
   }
-  const ids = [...s.inventory, ...Object.values(s.equipment)].map((i) => (i as Item).id);
+  const ids = [
+    ...s.inventory,
+    ...Object.values(s.equipment),
+    ...((s.pendingLoot ?? []) as Item[]),
+  ].map((i) => (i as Item).id);
   if (new Set(ids).size !== ids.length) throw new Error('存档存在重复装备。');
   if (
     !Array.isArray(s.extracted) ||
@@ -351,6 +368,13 @@ export function validateSave(input: unknown, historical = false): SaveData {
     }
   }
   const save = clone(s) as unknown as SaveData;
+  for (const item of [
+    ...save.inventory,
+    ...Object.values(save.equipment),
+    ...(save.pendingLoot ?? []),
+    ...(save.runRecords ?? []).flatMap(({ build }) => Object.values(build.equipment)),
+  ])
+    if (item) item.name = equipmentName(item);
   save.preferences = validatePreferences(s.preferences);
   if (!save.progression) {
     // Old equipment/economy survives. Rebuild old automatic unlocks into the new
@@ -528,21 +552,31 @@ export function validateAccountSave(input: unknown): AccountSave {
       checkIdentity(character.id);
       characterNames.add(nameKey(character.name));
       const save = validateSave(character.save);
-      checkItems([...save.inventory, ...Object.values(save.equipment)] as Item[]);
+      checkItems([
+        ...save.inventory,
+        ...Object.values(save.equipment),
+        ...(save.pendingLoot ?? []),
+      ]);
       return { id: character.id as string, name: character.name, save };
     });
     if (!characters.some((character) => character.id === raw.activeCharacterId))
       throw new Error('当前角色不存在。');
     // Reuse the existing item validator, with chunks respecting its backpack limit.
+    const stash: Item[] = [];
     for (let offset = 0; offset < raw.stash.length; offset += MAX_INVENTORY)
-      validateSave({ ...newSave(), inventory: raw.stash.slice(offset, offset + MAX_INVENTORY) });
-    checkItems(raw.stash as Item[]);
+      stash.push(
+        ...validateSave({
+          ...newSave(),
+          inventory: raw.stash.slice(offset, offset + MAX_INVENTORY),
+        }).inventory,
+      );
+    checkItems(stash);
     return {
       id: raw.id as string,
       name: raw.name,
       activeCharacterId: raw.activeCharacterId as string,
       characters,
-      stash: clone(raw.stash) as Item[],
+      stash,
     };
   });
   if (!accounts.some((account) => account.id === input.activeAccountId))

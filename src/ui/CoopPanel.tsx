@@ -1,10 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
 import type { CoopReward, CoopRoom } from '../core/coopRoom';
 import { CLASSES } from '../data/classes';
+import { getCampaignChapter, getRiftOpportunity } from '../data/campaign';
 import { coopBalance } from '../data/coopBalance';
+import { STAGES } from '../data/stages';
 import { apiRequest, useCloudStore } from '../state/cloudStore';
 import { useGameStore } from '../state/gameStore';
-import { CHARACTER_ART } from '../render/CharacterTextures';
+import { getCharacterArt } from '../data/characterArt';
 import { Compass, Crown, Swords, X } from './PixelIcons';
 import { useDialog } from './useDialog';
 import './coop.css';
@@ -191,7 +193,12 @@ export function CoopPanel({
   const self = room?.members.find((member) => member.id === room.selfId);
   const host = room?.selfId === room?.hostId;
   const balance = coopBalance(room?.members.length ?? 1);
-  const previewStage = stageDraft ? Number(stageDraft) : save.selectedStage;
+  const previewStage =
+    room?.stage ??
+    Math.min(save.highestStage, Math.max(1, Number(stageDraft ?? save.selectedStage)));
+  const stage = STAGES[previewStage - 1];
+  const chapter = lab ? undefined : getCampaignChapter(previewStage);
+  const opportunity = lab ? undefined : getRiftOpportunity(previewStage);
   return (
     <div className="modal-backdrop coop-backdrop">
       <div
@@ -215,8 +222,22 @@ export function CoopPanel({
             {error}
           </p>
         )}
-        {expedition && (
-          <>
+        {expedition && !room && (
+          <section className="expedition-brief" aria-label="本次远征">
+            <header>
+              <h3>{chapter?.title ?? stage?.name}</h3>
+              <small>
+                第 {previewStage} 层 · 已解锁至第 {save.highestStage} 层
+              </small>
+            </header>
+            {chapter && <p>{chapter.objective}</p>}
+            {opportunity && (
+              <aside className="expedition-opportunity" aria-label="战场捷径">
+                <strong>{opportunity.name}</strong>
+                <b>秘境进度 +{opportunity.bonus}%</b>
+                <p>{opportunity.hint}</p>
+              </aside>
+            )}
             <div className="coop-stage-picker">
               <label htmlFor="coop-expedition-stage">挑战层数</label>
               <div>
@@ -256,12 +277,15 @@ export function CoopPanel({
             <button className="coop-solo" disabled={busy || cloudTransition} onClick={playSolo}>
               <Compass size={28} />
               <span>
-                <strong>独自远征</strong>
-                <small>第 {save.selectedStage} 层 · 单人爬塔 · 随时暂停</small>
+                <strong>{!lab && save.pendingLoot?.length ? '整理保留战利品' : '独自远征'}</strong>
+                <small>
+                  第 {previewStage} 层 ·{' '}
+                  {previewStage === 1 ? '点敌集火，拖动移动' : '单人远征 · 可暂停'}
+                </small>
               </span>
               <span>→</span>
             </button>
-          </>
+          </section>
         )}
         {roomError && (
           <p className="coop-error" role="status">
@@ -358,7 +382,10 @@ export function CoopPanel({
                   >
                     {member ? (
                       <>
-                        <img src={CHARACTER_ART[member.classId].src} alt="" />
+                        <img
+                          src={getCharacterArt(member.classId, member.config.equipment).src}
+                          alt=""
+                        />
                         <div>
                           <strong>
                             {member.name}
@@ -425,7 +452,8 @@ export function CoopPanel({
             </div>
           </>
         ) : (
-          <>
+          <details className="coop-ways" open={expedition ? undefined : true}>
+            <summary>与好友组队</summary>
             <div className="coop-intro">
               <Swords size={36} />
               <div>
@@ -480,24 +508,27 @@ export function CoopPanel({
                     : '登录并同步云端角色，即可创建或加入远征队伍。'}
                 </p>
                 {!lab && (
-                  <button className="gold-button" disabled={busy} onClick={onAccount}>
+                  <button className="outline-button" disabled={busy} onClick={onAccount}>
                     账号与云端同步
                   </button>
                 )}
               </div>
             )}
-          </>
+          </details>
         )}
-        <footer className="coop-footnote">
-          限时 300 秒 · 倒地 8 秒后半血复苏 · 全队倒地则失败
-          <br />
-          联机战斗持续进行，菜单与切出窗口不会暂停全队。任意成员离队将结束远征。
-          <br />
-          {room && room.authority !== 'server'
-            ? '旧版房主模式：队长失联 30 秒或停止同步 20 秒后中止，刷新队长页面会安全中止。'
-            : '服务器托管：可刷新并重连原战场，单人成员掉线不终止；全队离线 30 秒才中止。'}
-          已完成奖励可在此补领。
-        </footer>
+        <details className="coop-footnote">
+          <summary>联机规则与掉线重连</summary>
+          <p>
+            限时 300 秒 · 倒地 8 秒后半血复苏 · 全队倒地则失败
+            <br />
+            联机战斗持续进行，菜单与切出窗口不会暂停全队。任意成员离队将结束远征。
+            <br />
+            {room && room.authority !== 'server'
+              ? '旧版房主模式：队长失联 30 秒或停止同步 20 秒后中止，刷新队长页面会安全中止。'
+              : '服务器托管：可刷新并重连原战场，单人成员掉线不终止；全队离线 30 秒才中止。'}
+            已完成奖励可在此补领。
+          </p>
+        </details>
       </div>
     </div>
   );

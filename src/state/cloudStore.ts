@@ -297,6 +297,7 @@ function fail(error: unknown) {
       'RATE_LIMITED',
       'RESULT_NOT_FOUND',
       'RESULT_CHARACTER_MISSING',
+      'RESULT_LOOT_PENDING',
     ].includes(error.code ?? '')
   ) {
     useCloudStore.setState({ error: message });

@@ -5,7 +5,7 @@ export const SETS: SetDef[] = [
   {
     id: 'stormcaller',
     classId: 'ranger',
-    name: '风暴召唤者',
+    name: '长夜天巡',
     lore: '暴雨落在破碎城墙上的那夜，守望者抬起弓，让整个天空回应他的孤独。',
     skillId: 'arrow_rain',
     two: '多重箭雨冷却缩短60%，每次命中恢复3点集中。',
@@ -17,7 +17,7 @@ export const SETS: SetDef[] = [
   {
     id: 'marauder',
     classId: 'ranger',
-    name: '掠夺者战甲',
+    name: '断关连弩卫',
     lore: '七位流亡猎手以敌人的锁链铸成甲胄。他们所经之地，箭矢比审判更早抵达。',
     skillId: 'rapid_fire',
     two: '连弩射击增加4支箭，所有箭矢穿透敌人。',
@@ -29,7 +29,7 @@ export const SETS: SetDef[] = [
   {
     id: 'frost_hunter',
     classId: 'ranger',
-    name: '极寒猎手',
+    name: '雪脊猎团',
     lore: '冻土之下埋着最后一位猎王。他的箭袋没有腐朽，仍在等待白霜降临。',
     skillId: 'elemental_arrow',
     two: '冰霜命中施加霜冻并触发小范围冰爆。',
@@ -41,7 +41,7 @@ export const SETS: SetDef[] = [
   {
     id: 'wasteland',
     classId: 'barbarian',
-    name: '荒原狂风',
+    name: '裂嶂风裔',
     lore: '先祖以狂风为裹尸布，以飞沙为墓碑。继承者穿过风暴，听见不曾停息的战歌。',
     skillId: 'whirlwind',
     two: '旋风斩移速与范围提高40%，每秒释放钢铁钩爪。',
@@ -53,7 +53,7 @@ export const SETS: SetDef[] = [
   {
     id: 'earthbreaker',
     classId: 'barbarian',
-    name: '大地裂变',
+    name: '赤脉砧卫',
     lore: '第一柄战锤落下时，山脉学会了恐惧。大地裂缝中的红光，是祖灵尚未冷却的血。',
     skillId: 'ancestor_hammer',
     two: '先祖之锤命中有35%概率掉落生命血球。',
@@ -65,7 +65,7 @@ export const SETS: SetDef[] = [
   {
     id: 'immortal_thorns',
     classId: 'barbarian',
-    name: '不朽荆棘',
+    name: '荆碑铁誓',
     lore: '王说任何刀剑都不能伤他。铁匠便将他的誓言铸成刺甲，让每一道伤口都有归处。',
     skillId: 'war_cry',
     two: '受到伤害降低50%，攻击附带护甲值1000%的荆棘伤害。',
@@ -77,7 +77,7 @@ export const SETS: SetDef[] = [
   {
     id: 'tal_rasha',
     classId: 'sorcerer',
-    name: '塔拉夏元素',
+    name: '碎星仪环',
     lore: '群星陨落之前，元素议会把最后的祷词封在七重法环中。如今，每一次施法都是一场小型天灾。',
     skillId: 'meteor',
     two: '每2秒在随机敌人上方召唤一颗免费陨石。',
@@ -89,7 +89,7 @@ export const SETS: SetDef[] = [
   {
     id: 'delsere',
     classId: 'sorcerer',
-    name: '德尔西尼冰霜',
+    name: '寒镜星院',
     lore: '法师冻结了一整个冬日，只为留住亡妻转身的瞬间。那片冰霜至今没有融化。',
     skillId: 'frozen_orb',
     two: '冰封球飞行距离翻倍，穿透时额外引爆一次。',
@@ -101,8 +101,8 @@ export const SETS: SetDef[] = [
   {
     id: 'vyr',
     classId: 'sorcerer',
-    name: '维尔御法者',
-    lore: '维尔踏入虚空时抛弃了肉身，只留下空洞的王冠和一道不愿闭上的光。',
+    name: '无昼辉冠',
+    lore: '高塔陷落那天，守塔人把最后一束星光封进辉冠，照亮了下山的路。',
     skillId: 'archon',
     two: '奥术黑洞持续时间翻倍，执政官死光折射3次。',
     four: '执政官冷却缩短70%，激光每次命中叠加15%独立伤害，上限900%。',
@@ -113,7 +113,7 @@ export const SETS: SetDef[] = [
   {
     id: 'rathma',
     classId: 'necromancer',
-    name: '拉斯玛骨爆',
+    name: '归名骨卫',
     lore: '守墓人从未驱使亡者。他只是记住他们的名字，于是亡者愿意为他再战一次。',
     skillId: 'command_skeletons',
     two: '骷髅死亡或自爆后立即重生，号令骸骨冷却缩短70%。',
@@ -125,7 +125,7 @@ export const SETS: SetDef[] = [
   {
     id: 'trang_oul',
     classId: 'necromancer',
-    name: '塔格奥毒镰',
+    name: '沼碑毒镰',
     lore: '古龙的血浸透了镰刃。它收割的不止是生命，还有生命曾踏过的整片土地。',
     skillId: 'death_scythe',
     two: '死亡镰刀攻速提高50%，每次挥出两道毒月斩波。',
@@ -137,8 +137,8 @@ export const SETS: SetDef[] = [
   {
     id: 'inarius',
     classId: 'necromancer',
-    name: '伊纳瑞斯圣骨',
-    lore: '堕落的天使将羽翼换成白骨。他走过冥河时，所有沉没的灵魂都跟在身后。',
+    name: '沉钟白骨',
+    lore: '守钟人在冥河岸边敲响沉钟，漂泊的魂灵沿着声响披上白骨。',
     skillId: 'bone_spear',
     two: '骸骨风暴永久环绕，骷髅军团数量上限增加6。',
     four: '骸骨风暴内的敌人受到你与召唤物的伤害独立提高200%。',
@@ -149,7 +149,7 @@ export const SETS: SetDef[] = [
   {
     id: 'shadow_blades',
     classId: 'druid',
-    name: '暗影利刃',
+    name: '月隐双刃',
     lore: '月亮照不到的地方，刀锋仍有自己的光。行者的影子比他先一步穿过了敌人的喉咙。',
     skillId: 'fan_of_knives',
     two: '移动时每0.8秒免费释放一次刀扇风暴。',
@@ -161,7 +161,7 @@ export const SETS: SetDef[] = [
   {
     id: 'wild_vines',
     classId: 'druid',
-    name: '荒野毒藤',
+    name: '烬林根语',
     lore: '焚林者认为灰烬里再无生命。第二年春天，黑色的藤蔓爬上了他的王座。',
     skillId: 'poison_vine',
     two: '剧毒藤蔓覆盖全场，每秒触发孢子爆炸。',
@@ -173,7 +173,7 @@ export const SETS: SetDef[] = [
   {
     id: 'storm_wolf',
     classId: 'druid',
-    name: '风暴狼神',
+    name: '雷脊狼裔',
     lore: '第一头狼追逐雷电奔入云层。从此每当风暴降临，荒野都会记起它的名字。',
     skillId: 'storm_claw',
     two: '雷霆狼人形态永久保持。',

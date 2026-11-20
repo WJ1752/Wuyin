@@ -86,7 +86,7 @@ async function makeFrames({ filename, columns, ids, size, height, ground }: Shee
   for (const island of islands) {
     if (island.area < 32) continue;
     const column = Math.floor((island.x * columns) / info.width);
-    const row = Math.floor((island.y * 2) / info.height);
+    const row = Math.floor((island.y * Math.ceil(ids.length / columns)) / info.height);
     groups[row * columns + column]?.push(island);
   }
   return Promise.all(
@@ -170,28 +170,42 @@ const petSheet = { columns: 3, ids: companions, size: 96, height: 81, ground: 88
 const heroOutput = 'public/assets/characters/painted';
 const petOutput = 'public/assets/pets/painted';
 
-await writeIndividual({ ...heroSheet, filename: 'heroes.png' }, heroOutput);
-await writeIndividual({ ...heroSheet, filename: 'heroes-walk.png' }, heroOutput, '-walk');
-await writeIndividual({ ...heroSheet, filename: 'heroes-action.png' }, heroOutput, '-action');
-await writeIndividual({ ...petSheet, filename: 'companions.png' }, petOutput);
-await writeIndividual({ ...petSheet, filename: 'companions-action.png' }, petOutput, '-action');
+async function writeEquippedPoses() {
+  const ids = ['', '-walk', '-action'].flatMap((pose) =>
+    characters.map((id) => `${id}-equipped${pose}`),
+  );
+  await writeIndividual(
+    { ...heroSheet, columns: characters.length, ids, filename: 'equipped-atlas.webp' },
+    heroOutput,
+  );
+}
 
-const npcSize = 128;
-const npcFrames = await makeFrames({
-  filename: 'residents.png',
-  columns: 4,
-  ids: residents,
-  size: npcSize,
-  height: 108,
-  ground: 118,
-});
-await canvas(npcSize, 4, 2)
-  .composite(
-    npcFrames.map((frame, index) => ({
-      ...frame,
-      left: frame.left + (index % 4) * npcSize,
-      top: frame.top + Math.floor(index / 4) * npcSize,
-    })),
-  )
-  .webp({ lossless: true, effort: 5 })
-  .toFile('public/assets/npcs/watchers-painted.webp');
+if (process.argv.includes('--equipped')) {
+  await writeEquippedPoses();
+} else {
+  await writeIndividual({ ...heroSheet, filename: 'heroes.png' }, heroOutput);
+  await writeIndividual({ ...heroSheet, filename: 'heroes-walk.png' }, heroOutput, '-walk');
+  await writeIndividual({ ...heroSheet, filename: 'heroes-action.png' }, heroOutput, '-action');
+  await writeIndividual({ ...petSheet, filename: 'companions.png' }, petOutput);
+  await writeIndividual({ ...petSheet, filename: 'companions-action.png' }, petOutput, '-action');
+
+  const npcSize = 128;
+  const npcFrames = await makeFrames({
+    filename: 'residents.png',
+    columns: 4,
+    ids: residents,
+    size: npcSize,
+    height: 108,
+    ground: 118,
+  });
+  await canvas(npcSize, 4, 2)
+    .composite(
+      npcFrames.map((frame, index) => ({
+        ...frame,
+        left: frame.left + (index % 4) * npcSize,
+        top: frame.top + Math.floor(index / 4) * npcSize,
+      })),
+    )
+    .webp({ lossless: true, effort: 5 })
+    .toFile('public/assets/npcs/watchers-painted.webp');
+}

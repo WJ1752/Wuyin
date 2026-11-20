@@ -1,6 +1,7 @@
 import type { DatabaseSync } from 'node:sqlite';
 import type { FastifyInstance } from 'fastify';
 import { CLASSES } from '../src/data/classes';
+import { CURRENT_TRIAL_RULESET } from '../src/data/stages';
 import type { ClassId } from '../src/core/types';
 
 export interface VerifiedRun {
@@ -30,7 +31,11 @@ export function recordVerifiedRun(db: DatabaseSync, run: VerifiedRun) {
     run.kills < 0
   )
     throw new Error('服务器成绩无效。');
-  db.prepare('INSERT OR IGNORE INTO verified_runs VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').run(
+  db.prepare(
+    `INSERT OR IGNORE INTO verified_runs
+    (run_id, user_id, character_id, name, class_id, level, stage, seconds, kills, set_name, created_at, ruleset)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  ).run(
     run.runId,
     run.userId,
     run.characterId,
@@ -42,29 +47,36 @@ export function recordVerifiedRun(db: DatabaseSync, run: VerifiedRun) {
     run.kills,
     run.setName,
     Date.now(),
+    CURRENT_TRIAL_RULESET,
   );
 }
 
 export function registerVerifiedLeaderboard(app: FastifyInstance, db: DatabaseSync) {
   app.get('/api/leaderboard/verified', async (request, reply) => {
     const query = request.query as Record<string, unknown>;
+    const ruleset = query.ruleset === undefined ? CURRENT_TRIAL_RULESET : Number(query.ruleset);
     if (
       !CLASSES.some((entry) => entry.id === query.classId) ||
-      Object.keys(query).some((key) => key !== 'classId')
+      Object.keys(query).some((key) => key !== 'classId' && key !== 'ruleset') ||
+      (query.ruleset !== undefined && String(ruleset) !== query.ruleset) ||
+      !Number.isInteger(ruleset) ||
+      ruleset < 1 ||
+      ruleset > CURRENT_TRIAL_RULESET
     )
-      return reply.code(400).send({ error: '请选择有效职业。', code: 'INVALID_CLASS' });
+      return reply.code(400).send({ error: '请选择有效职业和试炼规则。', code: 'INVALID_BOARD' });
     const rows = db
       .prepare(
         `WITH ranked AS (
       SELECT *, ROW_NUMBER() OVER (PARTITION BY user_id, set_name ORDER BY stage DESC, seconds, created_at, run_id) AS account_rank
-      FROM verified_runs WHERE class_id = ?
+      FROM verified_runs WHERE class_id = ? AND ruleset = ?
     ) SELECT *, COUNT(*) OVER () AS total FROM ranked WHERE account_rank = 1
       ORDER BY stage DESC, seconds, created_at, run_id LIMIT 20`,
       )
-      .all(String(query.classId));
+      .all(String(query.classId), ruleset);
     return {
       classId: query.classId,
       source: 'verified',
+      ruleset,
       entries: rows.map((row, index) => ({
         rank: index + 1,
         name: row.name,

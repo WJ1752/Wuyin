@@ -1,20 +1,23 @@
 import type { CSSProperties } from 'react';
 import type { ClassId } from '../core/types';
-import { CHARACTER_ART } from '../render/CharacterTextures';
+import { getCharacterArt, type WornArt } from '../data/characterArt';
 import { usePageVisible } from './usePageVisible';
 import './actor-motion.css';
 
 export function HeroArt({
   classId = 'ranger',
   small = false,
+  equipment,
 }: {
   classId?: ClassId;
   small?: boolean;
+  equipment?: WornArt;
 }) {
   const pageVisible = usePageVisible();
+  const art = getCharacterArt(classId, equipment);
   return (
     <img
-      src={CHARACTER_ART[classId].src}
+      src={art.src}
       className={`hero-art actor-idle${small ? ' small' : ''}`}
       data-actor-class={classId}
       data-motion-paused={!pageVisible || undefined}
@@ -24,7 +27,7 @@ export function HeroArt({
           objectFit: 'contain',
           objectPosition: 'center bottom',
           imageRendering: 'pixelated',
-          '--idle-origin': `${CHARACTER_ART[classId].anchorX * 100}% ${CHARACTER_ART[classId].ground * 100}%`,
+          '--idle-origin': `${art.anchorX * 100}% ${art.ground * 100}%`,
         } as CSSProperties
       }
       decoding="async"

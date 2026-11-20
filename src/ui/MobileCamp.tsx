@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { formatBigNumber } from '../core/format';
-import { useGameStore } from '../state/gameStore';
-import { CHARACTER_ART } from '../render/CharacterTextures';
+import { emptySlotItems, skillPoints, useGameStore } from '../state/gameStore';
+import { getCharacterArt } from '../data/characterArt';
 import { CLASSES } from '../data/classes';
 import { getNextCampaignChapter } from '../data/campaign';
 import { onboardingTasks } from './OnboardingChecklist';
@@ -22,6 +22,7 @@ import './mobile-camp-home.css';
 const ACTIONS = [
   { id: 'character', label: '装备', icon: Shield },
   { id: 'skills', label: '技能', icon: BookOpen },
+  { id: 'expedition', label: '出征', icon: Swords },
   { id: 'journey', label: '旅程', icon: Compass },
   { id: 'services', label: '服务', icon: Package },
 ] as const;
@@ -51,12 +52,15 @@ export function MobileCamp({ onNavigate, onGuide }: MobileCampProps) {
       : undefined;
   const chapter = !labBackup ? getNextCampaignChapter(clearedStage) : undefined;
   const nextFloor = chapter ? Math.min(chapter.stage, save.highestStage) : undefined;
+  const pending = !labBackup ? (save.pendingLoot?.length ?? 0) : 0;
+  const emptySlots = emptySlotItems(save).length;
+  const points = skillPoints(save);
 
   return (
     <div className="camp-floating-hud" aria-label="营地快捷操作">
       <header className="camp-hud-topbar">
         <button className="camp-hud-traveler" onClick={() => onNavigate('accounts')}>
-          <img src={CHARACTER_ART[save.classId].src} alt="" />
+          <img src={getCharacterArt(save.classId, save.equipment).src} alt="" />
           <span>
             <strong>{character?.name ?? hero.name}</strong>
             <small>
@@ -109,33 +113,41 @@ export function MobileCamp({ onNavigate, onGuide }: MobileCampProps) {
         )}
       </header>
 
-      {(prep || chapter) && (
+      {(pending > 0 || prep || chapter) && (
         <aside className="camp-hud-objective" aria-label="下一步">
           <button
             className="camp-hud-objective-action"
             disabled={cloudTransition}
             onClick={() => {
-              if (prep) onNavigate(prep.panel);
+              if (pending) onNavigate('character');
+              else if (prep) onNavigate(prep.panel);
               else if (nextFloor !== undefined) {
                 selectStage(nextFloor);
                 onNavigate('expedition');
               }
             }}
           >
-            {prep ? <BookOpen size={18} /> : <Compass size={18} />}
+            {pending ? (
+              <Package size={20} />
+            ) : prep ? (
+              <BookOpen size={20} />
+            ) : (
+              <Compass size={20} />
+            )}
             <span>
-              <strong>{prep?.title ?? chapter?.title}</strong>
-              {!prep && chapter && (
-                <small>
-                  {nextFloor === chapter.stage
-                    ? `主线 · 挑战第 ${chapter.stage} 层`
-                    : `主线 · 先挑战第 ${nextFloor} 层`}
-                </small>
-              )}
+              <strong>
+                {pending ? `${pending} 件战利品待领取` : (prep?.title ?? chapter?.title)}
+              </strong>
+              <small>
+                {pending
+                  ? '领取后可再次远征'
+                  : (prep?.action ??
+                    (clearedStage === 0 ? '首场远征 · 第 1 层' : `主线 · 出征第 ${nextFloor} 层`))}
+              </small>
             </span>
             <ChevronRight size={16} />
           </button>
-          {prep && (
+          {!pending && prep && (
             <button
               className="camp-hud-objective-dismiss"
               aria-label="隐藏营地实操提醒"
@@ -149,28 +161,34 @@ export function MobileCamp({ onNavigate, onGuide }: MobileCampProps) {
       )}
 
       <nav className="camp-hud-bottom" aria-label="营地操作">
-        <button onClick={() => onNavigate(ACTIONS[0].id)}>
-          <Shield size={22} />
-          <span>装备</span>
-        </button>
-        <button onClick={() => onNavigate(ACTIONS[1].id)}>
-          <BookOpen size={22} />
-          <span>技能</span>
-        </button>
-        <button className="camp-hud-depart" onClick={() => onNavigate('expedition')}>
-          <Swords size={23} />
-          <span>
-            <small>第 {save.selectedStage} 层</small>出征
-          </span>
-        </button>
-        <button onClick={() => onNavigate(ACTIONS[2].id)}>
-          <Compass size={22} />
-          <span>旅程</span>
-        </button>
-        <button onClick={() => onNavigate(ACTIONS[3].id)}>
-          <Package size={22} />
-          <span>服务</span>
-        </button>
+        {ACTIONS.map(({ id, label, icon: Icon }) => {
+          const depart = id === 'expedition';
+          const count = id === 'character' ? pending || emptySlots : id === 'skills' ? points : 0;
+          return (
+            <button
+              key={id}
+              className={depart ? 'camp-hud-depart' : undefined}
+              onClick={() => onNavigate(id)}
+              aria-label={depart ? undefined : label}
+              title={
+                count
+                  ? `${label} · ${id === 'skills' ? `${count} 点可分配` : `${count} 件可处理`}`
+                  : undefined
+              }
+            >
+              <Icon size={depart ? 23 : 22} />
+              <span>
+                {depart && <small>第 {save.selectedStage} 层</small>}
+                {label}
+              </span>
+              {count > 0 && (
+                <i className="camp-action-count" aria-hidden="true">
+                  {count}
+                </i>
+              )}
+            </button>
+          );
+        })}
       </nav>
     </div>
   );

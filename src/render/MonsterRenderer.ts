@@ -1,4 +1,4 @@
-import { Container, Graphics, Sprite } from 'pixi.js';
+import { Container, Graphics, MeshSimple, Sprite, type Texture } from 'pixi.js';
 import { getAtlasTexture } from './TextureAtlas';
 import type { MonsterAttackPose } from '../core/coop';
 import type { MonsterDef } from '../core/types';
@@ -7,6 +7,113 @@ import { pixelEllipse, pixelLine, pixelPolygon, pixelStamp } from './PixelArt';
 const INK = 0x14202a;
 const BONE = 0xe1d3ad;
 const LIGHT = 0xf8ebc5;
+
+export function smoothRange(start: number, end: number, value: number) {
+  const t = Math.min(1, Math.max(0, (value - start) / (end - start)));
+  return t * t * (3 - 2 * t);
+}
+
+/** The planted leg travels back at a steady rate while its partner swings forward. */
+export function stepOffset(phase: number) {
+  return phase < 0.5 ? 1 - 4 * phase : 2 * smoothRange(0.5, 1, phase) - 1;
+}
+
+export function stepLift(phase: number) {
+  const swing = Math.max(0, phase * 2 - 1);
+  return 4 * swing * (1 - swing);
+}
+
+interface SkinJoint {
+  pivot: readonly [number, number];
+  weight: (u: number, v: number) => number;
+}
+
+/**
+ * Skin the original nearest-neighbor artwork as a single silhouette. Each joint
+ * moves a localized part of the image, with shared vertices across seams.
+ */
+export class PixelSkin extends MeshSimple {
+  private readonly rest: Float32Array;
+  private readonly joints: {
+    x: number;
+    y: number;
+    weights: Float32Array;
+    dx: number;
+    dy: number;
+    angle: number;
+  }[];
+  private changed = false;
+
+  constructor(texture: Texture, size: number, ground: number, joints: SkinJoint[], detail = 6) {
+    const rest = new Float32Array(detail * detail * 2);
+    const uvs = new Float32Array(rest.length);
+    const indices: number[] = [];
+    for (let row = 0; row < detail; row++) {
+      for (let column = 0; column < detail; column++) {
+        const index = row * detail + column;
+        const u = column / (detail - 1);
+        const v = row / (detail - 1);
+        uvs.set([u, v], index * 2);
+        rest.set([(u - 0.5) * size, (v - ground) * size], index * 2);
+        if (row && column) {
+          const topLeft = index - detail - 1;
+          indices.push(topLeft, topLeft + 1, index, topLeft, index, index - 1);
+        }
+      }
+    }
+    // Keep the grid batchable and sample the atlas through Pixi's texture UV matrix.
+    super({ texture, vertices: rest.slice(), uvs, indices: Uint32Array.from(indices) });
+    this.autoUpdate = false;
+    this.rest = rest;
+    this.joints = joints.map(({ pivot: [u, v], weight }) => ({
+      x: (u - 0.5) * size,
+      y: (v - ground) * size,
+      weights: Float32Array.from({ length: rest.length / 2 }, (_, i) =>
+        weight(uvs[i * 2], uvs[i * 2 + 1]),
+      ),
+      dx: 0,
+      dy: 0,
+      angle: 0,
+    }));
+  }
+
+  moveJoint(index: number, dx: number, dy: number, angle = 0) {
+    const joint = this.joints[index];
+    if (joint.dx === dx && joint.dy === dy && joint.angle === angle) return;
+    joint.dx = dx;
+    joint.dy = dy;
+    joint.angle = angle;
+    this.changed = true;
+  }
+
+  commitPose() {
+    if (!this.changed) return;
+    this.changed = false;
+    const vertices = this.vertices;
+    vertices.set(this.rest);
+    for (const { x, y, weights, dx, dy, angle } of this.joints) {
+      if (!dx && !dy && !angle) continue;
+      const cos = Math.cos(angle) - 1;
+      const sin = Math.sin(angle);
+      for (let index = 0; index < weights.length; index++) {
+        const weight = weights[index];
+        if (!weight) continue;
+        const i = index * 2;
+        const u = this.rest[i] - x;
+        const v = this.rest[i + 1] - y;
+        vertices[i] += (dx + cos * u - sin * v) * weight;
+        vertices[i + 1] += (dy + sin * u + cos * v) * weight;
+      }
+    }
+    this.geometry.getBuffer('aPosition').update();
+  }
+
+  override destroy(options?: Parameters<MeshSimple['destroy']>[0]) {
+    const geometry = this.geometry;
+    super.destroy(options);
+    geometry.destroy();
+  }
+}
 
 /** Family anatomy is drawn as solid pixel clusters with a shared three-pixel grid. */
 export function drawPixelCreature(g: Graphics, family: string, color: number, boss = false) {
@@ -393,23 +500,80 @@ export function drawPixelCreature(g: Graphics, family: string, color: number, bo
   }
 }
 
+type EnemyGait = 'stride' | 'scuttle' | 'wing' | 'float' | 'slither' | 'still';
+
+function enemyGait(family: string): EnemyGait {
+  if (['bat', 'drake', 'imp'].includes(family)) return 'wing';
+  if (['ghost', 'eye'].includes(family)) return 'float';
+  if (['serpent', 'worm'].includes(family)) return 'slither';
+  if (['wolf', 'rat', 'spider', 'scorpion', 'insect'].includes(family)) return 'scuttle';
+  return family === 'dummy' ? 'still' : 'stride';
+}
+
+const CORE = 0;
+const REAR_FOOT = 1;
+const FRONT_FOOT = 2;
+const LEADING_LIMB = 3;
+const TRAILING_LIMB = 4;
+
+function monsterSkin(texture: Texture, size: number, gait: EnemyGait, def: MonsterDef) {
+  const low = gait === 'scuttle';
+  const winged = gait === 'wing';
+  const coiled = gait === 'slither';
+  const hovering = gait === 'float';
+  const hips = low ? 0.69 : 0.6;
+  const legs = (v: number) => smoothRange(hips + 0.02, 0.94, v);
+  const near = (u: number) => smoothRange(0.31, 0.73, u);
+  const limbHeight = coiled && def.family === 'serpent' ? 0.34 : low ? 0.63 : 0.52;
+  const jointHeight = winged ? 0.48 : limbHeight;
+  const arm = (v: number) =>
+    smoothRange(0.18, jointHeight - 0.05, v) * (1 - smoothRange(jointHeight + 0.12, 0.91, v));
+  const leading = (u: number) => smoothRange(0.54, 0.85, u);
+  const trailing = (u: number) => 1 - smoothRange(0.22, 0.49, u);
+  return new PixelSkin(texture, size, 0.956, [
+    {
+      pivot: [0.5, hips],
+      weight: (u, v) => (1 - legs(v)) * (1 - leading(u) * arm(v) * 0.56),
+    },
+    { pivot: [0.3, 0.956], weight: (u, v) => legs(v) * (1 - near(u)) },
+    { pivot: [0.7, 0.956], weight: (u, v) => legs(v) * near(u) },
+    {
+      pivot: [0.63, jointHeight],
+      weight: (u, v) => leading(u) * (winged ? 1 - smoothRange(0.55, 0.82, v) : arm(v)),
+    },
+    {
+      pivot: [0.38, winged ? 0.41 : hovering || coiled ? 0.64 : jointHeight],
+      weight: (u, v) =>
+        trailing(u) * (winged ? 1 - smoothRange(0.56, 0.8, v) : hovering || coiled ? 1 : arm(v)),
+    },
+  ]);
+}
+
 export class MonsterRig extends Container {
   private form = new Container();
   private shadow = new Graphics();
   private bar = new Graphics();
   private motionMarks = new Graphics();
+  private skin?: PixelSkin;
   private flash = 0;
-  private stride = 0;
+  private step = 0.25;
   private facing = 1;
   private pace = 0;
+  private travelX = 0;
+  private travelY = 0;
   private footfall = 0;
+  private footfallSide = 1;
+  private aim = 0;
+  private action = 0;
   private defeatAge = 0;
+  private defeatOriginY = 0;
   private priorBarWidth = -1;
-  private readonly motion = globalThis.matchMedia?.('(prefers-reduced-motion: reduce)').matches
-    ? 0
-    : 1;
-  private readonly gait: 'hover' | 'slither' | 'walk' | 'still';
-  private readonly attackReach: number;
+  private readonly motion = !globalThis.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+  private readonly gait: EnemyGait;
+  private readonly charge: boolean;
+  private readonly ranged: boolean;
+  private readonly artSize: number;
+
   constructor(
     def: MonsterDef,
     public elite = false,
@@ -417,10 +581,10 @@ export class MonsterRig extends Container {
     public minion = false,
   ) {
     super();
-    if (['ghost', 'eye', 'bat', 'drake', 'imp'].includes(def.family)) this.gait = 'hover';
-    else if (['serpent', 'worm'].includes(def.family)) this.gait = 'slither';
-    else this.gait = def.family === 'dummy' ? 'still' : 'walk';
-    this.attackReach = this.gait === 'hover' ? 7 : def.behavior === 'charge' ? 16 : 11;
+    this.gait = enemyGait(def.family);
+    this.charge = def.behavior === 'charge' || (boss && def.family === 'minotaur');
+    this.ranged = def.behavior === 'ranged' || def.family === 'ghost';
+    this.artSize = boss ? 90 : 42 + def.radius * 1.3;
     const color = Number.parseInt(def.color.replace('#', ''), 16);
     this.shadow.ellipse(0, 5, boss ? 59 : 25, boss ? 17 : 9).fill({ color: 0x0c1418, alpha: 0.48 });
     this.shadow.ellipse(0, 5, boss ? 42 : 17, boss ? 11 : 6).fill({ color: 0x0a1318, alpha: 0.36 });
@@ -432,10 +596,13 @@ export class MonsterRig extends Container {
       });
     this.addChild(this.shadow, this.form, this.motionMarks);
     const texture = getAtlasTexture(`monster:${def.id}`);
-    if (texture) {
+    if (texture && this.motion && this.gait !== 'still') {
+      this.skin = monsterSkin(texture, this.artSize, this.gait, def);
+      this.form.addChild(this.skin);
+    } else if (texture) {
       const body = new Sprite(texture);
       body.anchor.set(0.5, 0.956);
-      body.width = body.height = boss ? 90 : 42 + def.radius * 1.3;
+      body.width = body.height = this.artSize;
       this.form.addChild(body);
     } else {
       const body = new Graphics();
@@ -447,21 +614,24 @@ export class MonsterRig extends Container {
     this.motionMarks.visible = false;
     this.drawHealth(1);
   }
+
   hit() {
     this.flash = 0.12;
   }
+
   defeat(dt: number) {
+    if (this.defeatAge === 0) this.defeatOriginY = this.form.y;
     this.defeatAge += dt;
     const fall = Math.min(1, this.defeatAge / 0.34);
     const size = this.boss ? 2 : 1;
-    const settle = fall * (2 - fall);
+    const settle = this.motion ? fall * (2 - fall) : 0;
     this.bar.visible = false;
     this.form.alpha = 1 - fall * 0.62;
-    this.form.rotation = this.facing * settle * 0.48 * this.motion;
-    this.form.y = settle * 7 * size * this.motion;
-    this.form.scale.set(this.facing * size, size * (1 - 0.45 * settle * this.motion));
+    this.form.rotation = this.facing * settle * 0.48;
+    this.form.y = this.defeatOriginY * (1 - settle) + settle * 7 * size;
+    this.form.scale.set(this.facing * size, size * (1 - 0.45 * settle));
     this.shadow.alpha = 1 - fall;
-    this.motionMarks.visible = this.motion > 0 && fall < 1;
+    this.motionMarks.visible = this.motion && fall < 1;
     if (!this.motionMarks.visible) return;
     this.motionMarks.clear();
     for (const direction of [-1, 1]) {
@@ -472,6 +642,7 @@ export class MonsterRig extends Container {
       });
     }
   }
+
   drawHealth(ratio: number) {
     const w = this.boss ? 90 : 36,
       y = this.boss ? -183 : -81;
@@ -488,66 +659,130 @@ export class MonsterRig extends Container {
       .rect(-w / 2, y, filled, 4)
       .fill(this.boss ? 0xe97c81 : this.elite ? 0xe9c680 : 0xc87a83);
   }
+
   update(time: number, dt: number, dx: number, dy: number, id: number, pose?: MonsterAttackPose) {
     this.flash = Math.max(0, this.flash - dt);
     this.footfall = Math.max(0, this.footfall - dt);
-    const heading = pose ? Math.cos(pose.angle) : dx / Math.max(0.001, Math.hypot(dx, dy));
-    if (Math.abs(heading) > 0.18) this.facing = Math.sign(heading);
-    // Cap displacement so a teleport cannot skip through multiple steps in one frame.
-    const distance = Math.min(Math.hypot(dx, dy), 180 * dt);
-    const previousStep = Math.floor(this.stride / Math.PI);
-    this.stride += distance / (this.boss ? 12 : 7);
-    if (this.motion && this.gait === 'walk' && Math.floor(this.stride / Math.PI) !== previousStep)
-      this.footfall = 0.13;
-    const activity = Math.min(1, distance / Math.max(45 * dt, 0.001));
-    this.pace += (activity - this.pace) * (1 - Math.exp(-dt * 14));
-
-    const breath = this.gait === 'still' ? 0 : Math.sin(time * 2.6 + id) * this.motion;
-    const sway = Math.sin(this.stride + id) * this.pace * this.motion;
-    let lift = Math.abs(sway) * 2.8;
-    let drift = sway * 0.8;
-    if (this.gait === 'hover') {
-      lift = (3 + Math.sin(time * 3.8 + id) * 2.5) * this.motion;
-      drift += breath * 0.9;
-    } else if (this.gait === 'slither') {
-      lift *= 0.18;
-      drift = sway * 2.8;
-    }
-    let reachX = 0;
-    let reachY = 0;
-    let crouch = 0;
-    if (pose) {
-      const t = Math.min(1, Math.max(0, (time - pose.start) / Math.max(0.01, pose.duration)));
-      const windup = t * t * (3 - 2 * t);
-      // Release from the held pose, extend quickly, then settle back on the feet.
-      const reach = pose.strike
-        ? this.attackReach * Math.sin(Math.PI * t) * (1 - t) - 4 * Math.exp(-15 * t)
-        : -4 * windup;
-      reachX = Math.cos(pose.angle) * reach * this.motion;
-      reachY = Math.sin(pose.angle) * reach * this.motion;
-      crouch = (pose.strike ? Math.exp(-15 * t) : windup) * 0.055 * this.motion;
-    }
+    const distance = Math.hypot(dx, dy);
+    // Ignore jumps from charges and warps; their silhouettes use the attack pose.
+    const travel = distance < 70 ? Math.min(distance, 230 * dt) : 0;
     const size = this.boss ? 2 : 1;
+    const unit = this.artSize / 62;
+    const scuttles = this.gait === 'scuttle';
+    const steps = scuttles || this.gait === 'stride';
+    const follow = 1 - Math.exp(-dt * 20);
+    if (travel > 0.001) {
+      this.travelX += (dx / distance - this.travelX) * follow;
+      this.travelY += (dy / distance - this.travelY) * follow;
+    }
+    const travelHeading = travel > 0.001 ? dx / distance : 0;
+    const heading = pose ? Math.cos(pose.angle) : travelHeading;
+    // Vertical movement and near-vertical aim preserve the last readable side.
+    if (Math.abs(heading) > 0.24) this.facing = Math.sign(heading);
+    this.form.scale.x = size * this.facing;
+    this.pace +=
+      (Math.min(1, travel / Math.max(dt * (scuttles ? 60 : 42), 0.01)) - this.pace) * follow;
+
+    let intention = 0;
+    if (pose) {
+      this.aim = pose.angle;
+      const t = (time - pose.start) / Math.max(0.01, pose.duration);
+      intention = pose.strike
+        ? smoothRange(0, 0.2, t) * (1 - smoothRange(0.24, 1, t))
+        : -smoothRange(0, 0.78, t);
+    }
+    // Preserve the loaded joints when a strike replaces its warning in a frame.
+    this.action += (intention - this.action) * (1 - Math.exp(-dt * (pose?.strike ? 35 : 21)));
     const recoil = this.flash / 0.12;
-    this.form.position.set(
-      (drift + reachX - 3 * recoil * this.facing * this.motion) * size,
-      (reachY - lift) * size,
-    );
-    this.form.rotation = sway * 0.034 + reachX * 0.012;
-    this.form.scale.set(
-      this.facing * size * (1 - breath * 0.006 + crouch),
-      size * (1 + breath * 0.014 - crouch),
-    );
-    this.shadow.alpha = 1 - Math.min(0.3, lift * 0.035);
+    this.form.tint = this.flash > 0 ? 0xedc6b4 : 0xffffff;
+    if (this.skin) {
+      const wasFirstHalf = this.step < 0.5;
+      const length = (scuttles ? 24 : 30) * unit * size;
+      this.step = (this.step + travel / length) % 1;
+      if (steps && wasFirstHalf !== this.step < 0.5) {
+        this.footfall = 0.13;
+        this.footfallSide = this.step < 0.5 ? 1 : -1;
+      }
+      const aimX = 0.4 + 0.6 * Math.abs(Math.cos(this.aim));
+      const aimY = Math.sin(this.aim);
+      const angle = this.action;
+      const air = this.gait === 'wing' || this.gait === 'float';
+      const breath = Math.sin(time * 2.7 + id * 0.49);
+      const direction = this.facing * this.travelX;
+      const flex = Math.sin(this.step * Math.PI * 2);
+      const ready = Math.min(0, angle);
+      const thrust = Math.max(0, angle);
+      const reach = this.charge ? 12 : this.ranged ? 3.5 : 8;
+      const coreX = (reach * thrust + 5 * ready) * aimX + direction * this.pace * 1.2;
+      const coreY = (Math.abs(ready) * (scuttles ? 2 : 4) - thrust + aimY * angle * 3) * unit;
+      this.skin.moveJoint(
+        CORE,
+        (coreX - recoil * 3.7) * unit,
+        coreY - breath * 0.5,
+        (angle * (this.ranged ? 0.07 : 0.14) - recoil * 0.115) * aimX,
+      );
+      if (steps) {
+        const phase = (this.step + 0.5) % 1;
+        const width = (scuttles ? 4.4 : 5.8) * unit * this.pace;
+        const clearance = (scuttles ? 2.8 : 3.4) * unit * this.pace;
+        const rear = stepOffset(this.step) * width;
+        const front = stepOffset(phase) * width;
+        this.skin.moveJoint(
+          REAR_FOOT,
+          direction * rear,
+          this.travelY * rear * 0.65 - clearance * stepLift(this.step),
+        );
+        this.skin.moveJoint(
+          FRONT_FOOT,
+          direction * front,
+          this.travelY * front * 0.65 - clearance * stepLift(phase),
+        );
+      }
+
+      let leadX = angle * aimX * (this.ranged ? 5 : 9);
+      let leadY = aimY * angle * 6;
+      let leadAngle = angle * (this.ranged ? -0.26 : 0.27);
+      let followX = -angle * 2;
+      let followY = recoil * 1.5;
+      let followAngle = -angle * 0.18;
+      if (this.gait === 'wing') {
+        const wingbeat = Math.sin(time * 9 + id) * (0.13 + this.pace * 0.055);
+        leadAngle += wingbeat;
+        followAngle -= wingbeat * 0.8;
+        followY -= Math.abs(wingbeat) * 4;
+      } else if (this.gait === 'slither' || this.gait === 'float') {
+        const wave = this.gait === 'float' ? breath : flex * this.pace;
+        followX += wave * 2.5;
+        followAngle += wave * 0.085;
+        followY -= wave * 1.5;
+      } else if (scuttles) {
+        leadX += direction * flex * this.pace * 2.5;
+        followX -= direction * flex * this.pace * 2.2;
+        leadY -= thrust * 2.5;
+      } else {
+        leadAngle += flex * this.pace * 0.065;
+        followAngle -= flex * this.pace * 0.065;
+      }
+      this.skin.moveJoint(LEADING_LIMB, leadX * unit, leadY * unit, leadAngle);
+      this.skin.moveJoint(TRAILING_LIMB, followX * unit, followY * unit, followAngle);
+      this.skin.commitPose();
+      this.form.y = air ? -(2.8 + breath * 1.65) * size : 0;
+      this.shadow.alpha = 1 - Math.min(0.18, Math.abs(this.form.y) * 0.035);
+    } else if (this.motion && this.gait === 'still') {
+      this.form.rotation = -this.facing * recoil * 0.045;
+    }
+
     this.motionMarks.visible = this.footfall > 0 || this.flash > 0;
     if (!this.motionMarks.visible) return;
     this.motionMarks.clear();
     if (this.footfall > 0) {
-      const spread = (1 - this.footfall / 0.13) * 9 * size;
-      this.motionMarks.ellipse(-this.facing * (12 + spread), 4, 3 + spread, 1.7).fill({
-        color: 0xa99b84,
-        alpha: this.footfall * 2,
-      });
+      const spread = (1 - this.footfall / 0.13) * 8 * size;
+      this.motionMarks
+        .ellipse(this.facing * this.footfallSide * (7 + spread), 4, 3 + spread, 1.7)
+        .fill({
+          color: 0xa99b84,
+          alpha: this.footfall * 2,
+        });
     }
     if (this.flash > 0) {
       const x = this.facing * (9 + (1 - recoil) * 12) * size;

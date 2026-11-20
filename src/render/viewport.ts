@@ -4,7 +4,7 @@ export function combatFraming(width: number, height: number, compact: boolean) {
   const dock = landscape ? 120 : 0;
   const scale = compact
     ? Math.max(1, Math.min(1.2, (landscape ? height : width) / 360))
-    : Math.max(1.25, Math.min(1.6, height / 560));
+    : Math.max(1.05, Math.min(1.35, height / 690));
   return {
     scale,
     x: (width - dock) / 2,

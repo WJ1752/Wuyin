@@ -16,7 +16,7 @@ export function onboardingTasks(save: SaveData) {
     {
       id: 'clear',
       title: '完成第一场秘境',
-      detail: '靠近敌人自动攻击，走出预警，拾取紫色进度球后击败首领。',
+      detail: '点敌集火，拖动移动。躲开预警，收集紫色进度球后击败首领。',
       done: clearedStage > 0 || save.clears > 0,
       canPrepare: false,
       panel: 'expedition',

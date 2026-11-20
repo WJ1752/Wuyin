@@ -4,6 +4,8 @@ import { RARITY_COLORS, SLOTS } from '../core/types';
 import { SKILLS } from './skillTrees';
 import { LEGENDARIES } from './legendaries';
 import { SETS } from './sets';
+import { CLASSES } from './classes';
+import { CLASS_HAND_EQUIPMENT, EQUIPMENT_PREFIX, isHandSlot } from './equipment';
 
 export interface VisualLayer {
   path: string;
@@ -499,13 +501,13 @@ export const SET_VISUALS: Record<string, EquipmentVisual> = Object.fromEntries(
 );
 
 const ORDINARY_SERIES = {
-  common: ['旅人', 'tumble'],
-  uncommon: ['守望', 'thick_skin'],
-  rare: ['暮色', 'night_hunt'],
-  epic: ['幽影', 'shadow_step'],
-  legendary: ['圣遗', 'archon'],
-  set: ['契约', 'prodigy'],
-  primal: ['永恒', 'overwhelming_essence'],
+  common: [EQUIPMENT_PREFIX.common, 'tumble'],
+  uncommon: [EQUIPMENT_PREFIX.uncommon, 'thick_skin'],
+  rare: [EQUIPMENT_PREFIX.rare, 'night_hunt'],
+  epic: [EQUIPMENT_PREFIX.epic, 'shadow_step'],
+  legendary: [EQUIPMENT_PREFIX.legendary, 'archon'],
+  set: [EQUIPMENT_PREFIX.set, 'prodigy'],
+  primal: [EQUIPMENT_PREFIX.primal, 'overwhelming_essence'],
 } as const;
 
 export const ORDINARY_VISUALS: Record<string, EquipmentVisual> = Object.fromEntries(
@@ -517,12 +519,24 @@ export const ORDINARY_VISUALS: Record<string, EquipmentVisual> = Object.fromEntr
   ),
 );
 
+const CLASS_HAND_VISUALS: Record<string, EquipmentVisual> = Object.fromEntries(
+  CLASSES.flatMap(({ id, color }) =>
+    Object.entries(CLASS_HAND_EQUIPMENT[id]).map(([slot, { shape, motif }]) => {
+      const key = `${id}:${slot}`;
+      return [key, gearVisual(`class-hand:${key}`, shape, motif, color)];
+    }),
+  ),
+);
+
 /** Stable, shared index for generated world-drop art and runtime rendering. */
 export const EQUIPMENT_DROP_CATALOG = [
-  ...Object.values(ORDINARY_VISUALS),
-  ...Object.values(SET_VISUALS),
-  ...Object.values(LEGENDARY_VISUALS),
-].sort((a, b) => (a.key < b.key ? -1 : a.key > b.key ? 1 : 0));
+  ...[
+    ...Object.values(ORDINARY_VISUALS),
+    ...Object.values(SET_VISUALS),
+    ...Object.values(LEGENDARY_VISUALS),
+  ].sort((a, b) => (a.key < b.key ? -1 : a.key > b.key ? 1 : 0)),
+  ...Object.values(CLASS_HAND_VISUALS),
+];
 export const EQUIPMENT_DROP_INDEX = new Map(
   EQUIPMENT_DROP_CATALOG.map((visual, index) => [visual.key, index]),
 );
@@ -534,13 +548,17 @@ export const EQUIPMENT_ATLAS = {
 };
 
 export type ItemVisualIdentity = Pick<Item, 'slot'> &
-  Partial<Pick<Item, 'name' | 'rarity' | 'legendaryId' | 'setId'>>;
+  Partial<Pick<Item, 'name' | 'rarity' | 'legendaryId' | 'setId' | 'classId'>>;
 
 export function getItemVisual(item: ItemVisualIdentity): EquipmentVisual {
   if (item.legendaryId && LEGENDARY_VISUALS[item.legendaryId])
     return LEGENDARY_VISUALS[item.legendaryId];
   if (item.setId && SET_VISUALS[`${item.setId}:${item.slot}`])
     return SET_VISUALS[`${item.setId}:${item.slot}`];
+  if (item.classId && isHandSlot(item.slot)) {
+    const handVisual = CLASS_HAND_VISUALS[`${item.classId}:${item.slot}`];
+    if (handVisual) return handVisual;
+  }
   const name = item.name?.replace(/^【太古】/, '') ?? '';
   const series =
     Object.values(ORDINARY_SERIES).find(([prefix]) => name.startsWith(prefix)) ??

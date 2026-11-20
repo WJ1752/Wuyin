@@ -19,6 +19,21 @@ test('combat framing cannot reveal the blank space beyond the terrain at a map e
   assert.equal(boundCamera(690, 1800, 900), 900);
 });
 
+test('a slow visible frame advances the solo clock using bounded collision steps', () => {
+  const engine = controls();
+  const steps: number[] = [];
+  engine.app = { ticker: { elapsedMS: 140, FPS: 7 } };
+  engine.updateCamera = () => {};
+  engine.update = (delta: number) => steps.push(delta);
+  engine.tick();
+  assert.ok(steps.every((delta) => delta > 0 && delta <= 1 / 30));
+  assert.ok(Math.abs(steps.reduce((sum, delta) => sum + delta, 0) - 0.14) < 1e-8);
+  engine.setPaused(true);
+  const count = steps.length;
+  engine.tick();
+  assert.equal(steps.length, count);
+});
+
 test('touch dragging reaches full movement at the floating thumb radius and releases cleanly', () => {
   const engine = controls();
   engine.onPointerDown({
@@ -145,4 +160,46 @@ test('custom physical keys replace defaults and release movement after key-up', 
   assert.equal(engine.keys.size, 0);
   press('j', 'KeyJ');
   assert.deepEqual(casts, ['hunting_arrow']);
+});
+
+test('a tap picks an enemy in canvas coordinates, while dragging preserves that choice', () => {
+  const engine = controls();
+  const canvas = { getBoundingClientRect: () => ({ left: 20, top: 40, width: 400, height: 200 }) };
+  engine.app = { canvas, screen: { width: 800, height: 400 } };
+  engine.world.toLocal = (point: { x: number; y: number }) => point;
+  engine.enemies = [{ id: 7, radius: 14, hp: 8, view: { x: 100, y: 100 } }];
+  const pointer = {
+    button: 0,
+    isPrimary: true,
+    pointerId: 2,
+    clientX: 70,
+    clientY: 83,
+    target: canvas,
+  };
+  engine.onPointerDown(pointer);
+  engine.onPointerUp({ ...pointer, type: 'pointerup' });
+  assert.equal(engine.focusId, 7);
+  engine.onPointerDown(pointer);
+  engine.onPointerMove({ ...pointer, clientX: 162 });
+  engine.onPointerUp({ ...pointer, type: 'pointerup', clientX: 162 });
+  assert.equal(engine.focusId, 7);
+  const empty = { ...pointer, clientX: 162 };
+  engine.onPointerDown(empty);
+  engine.onPointerUp({ ...empty, type: 'pointerup' });
+  assert.equal(engine.focusId, undefined);
+});
+
+test('a manual cast buffered at the end of its cooldown fires once and is cancelled on pause', () => {
+  const { engine } = buildHarness('tal_rasha');
+  engine.cooldowns.meteor = 0.12;
+  const before = engine.report.casts;
+  engine.cast('meteor');
+  assert.equal(engine.report.casts, before);
+  engine.updateActor(0.13);
+  engine.updateActor(0.02);
+  assert.equal(engine.report.casts, before + 1);
+  engine.cooldowns.meteor = 0.12;
+  engine.cast('meteor');
+  engine.setPaused(true);
+  assert.equal(engine.bufferedSkill, undefined);
 });

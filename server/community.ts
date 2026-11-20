@@ -12,6 +12,7 @@ import type {
 } from '../src/core/types';
 import { CLASSES } from '../src/data/classes';
 import { SETS } from '../src/data/sets';
+import { equipmentName } from '../src/data/equipment';
 
 const TTL_MS = 45000;
 const activities: LobbyActivity[] = [
@@ -63,11 +64,12 @@ export function registerCommunity(
       isSelf: row.user_id === viewerId,
       equipment: Object.values(save.equipment)
         .filter((item): item is Item => !!item)
-        .map(({ slot, name, rarity, level, setId, legendaryId }) => ({
+        .map(({ slot, name, rarity, level, classId, setId, legendaryId }) => ({
           slot,
-          name,
+          name: equipmentName({ slot, name, rarity, classId, setId, legendaryId }),
           rarity,
           level,
+          classId,
           setId,
           legendaryId,
         })),

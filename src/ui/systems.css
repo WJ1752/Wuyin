@@ -1779,32 +1779,6 @@
 .character-dossier .sigil-ring {
   z-index: -1;
 }
-.systems-modal.item-comparison-tooltip {
-  position: fixed;
-  z-index: 10000;
-  width: min(330px, calc(100vw - 32px));
-  max-height: calc(100dvh - 32px);
-  overflow: hidden;
-  pointer-events: none;
-  padding: 12px;
-  box-shadow:
-    0 16px 40px #000b,
-    inset 0 0 0 3px #0a0e0ee6;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  gap: 10px;
-}
-.systems-modal.item-comparison-tooltip.has-comparison {
-  width: min(650px, calc(100vw - 32px));
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-}
-.item-comparison-tooltip .item-detail {
-  margin-top: 7px;
-  padding: 15px;
-}
-.item-comparison-tooltip .item-lore {
-  font-size: 10px !important;
-}
 .run-leaderboard {
   display: grid;
   gap: 13px;
@@ -1950,12 +1924,6 @@
     grid-template-columns: repeat(4, minmax(0, 1fr));
   }
 }
-@media (hover: none) {
-  .systems-modal.item-comparison-tooltip {
-    display: none;
-  }
-}
-
 .cloud-account-panel {
   display: grid;
   gap: 12px;
@@ -2351,13 +2319,6 @@
   font-family: Georgia, var(--serif);
   color: #bf9b5f;
 }
-.systems-modal.item-comparison-tooltip {
-  color: #d7d0bb;
-  background: #091113f5;
-  border: 1px solid #a68a5077;
-  border-radius: 0;
-}
-
 @media (max-width: 1100px) {
   .app .system-screen.panel-character .item-grid,
   .app .system-screen.panel-stash .item-grid {

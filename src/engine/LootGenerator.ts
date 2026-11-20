@@ -1,9 +1,10 @@
 import type { ClassId, Item, Rarity, Slot } from '../core/types';
-import { SLOTS, SLOT_NAMES } from '../core/types';
+import { SLOTS } from '../core/types';
 import { AFFIXES } from '../data/affixes';
 import { CLASSES } from '../data/classes';
 import { SETS } from '../data/sets';
 import { LEGENDARIES } from '../data/legendaries';
+import { equipmentName, isHandSlot } from '../data/equipment';
 import {
   getLootProfile,
   SMART_LOOT_CURRENT_CLASS_CHANCE,
@@ -127,11 +128,17 @@ export function generateLoot(classId: ClassId, level: number, options: LootOptio
           10000,
     });
   }
-  return {
-    id: globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${random().toString(36).slice(2)}`,
-    name: `${primal ? '【太古】' : ''}${set ? `${set.name} · ${SLOT_NAMES[slot]}` : (legendary?.name ?? `${{ common: '旅人', uncommon: '守望', rare: '暮色', epic: '幽影', legendary: '圣遗', set: '契约', primal: '永恒' }[rarity]}${SLOT_NAMES[slot]}`)}`,
+  const identity = {
     slot,
     rarity,
+    ...(isHandSlot(slot) && !set && !legendary ? { classId } : {}),
+    setId: set?.id,
+    legendaryId: legendary?.id,
+  };
+  return {
+    ...identity,
+    id: globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${random().toString(36).slice(2)}`,
+    name: equipmentName(identity),
     level,
     attack: Math.round(
       (slot === 'weapon' ? 30 : slot === 'offhand' ? 12 : slot === 'jewelry' ? 8 : 0) *
@@ -140,8 +147,6 @@ export function generateLoot(classId: ClassId, level: number, options: LootOptio
     ),
     armor: Math.round((slot === 'weapon' || slot === 'jewelry' ? 0 : 18) * scale * quality),
     affixes,
-    setId: set?.id,
-    legendaryId: legendary?.id,
     power: legendary
       ? primal
         ? legendary.max

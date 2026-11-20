@@ -1,7 +1,7 @@
 import { SeededRandom } from '../core/random';
 import type { StageDef } from '../core/types';
 import { getCampaignChapter } from '../data/campaign';
-import { RIFT_PYLON_SITES, THEMES } from '../data/stages';
+import { RIFT_PYLON_SITES, RIFT_RULES, THEMES } from '../data/stages';
 import { Container, Graphics, Sprite, type Texture, TilingSprite } from 'pixi.js';
 import { pixelEllipse, pixelLine, pixelPolygon, pixelStamp, snapPixel } from './PixelArt';
 import { getAtlasTexture, preloadAtlas } from './TextureAtlas';
@@ -51,12 +51,17 @@ export function createPropSprite(id: string, size: number) {
   return sprite;
 }
 
-const groundSheets = ['forest', 'crypt', 'ember', 'void'];
+const groundSheets = ['forest', 'crypt', 'ember', 'void'] as const;
+const arenaId = (theme: number) => `arena:${theme}`;
 const groundId = (theme: number, material: number) => `ground:${theme}:${material}`;
 
-export function preloadMapTextures(theme: number) {
-  return preloadAtlas(
-    `assets/maps/painted/${groundSheets[theme]}-floors.webp`,
+export async function preloadMapTextures(theme: number) {
+  const directory = `assets/maps/painted/${groundSheets[theme]}`;
+  const arena = arenaId(theme);
+  await preloadAtlas(`${directory}-arena.webp`, 1, 1, [[arena, 0, 0]], 'nearest');
+  if (getAtlasTexture(arena)) return;
+  await preloadAtlas(
+    `${directory}-floors.webp`,
     3,
     1,
     [0, 1, 2].map((material) => [groundId(theme, material), material, 0]),
@@ -102,10 +107,20 @@ function landmarkMotes(x: number, y: number, color: number, cadence: number) {
 }
 
 export function createMap({ theme, level }: StageDef, size = RIFT_MAP_SIZE): Container {
+  const scene = new Container();
   const root = new Container();
   const palette = PALETTES[theme % PALETTES.length];
-  const ground = new Graphics().rect(-size / 2, -size / 2, size, size).fill(palette[0]);
-  root.addChild(ground);
+  const arena = getAtlasTexture(arenaId(theme));
+  let ground: Graphics | undefined;
+  if (arena) {
+    const backdrop = new Sprite(arena);
+    backdrop.anchor.set(0.5);
+    backdrop.width = backdrop.height = size;
+    scene.addChild(backdrop);
+  } else {
+    ground = new Graphics().rect(-size / 2, -size / 2, size, size).fill(palette[0]);
+    root.addChild(ground);
+  }
   // A stage owns its scenery seed. Drawing the map never consumes combat RNG.
   const rng = new SeededRandom(`rift-map-${level}`);
   const rand = rng.next;
@@ -144,8 +159,11 @@ export function createMap({ theme, level }: StageDef, size = RIFT_MAP_SIZE): Con
         );
     }
   };
-  const texture = getAtlasTexture(groundId(theme, material));
-  const pathTexture = getAtlasTexture(groundId(theme, (material + 1 + (chapter % 2)) % 3));
+  // The authored arena includes its own roads and material boundaries. The
+  // repeating surfaces and road mask are only needed on the fallback route.
+  const texture = !arena && getAtlasTexture(groundId(theme, material));
+  const pathTexture =
+    !arena && getAtlasTexture(groundId(theme, (material + 1 + (chapter % 2)) % 3));
   if (texture && pathTexture) {
     const terrain = tileGround(texture, size);
     terrain.tint = terrainInk[theme];
@@ -171,7 +189,7 @@ export function createMap({ theme, level }: StageDef, size = RIFT_MAP_SIZE): Con
     mask.fill(0xffffff);
     root.addChild(road, mask);
     road.mask = mask;
-  } else {
+  } else if (ground) {
     // Quiet paving gives combat a readable centre; irregular islands break the tile grid.
     for (let y = -size / 2; y < size / 2; y += 48) {
       for (let x = -size / 2; x < size / 2; x += 64) {
@@ -204,35 +222,51 @@ export function createMap({ theme, level }: StageDef, size = RIFT_MAP_SIZE): Con
     }
   }
   if (getCampaignChapter(level)) {
-    const seal = createPropSprite('chapterSeal', 162);
+    const seal = createPropSprite('chapterSeal', arena ? 132 : 162);
     if (seal) {
       seal.anchor.set(0.5, 0.52);
-      seal.alpha = 0.68;
+      seal.alpha = arena ? 0.33 : 0.68;
       root.addChild(seal);
     }
   }
 
-  const landmark = createPropSprite(landmarks[theme], theme === 2 || theme === 3 ? 208 : 178);
+  // Worn boundary stones make the playable edge visible before the camera reaches it.
+  const boundary = new Graphics();
+  const edge = RIFT_RULES.arenaLimit;
+  for (let offset = -edge; offset <= edge; offset += 60) {
+    for (const side of [-1, 1]) {
+      const stone = Math.abs(offset / 60) % 3 === 0 ? 22 : 12;
+      boundary
+        .rect(offset - stone / 2, side * (edge + 11), stone, 6)
+        .rect(side * (edge + 11), offset - stone / 2, 6, stone);
+    }
+  }
+  boundary.fill({ color: palette[3], alpha: arena ? 0.48 : 0.64 });
+  root.addChild(boundary);
+
+  const landmark = createPropSprite(landmarks[theme], arena ? 162 : theme >= 2 ? 208 : 178);
   const landmarkX = across ? -410 : 420;
   const landmarkY = across ? 280 : -250;
-  for (let i = 0; i < 84; i++) {
+  const sceneryAttempts = arena ? 20 : 84;
+  for (let i = 0; i < sceneryAttempts; i++) {
     const x = snapPixel((rand() - 0.5) * (size - 80));
     const y = snapPixel((rand() - 0.5) * (size - 80));
     if (
-      Math.hypot(x, y) < 180 ||
-      onPath(x, y) ||
+      Math.hypot(x, y) < (arena ? 380 : 180) ||
+      (!arena && onPath(x, y)) ||
       (landmark && Math.hypot(x - landmarkX, y - landmarkY) < 135) ||
       RIFT_PYLON_SITES.some((site) => Math.hypot(x - site.x, y - site.y) < 96)
     )
       continue;
     const propId = theme === 0 && i % 4 === 0 ? 'mushrooms' : themeProps[theme % themeProps.length];
-    const prop = createPropSprite(propId, scenerySizes[propId]);
+    const prop = createPropSprite(propId, scenerySizes[propId] * (arena ? 0.72 : 1));
     if (prop) {
       prop.tint = sceneryLight[theme];
       prop.position.set(x, y + 4);
       root.addChild(prop);
       continue;
     }
+    if (arena) continue;
     const g = new Graphics();
     g.position.set(x, y);
     pixelEllipse(g, 0, 5, 30, 10, 0x101921, 3, 0.55);
@@ -308,10 +342,14 @@ export function createMap({ theme, level }: StageDef, size = RIFT_MAP_SIZE): Con
   if (landmark) {
     landmark.position.set(landmarkX, landmarkY);
     root.addChild(landmark);
-    if (!globalThis.matchMedia?.('(prefers-reduced-motion: reduce)').matches)
-      root.addChild(
-        landmarkMotes(landmarkX, landmarkY - 44, landmarkInks[theme], theme === 2 ? 1.45 : 0.55),
-      );
   }
-  return root;
+  // Cache the masked terrain fallback. The authored ground is already a shared
+  // single texture and can stay at its native pixel density.
+  if (!arena) root.cacheAsTexture({ resolution: 0.75, antialias: false, scaleMode: 'nearest' });
+  scene.addChild(root);
+  if (landmark && !globalThis.matchMedia?.('(prefers-reduced-motion: reduce)').matches)
+    scene.addChild(
+      landmarkMotes(landmarkX, landmarkY - 44, landmarkInks[theme], theme === 2 ? 1.45 : 0.55),
+    );
+  return scene;
 }

@@ -7,7 +7,7 @@ import {
   skillLearningStatus,
 } from '../data/progression';
 import { formatBigNumber } from '../core/format';
-import { CHARACTER_ART } from '../render/CharacterTextures';
+import { getCharacterArt } from '../data/characterArt';
 import { MAX_INVENTORY, useGameStore } from '../state/gameStore';
 import { useCloudStore } from '../state/cloudStore';
 import { onboardingTasks } from './OnboardingChecklist';
@@ -121,7 +121,7 @@ export function TownHud({
           aria-label="账号与角色"
         >
           <span className="traveler-avatar">
-            <img src={CHARACTER_ART[save.classId].src} alt="" />
+            <img src={getCharacterArt(save.classId, save.equipment).src} alt="" />
           </span>
           <span className="traveler-identity">
             <small>

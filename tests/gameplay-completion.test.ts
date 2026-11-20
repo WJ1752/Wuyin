@@ -50,6 +50,35 @@ function dummy(state: any, hp = 1e20, elite = false, minion = false) {
   );
 }
 
+test('a lit chapter ward awards team progress once and allows leaving and returning', () => {
+  const { engine, state } = start({ ...lab('stormcaller'), stage: 8 });
+  state.updateEnvironment(2);
+  state.x = 250;
+  state.updateEnvironment(2);
+  assert.equal(state.snapshot().objective.progress, 2);
+  state.x = 0;
+  state.updateEnvironment(3);
+  state.updateEnvironment(2);
+  assert.equal(state.progress, 30);
+  assert.equal(state.snapshot().objective.progress, 5);
+  assert.equal(state.objectiveComplete(), true);
+  engine.destroy();
+});
+
+test('the ember shortcut counts evaded eruptions and respects the official trial rules', () => {
+  const { engine, state } = start({ ...lab('stormcaller'), stage: 16 });
+  for (let i = 0; i < 90; i++) state.updateEnvironment(0.1);
+  assert.equal(state.objectiveProgress, 0);
+  while (!state.hazards.length) state.updateEnvironment(0.1);
+  state.x += 210;
+  for (let i = 0; i < 13; i++) state.updateEnvironment(0.1);
+  assert.equal(state.objectiveProgress, 1);
+  engine.destroy();
+  const trial = start({ ...lab('stormcaller'), stage: 150 });
+  assert.equal(trial.state.snapshot().objective, undefined);
+  trial.engine.destroy();
+});
+
 test('combat reports actual life lost without overkill and preserve incoming damage sources', () => {
   const { engine, state } = start({ ...lab('stormcaller'), training: true });
   const enemy = dummy(state, 7);

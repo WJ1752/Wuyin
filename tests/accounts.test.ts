@@ -5,13 +5,17 @@ import {
   MAX_INVENTORY,
   MAX_STASH,
   createCombatConfig,
+  emptySlotItems,
   newAccountSave,
   newSave,
   snapshotAccounts,
   useGameStore,
   validateAccountSave,
+  validateSave,
 } from '../src/state/gameStore';
 import { generateLoot } from '../src/engine/LootGenerator';
+import { LEGENDARIES } from '../src/data/legendaries';
+import { SETS } from '../src/data/sets';
 import type { AccountSave } from '../src/core/types';
 
 function reset(data = newAccountSave()) {
@@ -81,6 +85,51 @@ test('new account placeholder is replaced by first character and legacy saves mi
   const migrated = validateAccountSave(historical).accounts[0].characters[0].save;
   assert.equal(migrated.characterCreated, true);
   assert.equal(migrated.storyChapter, 'arrival');
+});
+
+test('ordinary hands keep their profession through storage and old named gear migrates by ID', () => {
+  const save = newSave('sorcerer');
+  const foreign = generateLoot('ranger', 15, { slot: 'weapon', rarity: 'rare' });
+  const legacy = { ...foreign, id: 'legacy-weapon', name: '暮色武器', classId: undefined };
+  const own = generateLoot('sorcerer', 1, { slot: 'offhand', rarity: 'common' });
+  const staff = generateLoot('sorcerer', 30, { legendaryId: 'grand_vizier', primal: true });
+  const helm = generateLoot('sorcerer', 40, { setId: 'tal_rasha', slot: 'head' });
+  staff.name = '【太古】大维兹尔之杖';
+  helm.name = '塔拉夏元素 · 头盔';
+  save.inventory = [foreign, legacy, own];
+  save.pendingLoot = [staff];
+  assert.throws(
+    () => validateSave({ ...save, inventory: [], equipment: { weapon: foreign } }),
+    /职业/,
+  );
+  assert.doesNotThrow(() =>
+    validateSave({ ...save, inventory: [], equipment: { weapon: legacy } }),
+  );
+
+  const oldAccount = newAccountSave(save);
+  oldAccount.accounts[0].stash = [helm];
+  const migrated = validateAccountSave(oldAccount);
+  assert.equal(migrated.accounts[0].stash[0].id, helm.id);
+  assert.equal(migrated.accounts[0].stash[0].setId, helm.setId);
+  assert.ok(
+    migrated.accounts[0].stash[0].name.startsWith(SETS.find((set) => set.id === helm.setId)!.name),
+  );
+  assert.deepEqual(migrated.accounts[0].characters[0].save.pendingLoot?.[0], {
+    ...JSON.parse(JSON.stringify(staff)),
+    name: `【太古】${LEGENDARIES.find((item) => item.id === staff.legendaryId)!.name}`,
+  });
+  reset(migrated);
+  assert.deepEqual(
+    emptySlotItems(useGameStore.getState().save).map(({ id }) => id),
+    [legacy.id, own.id],
+  );
+  useGameStore.getState().equip(foreign.id);
+  assert.equal(useGameStore.getState().save.equipment.weapon, undefined);
+  assert.match(useGameStore.getState().notice, /其他职业/);
+  useGameStore.getState().equip(legacy.id);
+  assert.equal(useGameStore.getState().save.equipment.weapon?.id, legacy.id);
+  useGameStore.getState().equip(own.id);
+  assert.equal(useGameStore.getState().save.equipment.offhand?.id, own.id);
 });
 
 test('deleting the final character creates an empty onboarding placeholder and preserves stash', () => {

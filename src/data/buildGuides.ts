@@ -29,7 +29,7 @@ export const BUILD_GUIDES: Record<string, BuildGuide> = {
     style: '移动旋风',
     range: '近距，沿怪群边缘旋转',
     rotation: '旋风 AUTO，持续移动覆盖怪群；手动冲锋后4秒内四道龙卷全部追踪敌人。',
-    tip: '成型续能依赖布尔凯索；未取得该传奇时仍需基础攻击回怒。',
+    tip: '双誓山刃可在旋风斩期间回怒。取得前仍需用基础攻击补充。',
   },
   earthbreaker: {
     style: '血球叠锤',

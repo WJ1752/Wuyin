@@ -15,6 +15,7 @@ const view = () => {
   for (const key of [
     'clear',
     'rect',
+    'ellipse',
     'fill',
     'stroke',
     'destroy',

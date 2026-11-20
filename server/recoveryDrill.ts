@@ -14,7 +14,7 @@ export async function verifyRecovery(source: string) {
     database = new DatabaseSync(target);
     if (database.prepare('PRAGMA quick_check').get()?.quick_check !== 'ok')
       throw new Error('恢复副本完整性检查失败。');
-    if (![1, 2, 3].includes(Number(database.prepare('PRAGMA user_version').get()?.user_version)))
+    if (![1, 2, 3, 4].includes(Number(database.prepare('PRAGMA user_version').get()?.user_version)))
       throw new Error('备份结构版本无效。');
     const counts = database
       .prepare(

@@ -214,7 +214,7 @@ docker compose logs --tail=100 app proxy
 - 合作最终帧在响应前将每名成员的结果写入 `coop_results`。`GET /api/coop/results` 查询本人未领取记录，`POST /api/coop/claim` 传 `{runId,revision}`，在同一数据库事务内调用与客户端相同的成长结算函数、写角色档、推进 revision 并标记领取。重复领取返回现有档案，不再发奖；旧 revision 写档被拒绝。领取事实不来自可导入的客户端字段，服务重启仍可从远征面板补领。房间本身仍是单进程短期状态，未完成的战斗不会在服务重启后继续。
 - 注册会显示一次随机恢复码，服务器只保存 SHA-256 摘要。设置可验证当前密码后改密、轮换恢复码、撤销其它设备会话或永久注销；恢复码找回会轮换密码和恢复码并撤销旧会话。注销会级联删除云档、奖励和成绩，界面要求输入账号名和密码确认；操作前本机保留备份。
 - `POST /api/trials/start` 只接收 `{setId}`，采用实验室的固定官方装备、当前统一技能预算、150 层和固定种子。服务器使用同一个 `GameEngine` 的无画面模式，以实际经过时间按 30Hz 推进；客户端只发送已学习技能的操作。`/api/trials/exchange` 拒绝客户端快照和成绩。默认最多 4 场，可用 `MAX_OFFICIAL_TRIALS` 在 1–16 间配置；低内存主机建议设置 2。`GET /api/trials/state` 可恢复仍在运行的试炼；断线超过 30 秒中止。
-- 官方试炼不读取开荒装备，也不发放金币、装备或成长。成功成绩只由服务器写入 `verified_runs`，`GET /api/leaderboard/verified?classId=ranger` 读取每账号每流派的最佳条目并取职业前 20 条。原 `/api/leaderboard` 继续作为社区云档榜，两者明确区分；普通开荒、导入存档和房主模拟合作不具备竞技反作弊认证。
+- 官方试炼使用统一配装，服务器将成功成绩写入 `verified_runs`。数据库结构 4 为旧成绩标记初版规则，新成绩写入第 2 版。`GET /api/leaderboard/verified?classId=ranger` 默认返回当前规则的职业前 20，每账号每流派保留最佳成绩。追加 `&ruleset=1` 可读历史榜，游戏内也能切换。社区云档榜保留在 `/api/leaderboard`，用于普通开荒成绩交流。
 - `/api/feedback` 接收 `{category,message}`，类别为 `bug`、`suggestion`、`runtime` 或 `network`；消息限制 5–2000 字、每 IP 每分钟 5 次，保留 30 天，最多 10000 条。不要上传密码、恢复码或完整存档。账号页与设置页共用反馈表单。
 - `/api/operations/metrics` 仅在配置至少 32 字符的 `OPERATIONS_TOKEN` 后开放，使用 `Authorization: Bearer <token>` 读取进程启动时间、请求数、5xx、平均/最大耗时、事件循环延迟、RSS/堆内存、远征/领取/试炼事件、待领数和反馈数；不返回存档或账号身份。默认不开放。日志对密码、恢复码、Cookie 和 Authorization 脱敏；超过 2 秒的 API 记录无请求体的慢请求日志。应由运维平台监控非 2xx、备份失败、持续 5xx 和内存；仓库中的指标本身不会代替通知服务。
 

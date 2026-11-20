@@ -123,7 +123,10 @@ const SFX: Record<string, Voice[]> = {
     { frequency: 311, end: 196, duration: 0.26, type: 'triangle', gain: 0.22, delay: 0.1 },
   ],
   elite: [{ frequency: 165, end: 126, duration: 0.55, type: 'triangle', gain: 0.2, attack: 0.09 }],
-  impact: [{ frequency: 176, end: 85, duration: 0.12, noise: true, gain: 0.21 }],
+  impact: [
+    { frequency: 920, end: 340, duration: 0.061, noise: true, gain: 0.19, attack: 0.002 },
+    { frequency: 145, end: 65, duration: 0.12, type: 'triangle', gain: 0.15, delay: 0.012 },
+  ],
   fall: [{ frequency: 320, end: 92, duration: 0.17, noise: true, gain: 0.14 }],
   ward: [
     { frequency: 248, end: 201, duration: 0.31, type: 'triangle', gain: 0.2 },
@@ -133,7 +136,10 @@ const SFX: Record<string, Voice[]> = {
     { frequency: 240, end: 495, duration: 0.65, noise: true, gain: 0.2, attack: 0.16 },
     { frequency: 147, end: 220, duration: 0.6, type: 'triangle', gain: 0.19, attack: 0.18 },
   ],
-  footstep: [{ frequency: 430, end: 252, duration: 0.085, noise: true, gain: 0.1 }],
+  footstep: [
+    { frequency: 135, end: 68, duration: 0.063, type: 'triangle', gain: 0.09, attack: 0.004 },
+    { frequency: 680, end: 290, duration: 0.09, noise: true, gain: 0.12, delay: 0.012 },
+  ],
   folio: [{ frequency: 1110, end: 630, duration: 0.18, noise: true, gain: 0.13 }],
   click: [{ frequency: 420, end: 240, duration: 0.06, type: 'triangle', gain: 0.16 }],
   victory: [392, 493.88, 587.33, 783.99].map((frequency, i) => ({
@@ -205,10 +211,14 @@ const elementalCue: Record<Element, string> = {
   poison: 'poison',
 };
 
-export function skillSound(skill: Pick<SkillDef, 'effect' | 'element' | 'kind'>) {
+export function skillSound(
+  skill: Pick<SkillDef, 'effect' | 'element' | 'kind'>,
+  weaponId?: string,
+) {
   if (skill.kind === 'movement') return 'dash';
   if (skill.kind === 'defense') return 'ward';
   const effect = ALIASES[skill.effect] ?? skill.effect;
+  if (weaponId === 'dawn' && effect === 'bow') return 'crossbow';
   return Object.hasOwn(SFX, effect) ? effect : elementalCue[skill.element];
 }
 
@@ -236,7 +246,7 @@ const score = {
 } as const;
 const frequencyFor = (midi: number) => 440 * 2 ** ((midi - 69) / 12);
 const cooldowns: Record<string, number> = {
-  footstep: 0.31,
+  footstep: 0.16,
   warning: 0.34,
   impact: 0.13,
   fall: 0.18,
@@ -245,6 +255,17 @@ const cooldowns: Record<string, number> = {
   hurt: 0.17,
   hit: 0.17,
 };
+const physicalCues = new Set([
+  'bow',
+  'crossbow',
+  'slash',
+  'hammer',
+  'impact',
+  'footstep',
+  'fall',
+  'hit',
+  'bone',
+]);
 export class SynthAudio {
   private context?: AudioContext;
   private master?: GainNode;
@@ -312,14 +333,15 @@ export class SynthAudio {
     const now = this.context.currentTime;
     if (now - (this.last.get(key) ?? -100) < (cooldowns[key] ?? 0.085)) return;
     this.last.set(key, now);
-    voices.forEach((v) => this.voice(v, false));
+    const tuning = physicalCues.has(key) ? 2 ** (((Math.random() - 0.5) * 1.8) / 12) : 1;
+    voices.forEach((v) => this.voice(v, false, tuning));
   }
   setTrack(track: Track) {
     if (this.track === track) return;
     this.track = track;
     this.step = 0;
   }
-  private voice(v: Voice, music: boolean) {
+  private voice(v: Voice, music: boolean, tuning = 1) {
     const ctx = this.context;
     if (!ctx || !this.master) return;
     const relativeVolume = music ? this.musicVolume : this.sfxVolume;
@@ -328,7 +350,7 @@ export class SynthAudio {
     const env = ctx.createGain();
     const filter = ctx.createBiquadFilter();
     filter.type = v.noise ? 'bandpass' : 'lowpass';
-    filter.frequency.value = v.noise ? v.frequency : music ? 1300 : 6500;
+    filter.frequency.value = v.noise ? v.frequency * tuning : music ? 1300 : 6500;
     filter.Q.value = v.noise ? 0.7 : 0.3;
     env.gain.setValueAtTime(0.0001, t);
     env.gain.exponentialRampToValueAtTime(
@@ -344,13 +366,13 @@ export class SynthAudio {
       const grain = ctx.createBufferSource();
       grain.buffer = this.noiseBuffer;
       source = grain;
-      if (v.end) filter.frequency.exponentialRampToValueAtTime(v.end, t + v.duration);
+      if (v.end) filter.frequency.exponentialRampToValueAtTime(v.end * tuning, t + v.duration);
       grain.start(t, Math.random() * Math.max(0, this.noiseBuffer.duration - v.duration - 0.03));
     } else {
       source = ctx.createOscillator();
       source.type = v.type ?? 'sine';
-      source.frequency.setValueAtTime(v.frequency, t);
-      if (v.end) source.frequency.exponentialRampToValueAtTime(v.end, t + v.duration);
+      source.frequency.setValueAtTime(v.frequency * tuning, t);
+      if (v.end) source.frequency.exponentialRampToValueAtTime(v.end * tuning, t + v.duration);
       source.start(t);
     }
     source.connect(filter);

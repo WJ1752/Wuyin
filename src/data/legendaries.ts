@@ -16,7 +16,7 @@ function legend(
 export const LEGENDARIES: LegendaryDef[] = [
   legend(
     'oraviel',
-    '奥拉维尔之手',
+    '听刃手套',
     'hands',
     3,
     4,
@@ -34,16 +34,16 @@ export const LEGENDARIES: LegendaryDef[] = [
   ),
   legend(
     'olda',
-    '奥尔达之裤',
+    '血辙绑腿',
     'legs',
     0.18,
     0.25,
     '拾取血球独立增伤18%～25%，持续15秒，最多10层。',
-    '染进皮革的血永远不会干涸。行军者说，奥尔达仍在等待下一场战争。',
+    '染进皮革的血永远不会干涸。运尸车走过雾关时，辙印总有一段会变红。',
   ),
   legend(
     'sacred_walkers',
-    '神圣行者战靴',
+    '踏灰战靴',
     'feet',
     1,
     1.5,
@@ -52,25 +52,25 @@ export const LEGENDARIES: LegendaryDef[] = [
   ),
   legend(
     'aquila',
-    '天鹰胸甲',
+    '巡崖羽甲',
     'chest',
     0.7,
     1,
     '资源高于75%时受到伤害降低50%，独立伤害提高70%～100%。',
-    '鹰王将一片羽毛赠给不肯跪下的守卫。羽毛化为钢铁，守卫化为传说。',
+    '崖壁守夜人把铁羽一枚枚编入甲片，直到寒风也找不到缝隙。',
   ),
   legend(
     'elements',
-    '元素嘉年华之戒',
+    '六候轮戒',
     'jewelry',
     1.2,
     1.6,
     '所有元素伤害提高120%～160%；对精英和首领独立伤害额外提高80%。',
-    '四位大法师同赴盛宴，没有一人归来。宴桌上只留下这枚仍在轮转的指环。',
+    '观星家将六种天候刻成一轮。在雾中转动指环，仍能分辨每一道刻痕。',
   ),
   legend(
     'zodiac',
-    '黄道黑曜石之戒',
+    '回钟墨晶戒',
     'jewelry',
     0.7,
     1,
@@ -88,7 +88,7 @@ export const LEGENDARIES: LegendaryDef[] = [
   ),
   legend(
     'nemesis',
-    '复仇者护腕',
+    '叩敌护腕',
     'hands',
     0.75,
     1,
@@ -97,17 +97,17 @@ export const LEGENDARIES: LegendaryDef[] = [
   ),
   legend(
     'squirt',
-    '斯奎特的项链',
+    '静灯项坠',
     'jewelry',
     1.1,
     1.5,
     '拥有护盾或近3秒未损失生命时，独立伤害提高110%～150%。',
-    '小贩把它当作廉价首饰出售，却从不告诉客人上一位主人的下场。',
+    '守灯人在坠心刻了一个小窗，灯光尚未熄灭时，它会轻轻发烫。',
   ),
 
   legend(
     'dawn',
-    '黎明手弩',
+    '晨哨手弩',
     'weapon',
     0.5,
     0.65,
@@ -117,17 +117,17 @@ export const LEGENDARIES: LegendaryDef[] = [
   ),
   legend(
     'yang',
-    '沃杨强弓',
+    '檐雨强弓',
     'weapon',
     0.7,
     1,
     '连弩射击期间每秒自动释放箭雨，造成原伤害的70%～100%。',
-    '沃杨从不抬头望天。他的箭会替他带回天空的消息。',
+    '守檐人无需探出城头，箭落瓦片的声响会告诉他雾的位置。',
     'ranger',
   ),
   legend(
     'dead_mans',
-    '亡者遗物箭袋',
+    '绝哨箭袋',
     'offhand',
     0.7,
     1,
@@ -167,7 +167,7 @@ export const LEGENDARIES: LegendaryDef[] = [
   ),
   legend(
     'windforce',
-    '风之力',
+    '断崖鸣弓',
     'weapon',
     0.2,
     0.3,
@@ -178,7 +178,7 @@ export const LEGENDARIES: LegendaryDef[] = [
 
   legend(
     'bulkathos',
-    '布尔凯索双刀',
+    '双誓山刃',
     'weapon',
     0.3,
     0.45,
@@ -198,7 +198,7 @@ export const LEGENDARIES: LegendaryDef[] = [
   ),
   legend(
     'lamentation',
-    '哀恸之刃',
+    '泣铁战刃',
     'weapon',
     1,
     1.5,
@@ -208,7 +208,7 @@ export const LEGENDARIES: LegendaryDef[] = [
   ),
   legend(
     'gavel',
-    '毁灭木槌',
+    '裂碑副槌',
     'offhand',
     1.2,
     1.8,
@@ -218,7 +218,7 @@ export const LEGENDARIES: LegendaryDef[] = [
   ),
   legend(
     'pride',
-    '卡修斯之傲',
+    '立誓旧盾',
     'offhand',
     0.7,
     1,
@@ -228,7 +228,7 @@ export const LEGENDARIES: LegendaryDef[] = [
   ),
   legend(
     'oathkeeper',
-    '守誓者',
+    '刻誓长刃',
     'weapon',
     1.5,
     2,
@@ -249,7 +249,7 @@ export const LEGENDARIES: LegendaryDef[] = [
 
   legend(
     'grand_vizier',
-    '大维兹尔之杖',
+    '暮星秤杖',
     'weapon',
     1.8,
     2.5,
@@ -259,7 +259,7 @@ export const LEGENDARIES: LegendaryDef[] = [
   ),
   legend(
     'endless_depths',
-    '无尽深渊法珠',
+    '沉潮法珠',
     'offhand',
     0.7,
     1,
@@ -269,7 +269,7 @@ export const LEGENDARIES: LegendaryDef[] = [
   ),
   legend(
     'deathwish',
-    '绝命法杖',
+    '禁式引杖',
     'weapon',
     1.5,
     2,
@@ -279,7 +279,7 @@ export const LEGENDARIES: LegendaryDef[] = [
   ),
   legend(
     'etched_sigil',
-    '蚀刻符印',
+    '折空符珠',
     'offhand',
     0.65,
     1,
@@ -309,7 +309,7 @@ export const LEGENDARIES: LegendaryDef[] = [
   ),
   legend(
     'cosmic_strand',
-    '星界之丝',
+    '缝星法珠',
     'offhand',
     0.35,
     0.5,
@@ -320,17 +320,17 @@ export const LEGENDARIES: LegendaryDef[] = [
 
   legend(
     'jesseth',
-    '杰瑟斯骨镰',
+    '归名骨镰',
     'weapon',
     1.8,
     2.4,
     '骸骨自动锁定敌人，召唤物独立伤害提高180%～240%。',
-    '杰瑟斯死前承诺军团永不解散。他是个信守承诺的人。',
+    '归名人把每一位失踪哨兵的名字刻在镰背，每次点名都有人答应。',
     'necromancer',
   ),
   legend(
     'corroded_fang',
-    '腐蚀之牙',
+    '酸雨龙牙镰',
     'weapon',
     0.7,
     1,
@@ -340,7 +340,7 @@ export const LEGENDARIES: LegendaryDef[] = [
   ),
   legend(
     'reilena',
-    '莱莲娜影镰',
+    '付影冥镰',
     'weapon',
     0.0035,
     0.005,
@@ -350,12 +350,12 @@ export const LEGENDARIES: LegendaryDef[] = [
   ),
   legend(
     'nayr',
-    '奈尔的黑镰',
+    '饥岁黑镰',
     'weapon',
     1,
     1.5,
     '毒素独立伤害提高100%～150%，剧毒持续时间延长2秒。',
-    '奈尔曾用它收割麦田。饥荒降临后，他收割了别的东西。',
+    '田间人把它挂在空仓门口。起雾时，镰下总会多一把麦穗形的灰。',
     'necromancer',
   ),
   legend(
@@ -370,7 +370,7 @@ export const LEGENDARIES: LegendaryDef[] = [
   ),
   legend(
     'bloodtide',
-    '血潮之灯',
+    '逆潮提灯',
     'offhand',
     0.12,
     0.2,
@@ -380,7 +380,7 @@ export const LEGENDARIES: LegendaryDef[] = [
   ),
   legend(
     'funerary_pick',
-    '丧葬之镰',
+    '空冢长镰',
     'weapon',
     1.4,
     2,
@@ -391,7 +391,7 @@ export const LEGENDARIES: LegendaryDef[] = [
 
   legend(
     'greenstone',
-    '格林斯通刀扇匕首',
+    '绿炉裂影匕',
     'weapon',
     1.2,
     1.8,

@@ -20,7 +20,7 @@ const lines: Record<PrologueChapter, { title: string; text: readonly string[] }>
     title: '守灯人的约定',
     text: [
       '岚指着铜铃上的刻痕。“沿旧路设有守望灯。只要有一盏灯重新亮起，失散的人就能听见回营的信号。”',
-      '从营地选择「出征」并独自进入第 1 层。靠近敌人自动攻击，躲开预警并收集紫色进度球，击败守门者后回营。',
+      '从营地选择「出征」，独自进入第 1 层。点敌集火，拖动移动。离开预警范围，收集紫色进度球，再击败守门者。',
     ],
   },
   'first-clear': {
@@ -84,9 +84,9 @@ export function StoryGuide({
           ))}
         </div>
         <footer>
-          {typeof chapter === 'string' && (
+          {typeof chapter === 'string' && !readingReport && (
             <button className="ghost-button" data-sound="folio" onClick={onSkip}>
-              跳过剧情
+              先进入营地
             </button>
           )}
           <button className="gold-button" data-sound="folio" onClick={onAdvance}>

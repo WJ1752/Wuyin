@@ -8,6 +8,7 @@ import type { FastifyInstance } from 'fastify';
 import { createApp, type AppOptions } from '../server/app';
 import { newAccountSave, newSave } from '../src/state/saveData';
 import { generateLoot } from '../src/engine/LootGenerator';
+import { SETS } from '../src/data/sets';
 import type { RunRecord, SaveData } from '../src/core/types';
 
 const origin = 'http://localhost:5173';
@@ -460,7 +461,10 @@ test('public profession boards rank the best cloud record per account and omit p
     response.json().entries.map((entry: { rank: number }) => entry.rank),
     [1, 2],
   );
-  assert.equal(response.json().entries[1].setName, '风暴召唤者');
+  assert.equal(
+    response.json().entries[1].setName,
+    SETS.find((set) => set.id === 'stormcaller')!.name,
+  );
   assert.equal(response.json().entries[0].setName, null);
   for (const secret of [
     firstUser.id,

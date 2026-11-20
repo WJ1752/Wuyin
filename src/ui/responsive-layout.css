@@ -42,9 +42,6 @@
 .app.layout-compact.character-entry input {
   font-size: 16px;
 }
-.mobile-item-close {
-  display: none;
-}
 .mobile-lab-notice {
   display: grid;
   gap: 8px;
@@ -56,32 +53,6 @@
 .mobile-lab-notice button {
   min-height: 44px;
   text-decoration: underline;
-}
-.app.layout-compact .mobile-item-inspector {
-  position: fixed;
-  inset: auto 8px max(8px, env(safe-area-inset-bottom));
-  z-index: 200;
-  max-height: min(65dvh, 520px);
-  overflow: auto;
-  padding: 12px;
-  background: #102236;
-  border: 2px solid #70a2a7;
-  box-shadow: 0 -16px 40px #030b17c9;
-}
-.app.layout-compact .mobile-item-inspector > .item-detail {
-  position: static;
-  max-height: none;
-  margin: 0;
-  border: 0;
-  box-shadow: none;
-}
-.app.layout-compact .mobile-item-inspector .mobile-item-close {
-  display: flex;
-  justify-self: end;
-  margin-left: auto;
-  position: sticky;
-  top: 0;
-  z-index: 2;
 }
 .app.layout-compact .system-screen.panel-skills .mobile-skill-tree .skill-tier-label {
   flex-direction: row;
@@ -326,16 +297,6 @@
 .app.layout-compact .system-screen .service-card > .pixel-ui-icon {
   width: 28px !important;
   height: 28px !important;
-}
-.app.layout-compact .system-screen.panel-skills .mobile-skill-detail.mobile-open {
-  position: fixed;
-  inset: auto max(8px, env(safe-area-inset-right)) max(8px, env(safe-area-inset-bottom))
-    max(8px, env(safe-area-inset-left));
-  max-height: min(54dvh, 420px);
-  margin: 0;
-  z-index: 200;
-  border: 2px solid #70a2a7;
-  box-shadow: 0 -16px 40px #030b17c9;
 }
 .app.layout-compact .coop-backdrop .coop-panel.coop-panel {
   height: var(--app-height, 100dvh);

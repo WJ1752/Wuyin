@@ -92,6 +92,7 @@ export const RIFT_PYLON_SITES = [
 ] as const;
 
 export const RIFT_RULES = {
+  arenaLimit: 780,
   timeLimit: 300,
   waveInterval: 5,
   normalProgressMin: 0.8,
@@ -138,3 +139,5 @@ export const PYLONS = [
     duration: 25,
   },
 ];
+/** Only scores recorded under the same official combat rules compete with one another. */
+export const CURRENT_TRIAL_RULESET = 2;
