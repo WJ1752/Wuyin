@@ -118,6 +118,8 @@ export interface Item {
   power: number;
   gem?: { id: string; level: number };
   reforged?: number;
+  /** Prevent this item from being consumed by salvage, extraction or crafting. */
+  locked?: boolean;
 }
 export interface GemDef {
   id: string;

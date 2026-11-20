@@ -132,6 +132,70 @@ test('ordinary hands keep their profession through storage and old named gear mi
   assert.equal(useGameStore.getState().save.equipment.offhand?.id, own.id);
 });
 
+test('backpack batches preserve locked gear and settle only the selected eligible items once', () => {
+  const save = newSave('ranger');
+  const state = useGameStore.getState;
+  const gemmed = generateLoot('ranger', 20, { slot: 'head', rarity: 'common' });
+  gemmed.gem = { id: 'ruby', level: 2 };
+  const locked = generateLoot('ranger', 20, { slot: 'weapon', rarity: 'epic' });
+  const relic = generateLoot('ranger', 20, { legendaryId: 'dawn' });
+  const untouched = generateLoot('ranger', 20, { slot: 'head', rarity: 'common' });
+  save.inventory.push(gemmed, locked, relic, untouched);
+  reset(newAccountSave(save));
+  state().setItemLocked(locked.id, true);
+  state().setItemLocked(relic.id, true);
+  state().salvage(locked.id);
+  state().extract(relic.id);
+  const selected = [gemmed.id, locked.id, relic.id, gemmed.id];
+  state().salvageSelected(selected);
+  state().salvageSelected(selected);
+  assert.deepEqual(
+    state().save.inventory.map((item) => item.id),
+    [locked.id, relic.id, untouched.id],
+  );
+  assert.equal(state().save.crystals, save.crystals + 4);
+  assert.equal(state().save.gems.ruby[1], save.gems.ruby[1] + 1);
+  assert.ok(!state().save.extracted.includes('dawn'));
+  state().equip(locked.id);
+  assert.equal(state().save.equipment.weapon?.locked, true);
+  state().unequip('weapon');
+  state().depositItems([locked.id, relic.id, locked.id]);
+  assert.equal(account().stash.length, 2);
+  reset(validateAccountSave(snapshotAccounts(state())));
+  state().withdrawItem(locked.id);
+  state().salvageLow();
+  assert.equal(state().save.inventory[0]?.locked, true);
+  state().setItemLocked(locked.id, false);
+  state().salvageSelected([locked.id]);
+  assert.equal(state().save.inventory.length, 0);
+  assert.equal(account().stash[0].locked, true);
+  state().setItemLocked(relic.id, false);
+  assert.equal(account().stash[0].locked, undefined);
+});
+
+test('bulk deposit checks the whole selection against available warehouse space', () => {
+  const data = newAccountSave();
+  const filler = generateLoot('ranger', 1, { slot: 'head', rarity: 'common' });
+  data.accounts[0].stash = Array.from({ length: MAX_STASH - 1 }, (_, index) => ({
+    ...filler,
+    id: `batch-stash-${index}`,
+  }));
+  const bag = data.accounts[0].characters[0].save.inventory;
+  bag.push({ ...filler, id: 'batch-a' }, { ...filler, id: 'batch-b' });
+  reset(data);
+  const state = useGameStore.getState;
+  state().depositItems(['batch-a', 'batch-b']);
+  assert.equal(state().save.inventory.length, 2);
+  assert.equal(account().stash.length, MAX_STASH - 1);
+  state().depositItems(['batch-a', 'batch-a']);
+  state().depositItems(['batch-a']);
+  assert.deepEqual(
+    state().save.inventory.map((item) => item.id),
+    ['batch-b'],
+  );
+  assert.equal(account().stash.length, MAX_STASH);
+});
+
 test('deleting the final character creates an empty onboarding placeholder and preserves stash', () => {
   const data = newAccountSave();
   const item = generateLoot('ranger', 10);

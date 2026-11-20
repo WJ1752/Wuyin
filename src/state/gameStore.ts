@@ -411,6 +411,8 @@ interface GameState {
   switchCharacter: (id: string) => void;
   deleteCharacter: (id: string) => void;
   depositItem: (id: string) => void;
+  depositItems: (ids: readonly string[]) => void;
+  setItemLocked: (id: string, locked: boolean) => void;
   withdrawItem: (id: string) => void;
   claimPendingLoot: () => void;
   setInCombat: (value: boolean) => void;
@@ -436,6 +438,7 @@ interface GameState {
   gamble: (slot: Slot, count: number) => void;
   salvage: (id: string) => void;
   salvageLow: () => void;
+  salvageSelected: (ids: readonly string[]) => void;
   craftRare: (baseId: string, donorId: string, affixId: string) => void;
   setCampFocus: (focus: 'crystals' | 'shards') => void;
   trackLegendary: (id: string) => void;
@@ -498,6 +501,7 @@ function isPrecious(item: Item) {
   return ['legendary', 'set', 'primal'].includes(item.rarity);
 }
 export function bulkSalvageable(item: Item, keepRareAffix?: string) {
+  if (item.locked) return false;
   if (item.rarity === 'rare')
     return item.affixes.length <= 2 && !item.affixes.some((a) => a.id === keepRareAffix);
   return !isPrecious(item);
@@ -523,11 +527,21 @@ export function craftRecipe(base: Item, donor: Item, affixId: string) {
     value: Number(Math.min(def.max * 1.3, def.max * 0.8 + affix.value * 0.5).toFixed(4)),
   };
 }
-function materialValue(item: Item) {
+export function materialValue(item: Item) {
   return isPrecious(item) ? { crystals: 12, souls: 2 } : { crystals: 4, souls: 0 };
 }
 function refundGem(save: SaveData, item: Item) {
   if (item.gem) save.gems[item.gem.id][item.gem.level - 1]++;
+}
+function salvageItems(save: SaveData, items: Item[]) {
+  const consumed = new Set(items.map((item) => item.id));
+  for (const item of items) {
+    const materials = materialValue(item);
+    save.crystals += materials.crystals;
+    save.souls += materials.souls;
+    refundGem(save, item);
+  }
+  save.inventory = save.inventory.filter((item) => !consumed.has(item.id));
 }
 export const PENDING_LOOT_NOTICE = '请先在装备面板领取保留战利品，再继续远征。';
 
@@ -1121,19 +1135,47 @@ export const useGameStore = create<GameState>((set, get) => {
       void get().persist();
     },
     depositItem(id) {
-      if (!requireCamp()) return;
+      get().depositItems([id]);
+    },
+    depositItems(ids) {
+      if (!ids.length || !requireCamp()) return;
       const data = snapshotAccounts(get());
       const account = data.accounts.find((account) => account.id === data.activeAccountId)!;
       const save = activeSave(data);
-      const index = save.inventory.findIndex((item) => item.id === id);
-      if (index < 0) return;
-      if (account.stash.length >= MAX_STASH) {
-        set({ notice: `账号仓库已满（${MAX_STASH} 件），请先取出装备。` });
+      const selected = new Set(ids);
+      const items = save.inventory.filter((item) => selected.has(item.id));
+      if (!items.length) return;
+      const free = MAX_STASH - account.stash.length;
+      if (items.length > free) {
+        set({
+          notice: free
+            ? `共享仓库只剩 ${free} 格，请减少所选装备。`
+            : `账号仓库已满（${MAX_STASH} 件），请先取出装备。`,
+        });
         return;
       }
-      const [item] = save.inventory.splice(index, 1);
-      account.stash.push(item);
-      set({ accounts: data.accounts, save, notice: `已将 ${item.name} 存入账号共享仓库。` });
+      save.inventory = save.inventory.filter((item) => !selected.has(item.id));
+      account.stash.push(...items);
+      const label = items.length === 1 ? items[0].name : `${items.length} 件装备`;
+      set({ accounts: data.accounts, save, notice: `已将 ${label} 存入账号共享仓库。` });
+      void get().persist();
+    },
+    setItemLocked(id, locked) {
+      if (!requireCamp()) return;
+      const data = snapshotAccounts(get());
+      const account = data.accounts.find((entry) => entry.id === data.activeAccountId)!;
+      const save = activeSave(data);
+      const item = [...save.inventory, ...Object.values(save.equipment), ...account.stash].find(
+        (entry) => entry?.id === id,
+      );
+      if (!item || !!item.locked === locked) return;
+      if (locked) item.locked = true;
+      else delete item.locked;
+      set({
+        accounts: data.accounts,
+        save,
+        notice: `${locked ? '已锁定' : '已解锁'}「${item.name}」`,
+      });
       void get().persist();
     },
     withdrawItem(id) {
@@ -1361,6 +1403,7 @@ export const useGameStore = create<GameState>((set, get) => {
       mutate((s) => {
         const item = s.inventory.find((i) => i.id === id);
         if (!item?.legendaryId) return '仅传奇散件可以萃取。';
+        if (item.locked) return '装备已锁定，请先解锁。';
         if (s.extracted.includes(item.legendaryId)) return '此特效已永久解锁。';
         if (s.crystals < 15 || s.souls < 1) return '萃取需要 15 结晶与 1 遗忘之魂。';
         s.crystals -= 15;
@@ -1437,11 +1480,9 @@ export const useGameStore = create<GameState>((set, get) => {
       mutate((s) => {
         const item = s.inventory.find((i) => i.id === id);
         if (!item) return;
+        if (item.locked) return '装备已锁定，请先解锁。';
         const m = materialValue(item);
-        s.crystals += m.crystals;
-        s.souls += m.souls;
-        refundGem(s, item);
-        s.inventory = s.inventory.filter((i) => i.id !== id);
+        salvageItems(s, [item]);
         return `已分解，获得 ${m.crystals} 结晶、${m.souls} 遗忘之魂`;
       });
     },
@@ -1482,14 +1523,16 @@ export const useGameStore = create<GameState>((set, get) => {
       });
     },
     salvageLow() {
+      get().salvageSelected(get().save.inventory.map((item) => item.id));
+    },
+    salvageSelected(ids) {
+      if (!ids.length || get().inCombat) return;
+      const selected = new Set(ids);
       mutate((s) => {
-        const items = s.inventory.filter((item) => bulkSalvageable(item, s.keepRareAffix));
-        for (const i of items) {
-          const m = materialValue(i);
-          s.crystals += m.crystals;
-          refundGem(s, i);
-        }
-        s.inventory = s.inventory.filter((i) => !items.includes(i));
+        const items = s.inventory.filter(
+          (item) => selected.has(item.id) && bulkSalvageable(item, s.keepRareAffix),
+        );
+        salvageItems(s, items);
         return `已分解 ${items.length} 件史诗及以下装备`;
       });
     },

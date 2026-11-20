@@ -151,6 +151,7 @@ export function validateSave(input: unknown, historical = false): SaveData {
     )
       return false;
     if (v.reforged !== undefined && !bounded(v.reforged, 0, 3, true)) return false;
+    if (v.locked !== undefined && typeof v.locked !== 'boolean') return false;
     return true;
   };
   if (

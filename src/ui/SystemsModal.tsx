@@ -1,5 +1,10 @@
-import { useEffect, useRef, useState } from 'react';
-import type { CSSProperties, MouseEvent, ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import type {
+  CSSProperties,
+  KeyboardEvent as ReactKeyboardEvent,
+  MouseEvent,
+  ReactNode,
+} from 'react';
 import {
   X,
   Sword,
@@ -74,6 +79,7 @@ import { useDialog } from './useDialog';
 import { apiRequest } from '../state/cloudStore';
 import { PlayerSettings } from './PlayerSettings';
 import { FeedbackForm } from './CloudAccountPanel';
+import { BackpackOrganizer, useBackpackSelection } from './BackpackOrganizer';
 
 const icons: Record<Slot, typeof Sword> = {
   weapon: Sword,
@@ -154,6 +160,13 @@ function SalvageButton({ item, onSalvaged }: { item: Item; onSalvaged?: () => vo
   const [confirm, setConfirm] = useState(false);
   const precious = ['legendary', 'set', 'primal'].includes(item.rarity);
   const needsConfirmation = !bulkSalvageable(item, keep);
+  useEffect(() => setConfirm(false), [item.id, item.locked]);
+  if (item.locked)
+    return (
+      <p className="muted salvage-action">
+        <Lock size={14} /> 已锁定，解锁后可分解
+      </p>
+    );
   return (
     <div className="salvage-action">
       {confirm && <p className="negative">将永久分解「{item.name}」，宝石无损返还。</p>}
@@ -191,17 +204,19 @@ function ExtractButton({ item }: { item: Item }) {
       <div className="button-row">
         <button
           className="gold-button"
-          disabled={collected || !affordable}
+          disabled={!!item.locked || collected || !affordable}
           data-sound={confirm ? 'arcane' : undefined}
           onClick={() => (confirm ? extract(item.id) : setConfirm(true))}
         >
-          {collected
-            ? '已收录'
-            : !affordable
-              ? '材料不足 · 15 结晶 + 1 魂'
-              : confirm
-                ? '确认消耗装备并萃取'
-                : '萃取 · 15 结晶 + 1 魂'}
+          {item.locked
+            ? '已锁定，解锁后可萃取'
+            : collected
+              ? '已收录'
+              : !affordable
+                ? '材料不足 · 15 结晶 + 1 魂'
+                : confirm
+                  ? '确认消耗装备并萃取'
+                  : '萃取 · 15 结晶 + 1 魂'}
         </button>
         {confirm && (
           <button className="ghost-button" onClick={() => setConfirm(false)}>
@@ -216,10 +231,18 @@ function ItemTile({
   item,
   onClick,
   selected = false,
+  marked,
+  hint,
+  hintKind,
+  tabIndex,
 }: {
   item: Item;
   onClick?: (event: MouseEvent<HTMLButtonElement>) => void;
   selected?: boolean;
+  marked?: boolean;
+  hint?: string;
+  hintKind?: 'empty-slot' | 'class';
+  tabIndex?: number;
 }) {
   const className = `item-card rarity-${item.rarity}${selected ? ' selected' : ''}`;
   const style = { '--rarity': RARITY_COLORS[item.rarity] } as CSSProperties;
@@ -228,11 +251,26 @@ function ItemTile({
       <span className="item-tile-art">
         <ItemIcon item={item} size={42} />
         {item.gem && <i style={{ color: GEMS.find((g) => g.id === item.gem!.id)?.color }}>◆</i>}
+        {item.locked && (
+          <span className="pack-lock-mark" aria-label="已锁定">
+            <Lock size={12} />
+          </span>
+        )}
+        {marked !== undefined && (
+          <span className="pack-mark-box" aria-hidden="true">
+            {marked && <Check size={14} />}
+          </span>
+        )}
       </span>
       <span className="item-tile-name">{equipmentName(item)}</span>
       <span className="item-tile-meta">
         {RARITY_NAMES[item.rarity]} · {item.level} 级
       </span>
+      {hint && (
+        <small className="pack-item-hint" data-kind={hintKind}>
+          {hint}
+        </small>
+      )}
     </>
   );
   return onClick ? (
@@ -240,7 +278,9 @@ function ItemTile({
       className={className}
       style={style}
       onClick={onClick}
-      aria-pressed={selected}
+      aria-pressed={marked ?? selected}
+      data-marked={marked}
+      tabIndex={tabIndex}
       data-item-id={item.id}
     >
       {content}
@@ -258,10 +298,12 @@ function ItemDetails({
   item,
   compare,
   children,
+  overview,
 }: {
   item: Item;
   compare?: Item;
   children?: ReactNode;
+  overview?: ReactNode;
 }) {
   const l = LEGENDARIES.find((l) => l.id === item.legendaryId);
   const set = SETS.find((t) => t.id === item.setId);
@@ -284,6 +326,7 @@ function ItemDetails({
         <ItemIcon item={item} size={54} />
         <h3>{equipmentName(item)}</h3>
       </div>
+      {overview}
       {item.rarity === 'rare' && (
         <p className="muted">
           铁匠底材 · {item.affixes.length}/4 词条
@@ -434,6 +477,10 @@ function EquipmentInspector({
   children?: ReactNode;
 }) {
   const closeButton = useRef<HTMLButtonElement>(null);
+  const setItemLocked = useGameStore((state) => state.setItemLocked);
+  const lockAvailable = useGameStore(
+    (state) => !state.inCombat && !state.labBackup && !state.cloudTransition,
+  );
   const id = item?.id;
   useEffect(() => {
     if (!id) return;
@@ -447,6 +494,18 @@ function EquipmentInspector({
     <aside className="equipment-inspector" aria-label="装备详情">
       <header className="equipment-inspector-heading">
         <h3>{item ? '装备详情' : '装备鉴览'}</h3>
+        {item && lockAvailable && (
+          <button
+            className="pack-item-lock ghost-button"
+            aria-label={item.locked ? '解锁装备' : '锁定装备'}
+            aria-pressed={!!item.locked}
+            title="锁定可防止分解、萃取和用作刻印素材"
+            onClick={() => setItemLocked(item.id, !item.locked)}
+          >
+            <Lock size={15} />
+            {item.locked ? '已锁定' : '锁定'}
+          </button>
+        )}
         {item && (
           <button
             ref={closeButton}
@@ -467,7 +526,7 @@ function EquipmentInspector({
               </p>
             )}
             {compare && <p className="equipment-reference">对比 · {equipmentName(compare)}</p>}
-            <ItemDetails item={item} compare={compare} />
+            <ItemDetails item={item} compare={compare} overview={<SwapSummary item={item} />} />
             {compare && (
               <details className="equipment-comparison">
                 <summary>
@@ -535,13 +594,153 @@ const percentStats = [
   'bonusDamage',
   'luck',
 ];
+function SwapSummary({ item }: { item: Item }) {
+  const save = useGameStore((state) => state.save);
+  const old = save.equipment[item.slot];
+  if (old?.id === item.id || (itemClass(item) && itemClass(item) !== save.classId)) return null;
+  const equipment = { ...save.equipment, [item.slot]: item };
+  const before = computeStats(save);
+  const after = computeStats({ ...save, equipment });
+  const changes = (Object.keys(statNames) as (keyof Stats)[]).flatMap((key) => {
+    const from = before[key];
+    const to = after[key];
+    if (typeof from !== 'number' || typeof to !== 'number') return [];
+    const percentage = percentStats.includes(key);
+    const format = (value: number) =>
+      Number(
+        (value * (percentage ? 100 : 1)).toFixed(key === 'attackSpeed' ? 2 : percentage ? 1 : 0),
+      );
+    const difference = Number((format(to) - format(from)).toFixed(2));
+    if (!difference) return [];
+    return [
+      {
+        label: key === 'attack' ? '攻击' : statNames[key],
+        value: `${format(from)}${percentage ? '%' : ''} → ${format(to)}${percentage ? '%' : ''}`,
+        gain: difference > 0,
+      },
+    ];
+  });
+  const affectedSets = SETS.filter((set) => set.id === old?.setId || set.id === item.setId);
+  const bonuses = affectedSets.flatMap((set) => {
+    const pieces = Object.values(save.equipment).filter((part) => part?.setId === set.id).length;
+    const next = pieces + Number(item.setId === set.id) - Number(old?.setId === set.id);
+    return [2, 4]
+      .filter((n) => pieces >= n !== next >= n)
+      .map((n) => ({
+        label: `${set.name} · ${n} 件`,
+        value: next >= n ? '激活' : '失去',
+        gain: next >= n,
+      }));
+  });
+  const rows = [...bonuses, ...changes];
+  const rowView = (row: (typeof rows)[number]) => (
+    <div key={row.label}>
+      <span>{row.label}</span>
+      <b className={row.gain ? 'positive' : 'negative'}>{row.value}</b>
+    </div>
+  );
+  return (
+    <section className="pack-swap-summary" aria-label="穿戴后属性">
+      <strong>穿戴后</strong>
+      {rows.length ? rows.slice(0, 3).map(rowView) : <span>面板属性相同</span>}
+      {rows.length > 3 && (
+        <details>
+          <summary>其余 {rows.length - 3} 项变化</summary>
+          {rows.slice(3).map(rowView)}
+        </details>
+      )}
+    </section>
+  );
+}
+const backpackRarities = Object.keys(RARITY_NAMES) as Item['rarity'][];
+const affixNames = new Map(AFFIXES.map((affix) => [affix.id, affix.name]));
+const professionNames = new Map(CLASSES.map((hero) => [hero.id, hero.name]));
+const BACKPACK_PAGE_SIZE = 24;
+
+function BackpackPages({
+  page,
+  count,
+  position,
+  onPage,
+}: {
+  page: number;
+  count: number;
+  position: '顶部' | '底部';
+  onPage: (page: number) => void;
+}) {
+  if (count < 2) return null;
+  return (
+    <nav className="pack-pagination" aria-label={`行囊${position}分页`}>
+      <button
+        className="ghost-button"
+        aria-label="上一页"
+        title="上一页"
+        disabled={page === 1}
+        onClick={() => onPage(page - 1)}
+      >
+        <ArrowLeft size={17} />
+      </button>
+      <select
+        className="system-select"
+        aria-label="跳转到背包页"
+        value={page}
+        onChange={(event) => onPage(Number(event.target.value))}
+      >
+        {Array.from({ length: count }, (_, i) => (
+          <option key={i + 1} value={i + 1}>
+            第 {i + 1} / {count} 页
+          </option>
+        ))}
+      </select>
+      <button
+        className="ghost-button"
+        aria-label="下一页"
+        title="下一页"
+        disabled={page === count}
+        onClick={() => onPage(page + 1)}
+      >
+        <ChevronRight size={17} />
+      </button>
+    </nav>
+  );
+}
+
+function navigatePackGrid(event: ReactKeyboardEvent<HTMLDivElement>) {
+  if (event.altKey || event.ctrlKey || event.metaKey) return;
+  const cards = Array.from(
+    event.currentTarget.querySelectorAll<HTMLButtonElement>('[data-item-id]'),
+  );
+  const index = cards.indexOf(event.target as HTMLButtonElement);
+  if (index === -1) return;
+  const columns = getComputedStyle(event.currentTarget).gridTemplateColumns.split(' ').length;
+  const destinations: Record<string, number> = {
+    ArrowLeft: index - 1,
+    ArrowRight: index + 1,
+    ArrowUp: index - columns,
+    ArrowDown: index + columns,
+    Home: 0,
+    End: cards.length - 1,
+  };
+  const next = destinations[event.key];
+  if (next === undefined) return;
+  event.preventDefault();
+  cards[Math.max(0, Math.min(next, cards.length - 1))].focus();
+}
+
 function CharacterPanel({ selected, selectItem, closeItem }: EquipmentSelection) {
   const store = useGameStore();
   const { save } = store;
-  const [filter, setFilter] = useState('all');
-  const [slotFilter, setSlotFilter] = useState('all');
+  const [rarity, setRarity] = useState('all');
+  const [slotFilter, setSlotFilter] = useState<Slot | 'all'>('all');
+  const [ownership, setOwnership] = useState('all');
+  const [lockedOnly, setLockedOnly] = useState(false);
   const [search, setSearch] = useState('');
-  const [usableOnly, setUsableOnly] = useState(false);
+  const [sort, setSort] = useState('recent');
+  const [focusedId, setFocusedId] = useState('');
+  const [page, setPage] = useState(1);
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const packRef = useRef<HTMLElement>(null);
+  const mobileReturn = useRef<{ top: number; itemId: string; position: number } | null>(null);
   const [showStats, setShowStats] = useState(false);
   const [dossierOpen, setDossierOpen] = useState(
     () => !window.matchMedia('(max-width: 960px)').matches,
@@ -552,21 +751,142 @@ function CharacterPanel({ selected, selectItem, closeItem }: EquipmentSelection)
   const equipped = item && save.equipment[item.slot]?.id === item.id;
   const usable = !item || !itemClass(item) || itemClass(item) === save.classId;
   const stash = store.accounts.find((account) => account.id === store.activeAccountId)?.stash ?? [];
-  const emptyPicks = emptySlotItems(save);
-  const visibleItems = save.inventory.filter(
-    (entry) =>
-      (filter === 'all' ||
-        (filter === 'set'
-          ? !!entry.setId
-          : filter === 'legendary'
-            ? !!entry.legendaryId
-            : entry.rarity === filter)) &&
-      (slotFilter === 'all' || entry.slot === slotFilter) &&
-      (!usableOnly || !itemClass(entry) || itemClass(entry) === save.classId) &&
-      entry.name.includes(search.trim()),
+  const emptyPicks = useMemo(() => emptySlotItems(save), [save]);
+  const words = search.trim().toLocaleLowerCase();
+  const filterCount = [
+    slotFilter !== 'all',
+    rarity !== 'all',
+    ownership !== 'all',
+    lockedOnly,
+  ].filter(Boolean).length;
+  const visibleItems = useMemo(() => {
+    const terms = words.split(/\s+/).filter(Boolean);
+    const matches = save.inventory
+      .filter((entry) => {
+        if (slotFilter !== 'all' && entry.slot !== slotFilter) return false;
+        if (
+          rarity !== 'all' &&
+          entry.rarity !== rarity &&
+          !(rarity === 'set' && entry.setId) &&
+          !(rarity === 'legendary' && entry.legendaryId)
+        )
+          return false;
+        if (lockedOnly && !entry.locked) return false;
+        const profession = itemClass(entry);
+        const wearable = !profession || profession === save.classId;
+        if ((ownership === 'usable' && !wearable) || (ownership === 'other' && wearable))
+          return false;
+        if (!terms.length) return true;
+        const description = [
+          equipmentName(entry),
+          SLOT_NAMES[entry.slot],
+          RARITY_NAMES[entry.rarity],
+          profession ? professionNames.get(profession) : '通用',
+          ...entry.affixes.map(({ id }) => affixNames.get(id)),
+        ]
+          .join(' ')
+          .toLocaleLowerCase();
+        return terms.every((term) => description.includes(term));
+      })
+      .reverse();
+    if (sort === 'rarity') {
+      matches.sort(
+        (a, b) =>
+          backpackRarities.indexOf(b.rarity) - backpackRarities.indexOf(a.rarity) ||
+          b.level - a.level,
+      );
+    } else if (sort === 'level' || sort === 'attack' || sort === 'armor') {
+      matches.sort((a, b) => b[sort] - a[sort]);
+    }
+    return matches;
+  }, [save.inventory, save.classId, words, rarity, slotFilter, ownership, lockedOnly, sort]);
+  const batch = useBackpackSelection(visibleItems);
+  const pageCount = Math.max(1, Math.ceil(visibleItems.length / BACKPACK_PAGE_SIZE));
+  const currentPage = Math.min(pageCount, page);
+  const pageItems = visibleItems.slice(
+    (currentPage - 1) * BACKPACK_PAGE_SIZE,
+    currentPage * BACKPACK_PAGE_SIZE,
   );
+  const tabStop = pageItems.some((entry) => entry.id === focusedId) ? focusedId : pageItems[0]?.id;
+  const hasFilters = !!(words || filterCount);
+  function changePage(next: number, fromBottom = false) {
+    setPage(next);
+    if (item && !equipped) selectItem('');
+    if (fromBottom)
+      requestAnimationFrame(() => {
+        packRef.current?.querySelector<HTMLButtonElement>('.pack-grid [data-item-id]')?.focus();
+      });
+  }
+  const resetFilters = () => {
+    changePage(1);
+    setRarity('all');
+    setSlotFilter('all');
+    setOwnership('all');
+    setLockedOnly(false);
+    setSearch('');
+  };
+  function browseSlot(slot: Slot) {
+    resetFilters();
+    setSlotFilter(slot);
+    setOwnership('usable');
+    setFiltersOpen(true);
+    selectItem('');
+    if (window.matchMedia('(max-width: 960px)').matches) setDossierOpen(false);
+    requestAnimationFrame(() => packRef.current?.focus());
+  }
+  function openItem(id: string, button: HTMLButtonElement) {
+    if (window.matchMedia('(max-width: 1080px)').matches) {
+      mobileReturn.current = {
+        top: button.closest('.modal-body')?.scrollTop ?? 0,
+        itemId: id,
+        position: pageItems.findIndex((entry) => entry.id === id),
+      };
+    }
+    selectItem(id, button);
+  }
+  function afterItemRemoved() {
+    if (!item || useGameStore.getState().save.inventory.some((entry) => entry.id === item.id))
+      return;
+    const index = visibleItems.findIndex((entry) => entry.id === item.id);
+    const next = index >= 0 ? (visibleItems[index + 1] ?? visibleItems[index - 1]) : undefined;
+    const nextCard = () =>
+      next &&
+      packRef.current?.querySelector<HTMLButtonElement>(`[data-item-id="${CSS.escape(next.id)}"]`);
+    if (next && !window.matchMedia('(max-width: 1080px)').matches) {
+      selectItem(next.id, nextCard() ?? undefined);
+    } else {
+      closeItem();
+      requestAnimationFrame(() => (nextCard() || packRef.current)?.focus());
+    }
+  }
+  useEffect(() => {
+    const origin = mobileReturn.current;
+    if (selected || !origin) return;
+    mobileReturn.current = null;
+    const frame = requestAnimationFrame(() => {
+      const pack = packRef.current;
+      const body = pack?.closest('.modal-body');
+      if (!pack || !body) return;
+      body.scrollTop = origin.top;
+      if (origin.position < 0) return;
+      const cards = Array.from(
+        pack.querySelectorAll<HTMLButtonElement>('.pack-grid [data-item-id]'),
+      );
+      const same = cards.find((card) => card.dataset.itemId === origin.itemId);
+      (same ?? cards[Math.min(origin.position, cards.length - 1)] ?? pack).focus({
+        preventScroll: true,
+      });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [selected]);
   const hero = CLASSES.find((c) => c.id === save.classId)!;
-  const stats = computeStats(save);
+  const stats = useMemo(() => computeStats(save), [save]);
+  useEffect(() => {
+    if (!item || equipped) return;
+    const index = visibleItems.findIndex((entry) => entry.id === item.id);
+    if (index < 0) selectItem('');
+    else setPage(Math.floor(index / BACKPACK_PAGE_SIZE) + 1);
+  }, [item, equipped, visibleItems, selectItem]);
   useEffect(() => {
     const media = window.matchMedia('(max-width: 960px)');
     const sync = () => setDossierOpen(!media.matches);
@@ -602,7 +922,7 @@ function CharacterPanel({ selected, selectItem, closeItem }: EquipmentSelection)
                   setDossierOpen((value) => !value);
                 }}
               >
-                {dossierOpen ? '收起已穿戴装备和属性' : '查看已穿戴装备和属性'}
+                {dossierOpen ? '收起穿戴' : '查看穿戴'}
               </summary>
               <div
                 className="character-dossier"
@@ -622,12 +942,18 @@ function CharacterPanel({ selected, selectItem, closeItem }: EquipmentSelection)
                           ? RARITY_COLORS[save.equipment[slot]!.rarity]
                           : undefined,
                       }}
-                      onClick={(event) =>
-                        selectItem(save.equipment[slot]?.id ?? '', event.currentTarget)
-                      }
+                      onClick={(event) => {
+                        const worn = save.equipment[slot];
+                        if (worn) openItem(worn.id, event.currentTarget);
+                        else browseSlot(slot);
+                      }}
                       aria-pressed={!!selected && save.equipment[slot]?.id === selected}
                       data-item-id={save.equipment[slot]?.id}
-                      title={SLOT_NAMES[slot]}
+                      title={
+                        save.equipment[slot]
+                          ? equipmentName(save.equipment[slot]!)
+                          : `查找可穿戴的${SLOT_NAMES[slot]}`
+                      }
                     >
                       {save.equipment[slot] ? (
                         <ItemIcon item={save.equipment[slot]!} size={34} />
@@ -692,90 +1018,200 @@ function CharacterPanel({ selected, selectItem, closeItem }: EquipmentSelection)
               )}
             </details>
           </section>
-          <section>
-            <div className="section-heading">
+          <section className="pack-inventory" ref={packRef} tabIndex={-1} aria-label="行囊">
+            <div className="section-heading pack-heading">
               <h3>行囊</h3>
-              <span>
-                {save.inventory.length} / {MAX_INVENTORY} · 空余{' '}
-                {MAX_INVENTORY - save.inventory.length}
-              </span>
-            </div>
-            {emptyPicks.length > 0 && (
-              <button
-                className="gold-button"
-                data-sound="equip"
-                title="同部位优先穿戴基础攻击与护甲之和最高的一件"
-                onClick={store.equipEmptySlots}
+              <span
+                className="pack-capacity"
+                title={`空余 ${MAX_INVENTORY - save.inventory.length} 格`}
               >
-                <Shirt size={16} /> 补齐 {emptyPicks.length} 个装备空位
+                {save.inventory.length} / {MAX_INVENTORY}
+              </span>
+              <button
+                type="button"
+                className="pack-organize-toggle outline-button"
+                aria-pressed={batch.active}
+                disabled={!save.inventory.length && !batch.active}
+                onClick={() => {
+                  if (!batch.active && item) selectItem('');
+                  batch.toggleMode();
+                }}
+              >
+                {batch.active ? '完成整理' : '批量整理'}
               </button>
-            )}
-            <div className="inventory-filters">
+            </div>
+            <div className="pack-tools" onChangeCapture={() => changePage(1)}>
               <input
+                className="pack-search"
+                type="search"
                 aria-label="搜索背包装备"
-                placeholder="搜索装备名称"
+                placeholder="搜索名称、词条或职业"
                 value={search}
                 onChange={(event) => setSearch(event.target.value)}
               />
+              <button
+                type="button"
+                className="pack-filter-toggle outline-button"
+                aria-controls="pack-filters"
+                aria-expanded={filtersOpen}
+                onClick={() => setFiltersOpen(!filtersOpen)}
+              >
+                筛选{filterCount > 0 ? ` · ${filterCount}` : ''}
+              </button>
               <select
-                aria-label="筛选装备部位"
-                className="system-select"
-                value={slotFilter}
-                onChange={(event) => setSlotFilter(event.target.value)}
+                className="system-select pack-sort"
+                aria-label="背包装备排序"
+                value={sort}
+                onChange={(event) => setSort(event.target.value)}
               >
-                <option value="all">全部部位</option>
-                {SLOTS.map((slot) => (
-                  <option key={slot} value={slot}>
-                    {SLOT_NAMES[slot]}
-                  </option>
-                ))}
+                <option value="recent">最近入包</option>
+                <option value="rarity">品质优先</option>
+                <option value="level">等级优先</option>
+                <option value="attack">基础攻击优先</option>
+                <option value="armor">基础护甲优先</option>
               </select>
-              <label>
-                <input
-                  type="checkbox"
-                  checked={usableOnly}
-                  onChange={(event) => setUsableOnly(event.target.checked)}
-                />
-                只看本职业可用
-              </label>
             </div>
-            <div className="panel-tabs compact">
-              <button className={filter === 'all' ? 'active' : ''} onClick={() => setFilter('all')}>
-                全部
-              </button>
-              <button
-                className={filter === 'legendary' ? 'active' : ''}
-                onClick={() => setFilter('legendary')}
-              >
-                传奇
-              </button>
-              <button className={filter === 'set' ? 'active' : ''} onClick={() => setFilter('set')}>
-                套装
-              </button>
-              <button
-                className={filter === 'primal' ? 'active' : ''}
-                onClick={() => setFilter('primal')}
-              >
-                太古
-              </button>
+            {filtersOpen && (
+              <div className="pack-filters" id="pack-filters" onChangeCapture={() => changePage(1)}>
+                <label>
+                  <span>部位</span>
+                  <select
+                    className="system-select"
+                    aria-label="筛选装备部位"
+                    value={slotFilter}
+                    onChange={(event) => setSlotFilter(event.target.value as Slot | 'all')}
+                  >
+                    <option value="all">全部部位</option>
+                    {SLOTS.map((slot) => (
+                      <option key={slot} value={slot}>
+                        {SLOT_NAMES[slot]}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label>
+                  <span>品质</span>
+                  <select
+                    className="system-select"
+                    aria-label="筛选装备品质"
+                    value={rarity}
+                    onChange={(event) => setRarity(event.target.value)}
+                  >
+                    <option value="all">全部品质</option>
+                    {backpackRarities.map((value) => (
+                      <option key={value} value={value}>
+                        {RARITY_NAMES[value]}
+                        {value === 'legendary' || value === 'set' ? '（含太古）' : ''}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label>
+                  <span>职业</span>
+                  <select
+                    className="system-select"
+                    aria-label="筛选适用职业"
+                    value={ownership}
+                    onChange={(event) => setOwnership(event.target.value)}
+                  >
+                    <option value="all">全部装备</option>
+                    <option value="usable">本职业可用</option>
+                    <option value="other">其他职业专属</option>
+                  </select>
+                </label>
+                <label className="pack-lock-filter">
+                  <input
+                    type="checkbox"
+                    checked={lockedOnly}
+                    onChange={(event) => setLockedOnly(event.target.checked)}
+                  />
+                  仅已锁定
+                </label>
+              </div>
+            )}
+            <div className="pack-list-heading">
+              <span role="status">
+                {hasFilters ? '符合条件' : '全部装备'} · {visibleItems.length} 件
+              </span>
+              {hasFilters && (
+                <button className="ghost-button pack-reset" onClick={resetFilters}>
+                  清空筛选
+                </button>
+              )}
+              {!batch.active && emptyPicks.length > 0 && (
+                <button
+                  className="ghost-button pack-fill"
+                  data-sound="equip"
+                  title="同部位优先穿戴基础攻击与护甲之和最高的一件"
+                  onClick={store.equipEmptySlots}
+                >
+                  <Shirt size={15} /> 补齐 {emptyPicks.length} 个空位
+                </button>
+              )}
+              <BackpackPages
+                page={currentPage}
+                count={pageCount}
+                position="顶部"
+                onPage={changePage}
+              />
             </div>
-            <div className="item-grid">
-              {visibleItems.map((i) => (
-                <ItemTile
-                  key={i.id}
-                  item={i}
-                  selected={i.id === selected}
-                  onClick={(event) => selectItem(i.id, event.currentTarget)}
-                />
-              ))}
+            <BackpackOrganizer batch={batch} />
+            <div
+              className="item-grid pack-grid"
+              role="group"
+              aria-label="行囊物品"
+              onKeyDown={navigatePackGrid}
+              onFocusCapture={(event) => {
+                const id = event.target instanceof HTMLButtonElement && event.target.dataset.itemId;
+                if (id) setFocusedId(id);
+              }}
+            >
+              {pageItems.map((entry) => {
+                const profession = itemClass(entry);
+                const otherClass = profession && profession !== save.classId;
+                return (
+                  <ItemTile
+                    key={entry.id}
+                    item={entry}
+                    tabIndex={entry.id === tabStop ? 0 : -1}
+                    selected={!batch.active && entry.id === selected}
+                    marked={batch.active ? batch.has(entry.id) : undefined}
+                    hintKind={otherClass ? 'class' : 'empty-slot'}
+                    hint={
+                      otherClass
+                        ? `${professionNames.get(profession)}专属`
+                        : !save.equipment[entry.slot]
+                          ? '可补位'
+                          : undefined
+                    }
+                    onClick={(event) =>
+                      batch.active
+                        ? batch.toggleItem(entry.id)
+                        : openItem(entry.id, event.currentTarget)
+                    }
+                  />
+                );
+              })}
             </div>
-            {save.inventory.length === 0 && <Empty>行囊空空。秘境深处，遗物正等待重见天日。</Empty>}
-            {save.inventory.length > 0 && !visibleItems.length && (
-              <Empty>没有符合条件的装备，试试切换品质或清空筛选。</Empty>
+            <BackpackPages
+              page={currentPage}
+              count={pageCount}
+              position="底部"
+              onPage={(next) => changePage(next, true)}
+            />
+            {!visibleItems.length && (
+              <div className="system-empty pack-empty">
+                <Package size={32} />
+                <p>
+                  {save.inventory.length
+                    ? '没有符合条件的装备'
+                    : '行囊空了。下一场远征的掉落会放在这里。'}
+                </p>
+              </div>
             )}
             {save.inventory.length >= MAX_INVENTORY - 10 && (
               <p className="muted system-hint">
-                背包将满。远征溢出的传奇、套装和太古会送入共享仓库，仓库满后保留待领。其余溢出装备转为材料。
+                背包空间紧张。远征溢出的传奇、套装、太古和受保护的稀有底材先入共享仓库，仓库满后保留待领。可批量分解的溢出装备转为材料。
               </p>
             )}
           </section>
@@ -810,7 +1246,7 @@ function CharacterPanel({ selected, selectItem, closeItem }: EquipmentSelection)
                     disabled={!!store.labBackup || stash.length >= MAX_STASH}
                     onClick={() => {
                       store.depositItem(item.id);
-                      closeItem();
+                      afterItemRemoved();
                     }}
                   >
                     {store.labBackup
@@ -821,7 +1257,9 @@ function CharacterPanel({ selected, selectItem, closeItem }: EquipmentSelection)
                   </button>
                 )}
               </div>
-              {!equipped && <SalvageButton key={item.id} item={item} onSalvaged={closeItem} />}
+              {!equipped && (
+                <SalvageButton key={item.id} item={item} onSalvaged={afterItemRemoved} />
+              )}
             </>
           )}
         </EquipmentInspector>
@@ -1459,7 +1897,9 @@ function RareAffixFilter() {
           </option>
         ))}
       </select>
-      <small>自动分解和一键分解会保留带此词条的黄装。背包满时，溢出的黄装仍会转为材料。</small>
+      <small>
+        自动与批量分解都会保留带此词条的稀有底材。远征时背包已满，受保护的底材会转入共享仓库或保留待领。
+      </small>
     </label>
   );
 }
